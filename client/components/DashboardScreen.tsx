@@ -1,0 +1,240 @@
+
+import React, { useMemo } from 'react';
+import { 
+  TrendingUp, 
+  TrendingDown, 
+  DollarSign, 
+  Users, 
+  ArrowUpRight, 
+  Package,
+  Calendar,
+  Wallet,
+  ShoppingBag,
+  Banknote,
+  CreditCard,
+  AlertCircle
+} from 'lucide-react';
+import { 
+  AreaChart, 
+  Area, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  Cell
+} from 'recharts';
+import { Transaction, Product } from '../types';
+import { CURRENCY } from '../constants';
+
+interface DashboardScreenProps {
+  transactions: Transaction[];
+  products: Product[];
+}
+
+const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, products }) => {
+  const stats = useMemo(() => {
+    const totalRevenue = transactions.reduce((sum, tx) => sum + tx.totalAmount, 0);
+    const totalDebt = transactions.reduce((sum, tx) => sum + tx.balance, 0);
+    
+    // Calculate total profit
+    const totalProfit = transactions.reduce((sum, tx) => {
+      const txProfit = tx.items.reduce((pSum, item) => {
+        const product = products.find(p => p.id === item.productId);
+        const cost = product ? product.costPrice : 0;
+        return pSum + (item.unitPrice - cost) * item.quantity;
+      }, 0);
+      return sum + txProfit;
+    }, 0);
+
+    const cashSales = transactions.filter(t => t.paymentMethod === 'cash').length;
+    const transferSales = transactions.filter(t => t.paymentMethod === 'transfer').length;
+
+    return { totalRevenue, totalProfit, totalSales: transactions.length, cashSales, transferSales, totalDebt };
+  }, [transactions, products]);
+
+  // Daily sales data for the chart
+  const chartData = useMemo(() => {
+    const last7Days = Array.from({ length: 7 }, (_, i) => {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      return date.toISOString().split('T')[0];
+    }).reverse();
+
+    return last7Days.map(date => {
+      const daySales = transactions
+        .filter(t => t.transactionDate.split('T')[0] === date)
+        .reduce((sum, t) => sum + t.totalAmount, 0);
+      
+      const displayDate = new Date(date).toLocaleDateString('en-NG', { weekday: 'short' });
+      return { date: displayDate, amount: daySales };
+    });
+  }, [transactions]);
+
+  // Top products
+  const topProducts = useMemo(() => {
+    const productSales: Record<string, { name: string, qty: number }> = {};
+    transactions.forEach(tx => {
+      tx.items.forEach(item => {
+        if (!productSales[item.productId]) {
+          productSales[item.productId] = { name: item.productName, qty: 0 };
+        }
+        productSales[item.productId].qty += item.quantity;
+      });
+    });
+
+    return Object.values(productSales)
+      .sort((a, b) => b.qty - a.qty)
+      .slice(0, 5);
+  }, [transactions]);
+
+  return (
+    <div className="max-w-7xl mx-auto space-y-8">
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">Owner Dashboard</h1>
+        <p className="text-gray-500">Real-time performance overview</p>
+      </div>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard 
+          title="Total Revenue" 
+          value={`${CURRENCY}${stats.totalRevenue.toLocaleString()}`} 
+          icon={<DollarSign className="text-blue-600" />} 
+          trend="+12% from last month"
+          color="bg-blue-50"
+        />
+        <StatCard 
+          title="Estimated Profit" 
+          value={`${CURRENCY}${stats.totalProfit.toLocaleString()}`} 
+          icon={<TrendingUp className="text-green-600" />} 
+          trend="+8.4% from last month"
+          color="bg-green-50"
+        />
+        <StatCard 
+          title="Outstanding Debt" 
+          value={`${CURRENCY}${stats.totalDebt.toLocaleString()}`} 
+          icon={<AlertCircle className="text-red-600" />} 
+          trend="Total money owed to you"
+          color="bg-red-50"
+        />
+        <StatCard 
+          title="Total Orders" 
+          value={stats.totalSales.toString()} 
+          icon={<ShoppingBag className="text-purple-600" />} 
+          trend="Lifetime transactions"
+          color="bg-purple-50"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Sales Chart */}
+        <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="font-bold text-gray-800 flex items-center gap-2">
+              <Calendar className="text-indigo-600" size={20} /> Sales Performance (Last 7 Days)
+            </h3>
+          </div>
+          <div className="h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient id="colorAmount" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.1}/>
+                    <stop offset="95%" stopColor="#4f46e5" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} dy={10} />
+                <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} tickFormatter={(val) => `₦${val/1000}k`} />
+                <Tooltip 
+                  contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}}
+                  formatter={(value: number) => [`${CURRENCY}${value.toLocaleString()}`, 'Revenue']}
+                />
+                <Area type="monotone" dataKey="amount" stroke="#4f46e5" strokeWidth={3} fillOpacity={1} fill="url(#colorAmount)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Payment Methods & Top Items */}
+        <div className="space-y-8">
+          <div className="bg-white p-6 rounded-2xl shadow-sm border">
+            <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+              <Wallet className="text-indigo-600" size={20} /> Payment Methods
+            </h3>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center text-green-600">
+                    <Banknote size={18} />
+                  </div>
+                  <span className="text-sm font-medium text-gray-600">Cash</span>
+                </div>
+                <span className="font-bold">{stats.cashSales}</span>
+              </div>
+              <div className="w-full bg-gray-100 rounded-full h-2">
+                <div 
+                  className="bg-green-500 h-2 rounded-full" 
+                  style={{ width: `${(stats.cashSales / (stats.totalSales || 1)) * 100}%` }}
+                ></div>
+              </div>
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600">
+                    <CreditCard size={18} />
+                  </div>
+                  <span className="text-sm font-medium text-gray-600">Transfer</span>
+                </div>
+                <span className="font-bold">{stats.transferSales}</span>
+              </div>
+              <div className="w-full bg-gray-100 rounded-full h-2">
+                <div 
+                  className="bg-blue-500 h-2 rounded-full" 
+                  style={{ width: `${(stats.transferSales / (stats.totalSales || 1)) * 100}%` }}
+                ></div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-2xl shadow-sm border">
+            <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+              <Package className="text-indigo-600" size={20} /> Top Selling Items
+            </h3>
+            <div className="space-y-3">
+              {topProducts.length === 0 ? (
+                <p className="text-sm text-gray-400 italic">No sales data yet</p>
+              ) : (
+                topProducts.map((prod, idx) => (
+                  <div key={idx} className="flex justify-between items-center p-2 hover:bg-gray-50 rounded-xl transition-colors">
+                    <span className="text-sm font-medium text-gray-700 truncate max-w-[150px]">{prod.name}</span>
+                    <span className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-black">{prod.qty} units</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const StatCard: React.FC<{ title: string, value: string, icon: React.ReactNode, trend: string, color: string }> = ({ title, value, icon, trend, color }) => (
+  <div className="bg-white p-5 rounded-2xl shadow-sm border group hover:shadow-md transition-all">
+    <div className="flex justify-between items-start mb-4">
+      <div className={`p-3 rounded-xl ${color} transition-transform group-hover:scale-110`}>
+        {React.cloneElement(icon as React.ReactElement<any>, { size: 24 })}
+      </div>
+    </div>
+    <div className="space-y-1">
+      <p className="text-sm font-medium text-gray-500">{title}</p>
+      <h4 className="text-2xl font-black text-gray-900">{value}</h4>
+      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{trend}</p>
+    </div>
+  </div>
+);
+
+export default DashboardScreen;

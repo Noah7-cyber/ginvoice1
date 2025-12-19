@@ -1,0 +1,89 @@
+# =========================
+# Dependencies
+# =========================
+node_modules/
+.pnpm-store/
+.yarn/
+.yarn-cache/
+.npm/
+
+# =========================
+# Build output
+# =========================
+dist/
+build/
+out/
+
+# =========================
+# Environment variables
+# =========================
+.env
+.env.*
+!.env.example
+
+# =========================
+# Logs
+# =========================
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+logs/
+*.log
+
+# =========================
+# OS / Editor junk
+# =========================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+.vscode/
+!.vscode/extensions.json
+
+.idea/
+*.iml
+
+# =========================
+# TypeScript
+# =========================
+*.tsbuildinfo
+
+# =========================
+# Vite
+# =========================
+.vite/
+
+# =========================
+# Service Workers / PWA
+# =========================
+sw.js.map
+workbox-*.js
+workbox-*.js.map
+
+# =========================
+# Cache / temp
+# =========================
+.cache/
+.temp/
+tmp/
+
+# =========================
+# Coverage / testing
+# =========================
+coverage/
+.playwright/
+.cypress/
+
+# =========================
+# Optional: Netlify / Vercel
+# =========================
+.netlify/
+.vercel/
+
+# =========================
+# Optional: Local DB / backups
+# =========================
+*.sqlite
+*.db
+backup*.json
