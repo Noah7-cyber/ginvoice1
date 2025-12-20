@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { ShoppingBag, ArrowLeft, Send, Mail, Store, CheckCircle2, AlertCircle } from 'lucide-react';
+import { requestPasswordReset } from '../services/api';
 
 interface ForgotPasswordScreenProps {
   onBack: () => void;
@@ -12,14 +13,20 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ onBack, bus
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    // Simulate API call to backend
-    setTimeout(() => {
+    try {
+      if (navigator.onLine) {
+        // Request recovery email from backend
+        await requestPasswordReset(email);
+      }
+    } catch (err) {
+      console.error('Password recovery request failed', err);
+    } finally {
       setLoading(false);
       setSubmitted(true);
-    }, 1500);
+    }
   };
 
   return (

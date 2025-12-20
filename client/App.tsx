@@ -18,6 +18,7 @@ import {
 import { InventoryState, UserRole, Product, Transaction, BusinessProfile, TabId, SaleItem, PaymentMethod } from './types';
 import { INITIAL_PRODUCTS } from './constants';
 import { saveState, loadState, syncWithBackend } from './services/storage';
+import { login, registerBusiness, saveAuthToken, clearAuthToken, checkSyncAccess } from './services/api';
 import SalesScreen from './components/SalesScreen';
 import InventoryScreen from './components/InventoryScreen';
 import DashboardScreen from './components/DashboardScreen';
@@ -31,6 +32,7 @@ import ForgotPasswordScreen from './components/ForgotPasswordScreen';
 const App: React.FC = () => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [trialLocked, setTrialLocked] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>('sales');
   const [isCartOpen, setIsCartOpen] = useState(window.innerWidth > 1024);
   const [view, setView] = useState<'main' | 'forgot-password'>('main');
@@ -69,6 +71,26 @@ const App: React.FC = () => {
     setIsSyncing(false);
   }, [state]);
 
+  const checkTrialStatus = useCallback(async () => {
+    if (!navigator.onLine || trialLocked) return;
+    try {
+      const status = await checkSyncAccess();
+      if (!status.accessActive && !status.isSubscribed) {
+        // Trial expired; send user to payment link
+        setTrialLocked(true);
+        alert('Your free trial is over. Please complete payment to continue using Ginvoice.');
+        window.location.href = 'https://paystack.shop/pay/gti5s0lqks';
+      }
+    } catch (err) {
+      const status = (err as any)?.status;
+      if (status === 402 && !trialLocked) {
+        setTrialLocked(true);
+        alert('Your free trial is over. Please complete payment to continue using Ginvoice.');
+        window.location.href = 'https://paystack.shop/pay/gti5s0lqks';
+      }
+    }
+  }, [trialLocked]);
+
   useEffect(() => {
     const styleId = 'dynamic-theme';
     let styleTag = document.getElementById(styleId);
@@ -87,33 +109,108 @@ const App: React.FC = () => {
   }, [state.business.theme]);
 
   useEffect(() => {
-    const hO = () => { setIsOnline(true); triggerSync(); };
+    const hO = () => { setIsOnline(true); checkTrialStatus(); triggerSync(); };
     const hF = () => setIsOnline(false);
     window.addEventListener('online', hO);
     window.addEventListener('offline', hF);
     return () => { window.removeEventListener('online', hO); window.removeEventListener('offline', hF); };
-  }, [triggerSync]);
+  }, [triggerSync, checkTrialStatus]);
+
+  useEffect(() => {
+    if (state.isLoggedIn) {
+      checkTrialStatus();
+    }
+  }, [state.isLoggedIn, checkTrialStatus]);
 
   useEffect(() => { saveState(state); }, [state]);
 
-  const handleRegister = (details: any) => setState(prev => ({ 
-    ...prev, 
-    isRegistered: true, 
-    isLoggedIn: true, 
-    role: 'owner',
-    business: { ...prev.business, ...details } 
-  }));
+  const handleRegister = async (details: any) => {
+    try {
+      if (navigator.onLine) {
+        // Backend registration + token bootstrap for cross-device sync
+        const response = await registerBusiness({
+          name: details.name,
+          email: details.email,
+          phone: details.phone,
+          address: details.address,
+          ownerPassword: details.ownerPassword,
+          staffPassword: details.staffPassword,
+          logo: details.logo,
+          theme: state.business.theme
+        });
+        saveAuthToken(response.token);
+      }
+    } catch (err) {
+      console.error('Registration failed, continuing offline', err);
+    }
 
-  const handleManualLogin = (details: { email: string, pin: string }) => {
+    setState(prev => ({
+      ...prev,
+      isRegistered: true,
+      isLoggedIn: true,
+      role: 'owner',
+      business: { ...prev.business, ...details }
+    }));
+  };
+
+  const handleManualLogin = async (details: { email: string, pin: string }) => {
+    try {
+      if (navigator.onLine) {
+        // Backend login for cloud-backed stores
+        const response = await login(details.email, details.pin);
+        saveAuthToken(response.token);
+        setState(prev => ({
+          ...prev,
+          isLoggedIn: true,
+          role: response.role,
+          isRegistered: true,
+          business: { ...prev.business, ...response.business }
+        }));
+        return;
+      }
+    } catch (err) {
+      console.error('Remote login failed, falling back to local', err);
+    }
+
     if (state.business.email === details.email && state.business.ownerPassword === details.pin) {
-       setState(prev => ({ ...prev, isLoggedIn: true, role: 'owner', isRegistered: true }));
+      setState(prev => ({ ...prev, isLoggedIn: true, role: 'owner', isRegistered: true }));
     } else {
-       alert("No matching store found for this email/PIN on this device.");
+      alert("No matching store found for this email/PIN on this device.");
     }
   };
 
-  const handleLogin = (role: UserRole) => { setState(prev => ({ ...prev, role, isLoggedIn: true })); setActiveTab('sales'); };
-  const handleLogout = () => setState(prev => ({ ...prev, isLoggedIn: false }));
+  const handleLogin = async (pin: string, selectedRole: UserRole) => {
+    try {
+      if (navigator.onLine && state.business.email) {
+        // Backend login to unlock cloud sync token
+        const response = await login(state.business.email, pin);
+        saveAuthToken(response.token);
+        setState(prev => ({
+          ...prev,
+          role: response.role,
+          isLoggedIn: true,
+          business: { ...prev.business, ...response.business }
+        }));
+        setActiveTab('sales');
+        return true;
+      }
+    } catch (err) {
+      console.error('Remote login failed, using local pin', err);
+    }
+
+    const correctPassword = selectedRole === 'owner' ? state.business.ownerPassword : state.business.staffPassword;
+    if (pin === correctPassword) {
+      setState(prev => ({ ...prev, role: selectedRole, isLoggedIn: true }));
+      setActiveTab('sales');
+      return true;
+    }
+    return false;
+  };
+
+  const handleLogout = () => {
+    clearAuthToken();
+    setState(prev => ({ ...prev, isLoggedIn: false }));
+  };
   
   const handleResetBusiness = () => {
     // Navigate back to setup/registration screen

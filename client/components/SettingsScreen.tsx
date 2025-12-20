@@ -249,7 +249,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
           
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <a 
-              href="https://wa.me/2348000000000" 
+              href="https://wa.me/2348051763431" 
               target="_blank" 
               rel="noreferrer"
               className="flex items-center gap-4 p-4 border-2 border-emerald-50 bg-emerald-50/30 rounded-2xl hover:bg-emerald-50 transition-all group"
@@ -264,7 +264,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
             </a>
 
             <a 
-              href="mailto:support@ginvoice.com" 
+              href="mailto:noahibr2@gmail.com" 
               className="flex items-center gap-4 p-4 border-2 border-indigo-50 bg-indigo-50/30 rounded-2xl hover:bg-indigo-50 transition-all group"
             >
               <div className="p-3 bg-indigo-600 text-white rounded-xl group-hover:scale-110 transition-transform">

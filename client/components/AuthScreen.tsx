@@ -4,7 +4,7 @@ import { UserCircle, ShieldCheck, ShoppingBag, Info, Lock, Eye, EyeOff, ArrowLef
 import { UserRole, BusinessProfile } from '../types';
 
 interface AuthScreenProps {
-  onLogin: (role: UserRole) => void;
+  onLogin: (pin: string, role: UserRole) => Promise<boolean>;
   onForgotPassword: () => void;
   onResetBusiness: () => void;
   business: BusinessProfile;
@@ -22,13 +22,11 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onForgotPassword, onRe
     setPassword('');
   };
 
-  const handleLoginAttempt = (e: React.FormEvent) => {
+  const handleLoginAttempt = async (e: React.FormEvent) => {
     e.preventDefault();
-    const correctPassword = selectedRole === 'owner' ? business.ownerPassword : business.staffPassword;
-    
-    if (password === correctPassword) {
-      onLogin(selectedRole!);
-    } else {
+    if (!selectedRole) return;
+    const ok = await onLogin(password, selectedRole);
+    if (!ok) {
       setError(true);
       setTimeout(() => setError(false), 2000);
     }

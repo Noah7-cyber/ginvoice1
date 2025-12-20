@@ -1,5 +1,6 @@
 
 import { InventoryState } from '../types';
+import { syncState, loadAuthToken } from './api';
 
 const STORAGE_KEY = 'ginvoice_data_v1';
 
@@ -33,6 +34,7 @@ export const loadState = (): InventoryState | undefined => {
  */
 export const syncWithBackend = async (state: InventoryState): Promise<string | null> => {
   if (!navigator.onLine) return null;
+  if (!loadAuthToken()) return null;
 
   try {
     console.log('📡 BACKGROUND SYNC: Pushing local data to cloud...', {
@@ -41,11 +43,8 @@ export const syncWithBackend = async (state: InventoryState): Promise<string | n
       timestamp: new Date().toLocaleTimeString()
     });
     
-    // Simulate network delay for real-world feel
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // In production, this is where you'd call: 
-    // await fetch('/api/sync', { method: 'POST', body: JSON.stringify(state) });
+    // Push full offline state to backend
+    await syncState(state);
     
     return new Date().toISOString();
   } catch (e) {
