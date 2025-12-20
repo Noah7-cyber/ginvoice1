@@ -14,6 +14,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   
   // Bulk Edit Panel States
@@ -81,10 +82,16 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
   const handleAddProduct = (e: React.FormEvent) => {
     e.preventDefault();
-    const product: Product = { ...(newProduct as Product), id: `PRD-${Date.now()}` };
-    onUpdateProducts([...products, product]);
+    if (editingProductId) {
+      const updatedProducts = products.map(p => p.id === editingProductId ? { ...(newProduct as Product), id: p.id } : p);
+      onUpdateProducts(updatedProducts);
+    } else {
+      const product: Product = { ...(newProduct as Product), id: `PRD-${Date.now()}` };
+      onUpdateProducts([...products, product]);
+    }
     setIsModalOpen(false);
     setNewProduct({ name: '', category: CATEGORIES[0], costPrice: 0, sellingPrice: 0, currentStock: 0, unit: 'Unit' });
+    setEditingProductId(null);
   };
 
   const deleteProduct = (id: string) => {
@@ -192,7 +199,16 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                   <td className="px-6 py-4 font-black text-gray-900">{CURRENCY}{product.sellingPrice.toLocaleString()}</td>
                   <td className="px-6 py-4">
                     <div className="flex gap-2">
-                      <button className="p-2 text-gray-400 hover:text-primary"><Edit3 size={18} /></button>
+                      <button
+                        onClick={() => {
+                          setEditingProductId(product.id);
+                          setNewProduct({ ...product });
+                          setIsModalOpen(true);
+                        }}
+                        className="p-2 text-gray-400 hover:text-primary"
+                      >
+                        <Edit3 size={18} />
+                      </button>
                       {isOwner && <button onClick={() => deleteProduct(product.id)} className="p-2 text-gray-400 hover:text-red-500"><Trash2 size={18} /></button>}
                     </div>
                   </td>
@@ -312,7 +328,13 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                 </div>
               </div>
               <div className="pt-4 flex gap-3">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-4 border rounded-xl font-bold text-gray-500">Cancel</button>
+                <button
+                  type="button"
+                  onClick={() => { setIsModalOpen(false); setEditingProductId(null); }}
+                  className="flex-1 py-4 border rounded-xl font-bold text-gray-500"
+                >
+                  Cancel
+                </button>
                 <button type="submit" className="flex-1 py-4 bg-primary text-white rounded-xl font-bold shadow-lg">Save Product</button>
               </div>
             </form>

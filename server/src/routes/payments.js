@@ -68,6 +68,10 @@ router.post('/webhook', async (req, res) => {
     const event = req.body;
     if (event?.event === 'charge.success') {
       const businessId = event?.data?.metadata?.businessId;
+      const amountKobo = Number(event?.data?.amount || 0);
+      if (amountKobo < 200000) {
+        return res.json({ received: true });
+      }
       if (businessId) {
         const business = await Business.findById(businessId);
         if (business) {

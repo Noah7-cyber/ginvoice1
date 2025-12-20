@@ -33,6 +33,7 @@ const App: React.FC = () => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isSyncing, setIsSyncing] = useState(false);
   const [trialLocked, setTrialLocked] = useState(false);
+  const [trialStatus, setTrialStatus] = useState<{ accessActive: boolean; isSubscribed: boolean } | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>('sales');
   const [isCartOpen, setIsCartOpen] = useState(window.innerWidth > 1024);
   const [view, setView] = useState<'main' | 'forgot-password'>('main');
@@ -75,18 +76,22 @@ const App: React.FC = () => {
     if (!navigator.onLine || trialLocked) return;
     try {
       const status = await checkSyncAccess();
+      setTrialStatus({ accessActive: !!status.accessActive, isSubscribed: !!status.isSubscribed });
       if (!status.accessActive && !status.isSubscribed) {
-        // Trial expired; send user to payment link
+        // Trial expired; allow billing only and prompt payment
         setTrialLocked(true);
+        setActiveTab('history');
         alert('Your free trial is over. Please complete payment to continue using Ginvoice.');
-        window.location.href = 'https://paystack.shop/pay/gti5s0lqks';
+        window.open('https://paystack.shop/pay/gti5s0lqks', '_blank');
       }
     } catch (err) {
       const status = (err as any)?.status;
       if (status === 402 && !trialLocked) {
+        setTrialStatus({ accessActive: false, isSubscribed: false });
         setTrialLocked(true);
+        setActiveTab('history');
         alert('Your free trial is over. Please complete payment to continue using Ginvoice.');
-        window.location.href = 'https://paystack.shop/pay/gti5s0lqks';
+        window.open('https://paystack.shop/pay/gti5s0lqks', '_blank');
       }
     }
   }, [trialLocked]);
@@ -253,9 +258,16 @@ const App: React.FC = () => {
   };
 
   const allowedTabs = useMemo(() => {
+    if (trialLocked) return ['history'] as TabId[];
     if (state.role === 'owner') return ['sales', 'inventory', 'history', 'dashboard', 'settings'] as TabId[];
     return Array.from(new Set(['sales', ...state.business.staffPermissions])) as TabId[];
-  }, [state.role, state.business.staffPermissions]);
+  }, [state.role, state.business.staffPermissions, trialLocked]);
+
+  useEffect(() => {
+    if (trialLocked && activeTab !== 'history') {
+      setActiveTab('history');
+    }
+  }, [trialLocked, activeTab]);
 
   if (!state.isRegistered) return <RegistrationScreen onRegister={handleRegister} onManualLogin={handleManualLogin} />;
   

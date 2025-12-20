@@ -1,4 +1,3 @@
-
 const CACHE_NAME = 'ginvoice-v2';
 const ASSETS_TO_CACHE = [
   '/',
@@ -6,6 +5,42 @@ const ASSETS_TO_CACHE = [
   'https://cdn.tailwindcss.com',
   'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&family=Dancing+Script:wght@400;700&family=Montserrat:wght@400;600;700;900&display=swap'
 ];
+
+const BYPASS_PATHS = [
+  '/health',
+  '/auth/',
+  '/api/',
+  '/sync/',
+  '/payments/',
+  '/webhooks/',
+  '/entitlements'
+];
+
+const jsonOfflineResponse = () => {
+  return new Response(JSON.stringify({ ok: false, offline: true }), {
+    status: 503,
+    headers: { 'Content-Type': 'application/json' }
+  });
+};
+
+const shouldBypass = (requestUrl, request) => {
+  const pathname = requestUrl.pathname;
+  const hasAuthHeader = request.headers.has('authorization');
+  const hasCredentials = request.credentials === 'include';
+
+  if (hasAuthHeader || hasCredentials) return true;
+
+  return BYPASS_PATHS.some((path) => {
+    if (path.endsWith('/')) return pathname.startsWith(path);
+    return pathname === path || pathname.startsWith(path + '/');
+  });
+};
+
+const isSafeAsset = (requestUrl, request) => {
+  if (request.mode === 'navigate') return false;
+  if (requestUrl.origin !== self.location.origin) return false;
+  return requestUrl.pathname.startsWith('/assets/');
+};
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -34,24 +69,44 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
-  event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      return fetch(event.request).then((response) => {
-        if (!response || response.status !== 200 || response.type !== 'basic') {
-          return response;
-        }
-        const responseToCache = response.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
-        });
-        return response;
-      }).catch(() => {
-        // Fallback if network fails and not in cache
-        return caches.match('/index.html');
-      });
-    })
-  );
+  const requestUrl = new URL(event.request.url);
+
+  if (shouldBypass(requestUrl, event.request)) {
+    event.respondWith(
+      fetch(event.request).catch(() => jsonOfflineResponse())
+    );
+    return;
+  }
+
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => response)
+        .catch(() => caches.match('/index.html'))
+    );
+    return;
+  }
+
+  if (isSafeAsset(requestUrl, event.request)) {
+    event.respondWith(
+      caches.match(event.request).then((cachedResponse) => {
+        if (cachedResponse) return cachedResponse;
+        return fetch(event.request)
+          .then((response) => {
+            if (!response || response.status !== 200) return response;
+            const responseToCache = response.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
+            return response;
+          })
+          .catch(() => caches.match('/index.html'));
+      })
+    );
+    return;
+  }
+
+  event.respondWith(fetch(event.request));
 });
+
+// Changes: bypass auth/api/sync/payment routes and credentialed requests; network-first for navigation; cache-first only for safe versioned assets; return JSON 503 when offline for bypassed routes.
