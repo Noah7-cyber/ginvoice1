@@ -1,6 +1,6 @@
 
-import React, { useState } from 'react';
-import { Store, Save, LayoutGrid, MapPin, Phone, Palette, Type, ShieldAlert, CheckCircle2, RefreshCw, CloudCheck } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { Store, Save, LayoutGrid, MapPin, Phone, Palette, Type, ShieldAlert, CheckCircle2, RefreshCw, CloudCheck, Upload, Trash2, Image as ImageIcon, MessageSquare, HeadphonesIcon, HelpCircle } from 'lucide-react';
 import { BusinessProfile, TabId } from '../types';
 import { THEME_COLORS, FONTS } from '../constants';
 
@@ -15,12 +15,29 @@ interface SettingsScreenProps {
 const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusiness, onManualSync, lastSynced, isSyncing }) => {
   const [formData, setFormData] = useState<BusinessProfile>(business);
   const [showSaved, setShowSaved] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onUpdateBusiness(formData);
     setShowSaved(true);
     setTimeout(() => setShowSaved(false), 3000);
+  };
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData({ ...formData, logo: reader.result as string });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeLogo = () => {
+    setFormData({ ...formData, logo: undefined });
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const togglePermission = (tab: TabId) => {
@@ -69,36 +86,79 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
         {/* Core Info */}
         <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
           <h2 className="text-lg font-bold flex items-center gap-2"><Store className="text-primary" /> Store Identity</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Business Name</label>
+          
+          <div className="flex flex-col md:flex-row gap-8 items-start">
+            {/* Logo Upload Section */}
+            <div className="flex flex-col items-center gap-3">
+              <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest text-center">Business Logo</label>
+              <div className="relative group">
+                <div className="w-32 h-32 rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 flex flex-col items-center justify-center overflow-hidden transition-all group-hover:border-primary">
+                  {formData.logo ? (
+                    <img src={formData.logo} alt="Business Logo" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="flex flex-col items-center text-gray-400">
+                      <ImageIcon size={32} className="mb-2" />
+                      <span className="text-[10px] font-bold">No Logo</span>
+                    </div>
+                  )}
+                </div>
+                {formData.logo && (
+                  <button 
+                    type="button" 
+                    onClick={removeLogo}
+                    className="absolute -top-2 -right-2 bg-red-500 text-white p-1.5 rounded-full shadow-lg hover:bg-red-600 transition-all opacity-0 group-hover:opacity-100"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </div>
               <input 
-                type="text" 
-                value={formData.name}
-                onChange={e => setFormData({...formData, name: e.target.value})}
-                className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold"
-                placeholder="Business Name"
+                type="file" 
+                ref={fileInputRef} 
+                className="hidden" 
+                accept="image/*" 
+                onChange={handleLogoUpload} 
               />
+              <button 
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="text-[10px] font-black uppercase text-primary bg-primary-bg px-4 py-2 rounded-lg flex items-center gap-2 hover:opacity-80 transition-all"
+              >
+                <Upload size={14} /> {formData.logo ? 'Change Logo' : 'Upload Logo'}
+              </button>
             </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Phone Contact</label>
-              <input 
-                type="tel" 
-                value={formData.phone}
-                onChange={e => setFormData({...formData, phone: e.target.value})}
-                className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold"
-                placeholder="080..."
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Address</label>
-              <input 
-                type="text" 
-                value={formData.address}
-                onChange={e => setFormData({...formData, address: e.target.value})}
-                className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold"
-                placeholder="Market stall address"
-              />
+
+            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+              <div>
+                <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Business Name</label>
+                <input 
+                  type="text" 
+                  value={formData.name}
+                  onChange={e => setFormData({...formData, name: e.target.value})}
+                  className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold"
+                  placeholder="Business Name"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Phone Contact</label>
+                <input 
+                  type="tel" 
+                  value={formData.phone}
+                  onChange={e => setFormData({...formData, phone: e.target.value})}
+                  className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold"
+                  placeholder="080..."
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Address</label>
+                <input 
+                  type="text" 
+                  value={formData.address}
+                  onChange={e => setFormData({...formData, address: e.target.value})}
+                  className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold"
+                  placeholder="Market stall address"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -182,7 +242,47 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
           </div>
         </div>
 
-        <div className="flex items-center justify-between bg-white p-6 rounded-3xl shadow-lg border-t-4 border-primary">
+        {/* Support Section */}
+        <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
+          <h2 className="text-lg font-bold flex items-center gap-2"><HelpCircle className="text-emerald-600" /> Support & Help</h2>
+          <p className="text-sm text-gray-500 font-medium">Need help with your account or having technical issues? Contact our Nigerian support team.</p>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <a 
+              href="https://wa.me/2348000000000" 
+              target="_blank" 
+              rel="noreferrer"
+              className="flex items-center gap-4 p-4 border-2 border-emerald-50 bg-emerald-50/30 rounded-2xl hover:bg-emerald-50 transition-all group"
+            >
+              <div className="p-3 bg-emerald-500 text-white rounded-xl group-hover:scale-110 transition-transform">
+                <MessageSquare size={20} />
+              </div>
+              <div>
+                <p className="font-bold text-gray-900">WhatsApp Support</p>
+                <p className="text-[10px] text-emerald-600 font-black uppercase tracking-widest">Fastest Response</p>
+              </div>
+            </a>
+
+            <a 
+              href="mailto:support@ginvoice.com" 
+              className="flex items-center gap-4 p-4 border-2 border-indigo-50 bg-indigo-50/30 rounded-2xl hover:bg-indigo-50 transition-all group"
+            >
+              <div className="p-3 bg-indigo-600 text-white rounded-xl group-hover:scale-110 transition-transform">
+                <HeadphonesIcon size={20} />
+              </div>
+              <div>
+                <p className="font-bold text-gray-900">Email Support</p>
+                <p className="text-[10px] text-indigo-600 font-black uppercase tracking-widest">Technical Inquiry</p>
+              </div>
+            </a>
+          </div>
+
+          <div className="pt-4 flex items-center justify-center gap-2 text-[10px] font-black text-gray-300 uppercase tracking-[0.2em]">
+            Ginvoice Market OS • v1.2.0 • Made in Nigeria 🇳🇬
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between bg-white p-6 rounded-3xl shadow-lg border-t-4 border-primary sticky bottom-4 z-10">
           <div>
             {showSaved && <p className="text-green-600 font-bold flex items-center gap-2 animate-bounce">✓ Changes saved!</p>}
           </div>

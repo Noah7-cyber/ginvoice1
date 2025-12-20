@@ -65,8 +65,12 @@ const InvoicePreview: React.FC<InvoicePreviewProps> = ({ transaction, business, 
         <div className="flex-1 overflow-y-auto p-8 md:p-12 bg-white print:overflow-visible" id="invoice-content">
           <div className="flex flex-col md:flex-row justify-between gap-8 mb-12">
             <div className="space-y-4">
-              <div className="flex items-center gap-2 text-primary">
-                <ShoppingBag size={32} />
+              <div className="flex items-center gap-3 text-primary">
+                {business.logo ? (
+                  <img src={business.logo} alt="Business Logo" className="w-16 h-16 rounded-xl object-cover bg-white border p-1" />
+                ) : (
+                  <ShoppingBag size={48} />
+                )}
                 <h1 className="text-3xl font-black tracking-tight">{business.name}</h1>
               </div>
               <div className="text-sm text-gray-500 space-y-1">

@@ -8,6 +8,9 @@ export interface BusinessProfile {
   address: string;
   phone: string;
   email?: string;
+  logo?: string; // Base64 encoded image
+  ownerPassword?: string;
+  staffPassword?: string;
   theme: {
     primaryColor: string;
     fontFamily: string;
