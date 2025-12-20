@@ -43,6 +43,7 @@ export interface Transaction {
   id: string;
   transactionDate: string;
   customerName: string;
+  customerPhone?: string;
   items: SaleItem[];
   subtotal: number;
   globalDiscount: number;

@@ -36,6 +36,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editAmountPaid, setEditAmountPaid] = useState<number>(0);
+  const [editCustomerName, setEditCustomerName] = useState<string>('');
   const [selectedInvoice, setSelectedInvoice] = useState<Transaction | null>(null);
 
   const filteredInvoices = transactions.filter(t => 
@@ -45,17 +46,18 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
 
   // Aggregated Debtors Ledger
   const debtorsLedger = useMemo(() => {
-    const map = new Map<string, { totalOwed: number, invoiceCount: number, lastTxDate: string, transactions: Transaction[] }>();
+    const map = new Map<string, { totalOwed: number, invoiceCount: number, lastTxDate: string, transactions: Transaction[], phone?: string }>();
     
     transactions.forEach(t => {
       if (t.balance > 0) {
-        const existing = map.get(t.customerName) || { totalOwed: 0, invoiceCount: 0, lastTxDate: t.transactionDate, transactions: [] };
+        const existing = map.get(t.customerName) || { totalOwed: 0, invoiceCount: 0, lastTxDate: t.transactionDate, transactions: [], phone: t.customerPhone };
         existing.totalOwed += t.balance;
         existing.invoiceCount += 1;
         if (new Date(t.transactionDate) > new Date(existing.lastTxDate)) {
           existing.lastTxDate = t.transactionDate;
         }
         existing.transactions.push(t);
+        if (!existing.phone && t.customerPhone) existing.phone = t.customerPhone;
         map.set(t.customerName, existing);
       }
     });
@@ -69,11 +71,13 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
   const handleEditClick = (t: Transaction) => {
     setEditingId(t.id);
     setEditAmountPaid(t.amountPaid);
+    setEditCustomerName(t.customerName);
   };
 
   const handleSaveEdit = (t: Transaction) => {
     onUpdateTransaction({
       ...t,
+      customerName: editCustomerName,
       amountPaid: editAmountPaid,
       balance: Math.max(0, t.totalAmount - editAmountPaid)
     });
@@ -140,7 +144,16 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
                           {t.customerName[0].toUpperCase()}
                         </div>
                         <div>
-                          <h3 className="font-bold text-gray-900">{t.customerName}</h3>
+                          {editingId === t.id ? (
+                            <input
+                              type="text"
+                              className="w-full px-2 py-1 bg-gray-50 border rounded text-sm font-bold focus:ring-1 focus:ring-indigo-500 outline-none"
+                              value={editCustomerName}
+                              onChange={(e) => setEditCustomerName(e.target.value)}
+                            />
+                          ) : (
+                            <h3 className="font-bold text-gray-900">{t.customerName}</h3>
+                          )}
                           <p className="text-xs text-gray-400">ID: {t.id} • {new Date(t.transactionDate).toLocaleDateString()}</p>
                         </div>
                       </div>
@@ -253,7 +266,16 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
                     >
                       <Eye size={18} /> View Bills
                     </button>
-                    <button className="p-3 text-emerald-600 bg-emerald-50 rounded-xl hover:bg-emerald-100 transition-all border border-emerald-100">
+                    <button
+                      onClick={() => {
+                        if (debtor.phone) {
+                          window.location.href = `tel:${debtor.phone}`;
+                        } else {
+                          alert('No phone number saved for this customer.');
+                        }
+                      }}
+                      className="p-3 text-emerald-600 bg-emerald-50 rounded-xl hover:bg-emerald-100 transition-all border border-emerald-100"
+                    >
                       <Phone size={20} />
                     </button>
                   </div>

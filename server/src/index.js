@@ -8,6 +8,8 @@ const compression = require('compression');
 const authRoutes = require('./routes/auth');
 const syncRoutes = require('./routes/sync');
 const paymentRoutes = require('./routes/payments');
+const analyticsRoutes = require('./routes/analytics');
+const entitlementsRoutes = require('./routes/entitlements');
 
 const app = express();
 
@@ -33,6 +35,8 @@ app.get('/health', (_req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/sync', syncRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/entitlements', entitlementsRoutes);
 
 const port = process.env.PORT || 4000;
 const mongoUri = process.env.MONGODB_URI || '';

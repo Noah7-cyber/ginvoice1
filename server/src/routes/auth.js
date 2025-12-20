@@ -21,6 +21,7 @@ const sanitizeBusiness = (business) => ({
   theme: business.theme,
   trialEndsAt: business.trialEndsAt,
   isSubscribed: business.isSubscribed,
+  subscriptionExpiresAt: business.subscriptionExpiresAt,
   createdAt: business.createdAt
 });
 

@@ -18,7 +18,8 @@ import {
 import { InventoryState, UserRole, Product, Transaction, BusinessProfile, TabId, SaleItem, PaymentMethod } from './types';
 import { INITIAL_PRODUCTS } from './constants';
 import { saveState, loadState, syncWithBackend } from './services/storage';
-import { login, registerBusiness, saveAuthToken, clearAuthToken, checkSyncAccess } from './services/api';
+import { login, registerBusiness, saveAuthToken, clearAuthToken, deleteTransaction } from './services/api';
+import { getEntitlements } from './services/api';
 import SalesScreen from './components/SalesScreen';
 import InventoryScreen from './components/InventoryScreen';
 import DashboardScreen from './components/DashboardScreen';
@@ -32,8 +33,8 @@ import ForgotPasswordScreen from './components/ForgotPasswordScreen';
 const App: React.FC = () => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [trialLocked, setTrialLocked] = useState(false);
-  const [trialStatus, setTrialStatus] = useState<{ accessActive: boolean; isSubscribed: boolean } | null>(null);
+  const [subscriptionLocked, setSubscriptionLocked] = useState(false);
+  const [entitlements, setEntitlements] = useState<{ plan: 'FREE' | 'PRO'; expiresAt?: string | null } | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>('sales');
   const [isCartOpen, setIsCartOpen] = useState(window.innerWidth > 1024);
   const [view, setView] = useState<'main' | 'forgot-password'>('main');
@@ -57,6 +58,7 @@ const App: React.FC = () => {
   // Cart State
   const [cart, setCart] = useState<SaleItem[]>([]);
   const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [amountPaid, setAmountPaid] = useState<number>(0);
   const [globalDiscount, setGlobalDiscount] = useState<number>(0);
@@ -72,29 +74,33 @@ const App: React.FC = () => {
     setIsSyncing(false);
   }, [state]);
 
-  const checkTrialStatus = useCallback(async () => {
-    if (!navigator.onLine || trialLocked) return;
+  useEffect(() => {
+    if (!navigator.onLine || !state.isLoggedIn) return;
+    const timer = setTimeout(() => {
+      triggerSync();
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [state.products, state.transactions, state.business, state.isLoggedIn, triggerSync]);
+
+  const fetchEntitlements = useCallback(async () => {
+    if (!navigator.onLine) return;
     try {
-      const status = await checkSyncAccess();
-      setTrialStatus({ accessActive: !!status.accessActive, isSubscribed: !!status.isSubscribed });
-      if (!status.accessActive && !status.isSubscribed) {
-        // Trial expired; allow billing only and prompt payment
-        setTrialLocked(true);
-        setActiveTab('history');
-        alert('Your free trial is over. Please complete payment to continue using Ginvoice.');
-        window.open('https://paystack.shop/pay/gti5s0lqks', '_blank');
+      const data = await getEntitlements();
+      setEntitlements({ plan: data.plan, expiresAt: data.expiresAt });
+      if (data.plan === 'FREE' && data.expiresAt && new Date(data.expiresAt) < new Date()) {
+        if (!subscriptionLocked) {
+          setSubscriptionLocked(true);
+          setActiveTab('history');
+          alert('Your subscription has expired. Please complete payment to continue using premium features.');
+          window.open('https://paystack.shop/pay/gti5s0lqks', '_blank');
+        }
+      } else if (subscriptionLocked) {
+        setSubscriptionLocked(false);
       }
     } catch (err) {
-      const status = (err as any)?.status;
-      if (status === 402 && !trialLocked) {
-        setTrialStatus({ accessActive: false, isSubscribed: false });
-        setTrialLocked(true);
-        setActiveTab('history');
-        alert('Your free trial is over. Please complete payment to continue using Ginvoice.');
-        window.open('https://paystack.shop/pay/gti5s0lqks', '_blank');
-      }
+      console.error('Entitlements fetch failed', err);
     }
-  }, [trialLocked]);
+  }, [subscriptionLocked]);
 
   useEffect(() => {
     const styleId = 'dynamic-theme';
@@ -114,18 +120,18 @@ const App: React.FC = () => {
   }, [state.business.theme]);
 
   useEffect(() => {
-    const hO = () => { setIsOnline(true); checkTrialStatus(); triggerSync(); };
+    const hO = () => { setIsOnline(true); fetchEntitlements(); triggerSync(); };
     const hF = () => setIsOnline(false);
     window.addEventListener('online', hO);
     window.addEventListener('offline', hF);
     return () => { window.removeEventListener('online', hO); window.removeEventListener('offline', hF); };
-  }, [triggerSync, checkTrialStatus]);
+  }, [triggerSync, fetchEntitlements]);
 
   useEffect(() => {
     if (state.isLoggedIn) {
-      checkTrialStatus();
+      fetchEntitlements();
     }
-  }, [state.isLoggedIn, checkTrialStatus]);
+  }, [state.isLoggedIn, fetchEntitlements]);
 
   useEffect(() => { saveState(state); }, [state]);
 
@@ -216,6 +222,19 @@ const App: React.FC = () => {
     clearAuthToken();
     setState(prev => ({ ...prev, isLoggedIn: false }));
   };
+
+  const handleDeleteTransaction = async (id: string) => {
+    if (!navigator.onLine) {
+      alert('Delete requires an internet connection.');
+      return;
+    }
+    try {
+      await deleteTransaction(id);
+      setState(prev => ({ ...prev, transactions: prev.transactions.filter(t => t.id !== id) }));
+    } catch (err) {
+      alert('Delete failed. Please try again.');
+    }
+  };
   
   const handleResetBusiness = () => {
     // Navigate back to setup/registration screen
@@ -253,21 +272,24 @@ const App: React.FC = () => {
       });
       return { ...prev, products: updatedProducts, transactions: [transaction, ...prev.transactions] };
     });
-    setCart([]); setCustomerName(''); setAmountPaid(0); setGlobalDiscount(0); setSignature(''); setIsLocked(false);
+    setCart([]); setCustomerName(''); setCustomerPhone(''); setAmountPaid(0); setGlobalDiscount(0); setSignature(''); setIsLocked(false);
     if (window.innerWidth < 768) setIsCartOpen(false);
   };
 
   const allowedTabs = useMemo(() => {
-    if (trialLocked) return ['history'] as TabId[];
-    if (state.role === 'owner') return ['sales', 'inventory', 'history', 'dashboard', 'settings'] as TabId[];
-    return Array.from(new Set(['sales', ...state.business.staffPermissions])) as TabId[];
-  }, [state.role, state.business.staffPermissions, trialLocked]);
+    const hasPro = entitlements?.plan === 'PRO';
+    const baseOwnerTabs: TabId[] = ['sales', 'inventory', 'history'];
+    const ownerTabs = hasPro ? [...baseOwnerTabs, 'dashboard', 'settings'] : baseOwnerTabs;
+    if (state.role === 'owner') return ownerTabs;
+    const staffTabs = Array.from(new Set(['sales', 'history', ...state.business.staffPermissions])) as TabId[];
+    return hasPro ? staffTabs : staffTabs.filter(tab => tab !== 'dashboard' && tab !== 'settings');
+  }, [state.role, state.business.staffPermissions, entitlements]);
 
   useEffect(() => {
-    if (trialLocked && activeTab !== 'history') {
+    if (!allowedTabs.includes(activeTab)) {
       setActiveTab('history');
     }
-  }, [trialLocked, activeTab]);
+  }, [allowedTabs, activeTab]);
 
   if (!state.isRegistered) return <RegistrationScreen onRegister={handleRegister} onManualLogin={handleManualLogin} />;
   
@@ -362,7 +384,7 @@ const App: React.FC = () => {
         <div className="flex-1 overflow-y-auto p-4 md:p-8">
           {activeTab === 'sales' && <SalesScreen products={state.products} onAddToCart={addToCart} />}
           {activeTab === 'inventory' && <InventoryScreen products={state.products} onUpdateProducts={p => setState({...state, products: p})} isOwner={state.role === 'owner'} />}
-          {activeTab === 'history' && <HistoryScreen transactions={state.transactions} business={state.business} onDeleteTransaction={id => setState({...state, transactions: state.transactions.filter(t => t.id !== id)})} onUpdateTransaction={t => setState({...state, transactions: state.transactions.map(prev => prev.id === t.id ? t : prev)})} />}
+          {activeTab === 'history' && <HistoryScreen transactions={state.transactions} business={state.business} onDeleteTransaction={handleDeleteTransaction} onUpdateTransaction={t => setState({...state, transactions: state.transactions.map(prev => prev.id === t.id ? t : prev)})} />}
           {activeTab === 'dashboard' && state.role === 'owner' && <DashboardScreen transactions={state.transactions} products={state.products} />}
           {activeTab === 'settings' && state.role === 'owner' && <SettingsScreen business={state.business} onUpdateBusiness={b => setState({...state, business: b})} onManualSync={triggerSync} lastSynced={state.lastSyncedAt} isSyncing={isSyncing} />}
         </div>
@@ -388,6 +410,7 @@ const App: React.FC = () => {
           <CurrentOrderSidebar 
             cart={cart} setCart={setCart}
             customerName={customerName} setCustomerName={setCustomerName}
+            customerPhone={customerPhone} setCustomerPhone={setCustomerPhone}
             paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod}
             amountPaid={amountPaid} setAmountPaid={setAmountPaid}
             globalDiscount={globalDiscount} setGlobalDiscount={setGlobalDiscount}

@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Plus, Search, Edit3, Trash2, CheckCircle2, X, ListTodo, Layers, Tag, DollarSign, ArrowUp } from 'lucide-react';
 import { Product } from '../types';
 import { CURRENCY, CATEGORIES } from '../constants';
+import { deleteProduct } from '../services/api';
 
 interface InventoryScreenProps {
   products: Product[];
@@ -22,6 +23,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   const [bulkCategory, setBulkCategory] = useState('');
   const [bulkPriceChange, setBulkPriceChange] = useState<number | ''>('');
   const [bulkStockAdd, setBulkStockAdd] = useState<number | ''>('');
+  const [bulkStockReduce, setBulkStockReduce] = useState<number | ''>('');
 
   const [newProduct, setNewProduct] = useState<Partial<Product>>({
     name: '',
@@ -64,6 +66,9 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
         if (typeof bulkStockAdd === 'number') {
           updated.currentStock = Math.max(0, updated.currentStock + bulkStockAdd);
         }
+        if (typeof bulkStockReduce === 'number') {
+          updated.currentStock = Math.max(0, updated.currentStock - bulkStockReduce);
+        }
         return updated;
       }
       return p;
@@ -78,6 +83,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     setBulkCategory('');
     setBulkPriceChange('');
     setBulkStockAdd('');
+    setBulkStockReduce('');
   };
 
   const handleAddProduct = (e: React.FormEvent) => {
@@ -94,9 +100,18 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     setEditingProductId(null);
   };
 
-  const deleteProduct = (id: string) => {
+  const handleDeleteProduct = async (id: string) => {
+    if (!navigator.onLine) {
+      alert('Delete requires an internet connection.');
+      return;
+    }
     if (confirm('Are you sure you want to delete this item?')) {
-      onUpdateProducts(products.filter(p => p.id !== id));
+      try {
+        await deleteProduct(id);
+        onUpdateProducts(products.filter(p => p.id !== id));
+      } catch (err) {
+        alert('Delete failed. Please try again.');
+      }
     }
   };
 
@@ -209,7 +224,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                       >
                         <Edit3 size={18} />
                       </button>
-                      {isOwner && <button onClick={() => deleteProduct(product.id)} className="p-2 text-gray-400 hover:text-red-500"><Trash2 size={18} /></button>}
+                      {isOwner && <button onClick={() => handleDeleteProduct(product.id)} className="p-2 text-gray-400 hover:text-red-500"><Trash2 size={18} /></button>}
                     </div>
                   </td>
                 </tr>
@@ -269,6 +284,20 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                         onChange={(e) => setBulkStockAdd(e.target.value ? Number(e.target.value) : '')}
                       />
                     </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-black text-gray-400 uppercase mb-2 block">Reduce Stock (Qty)</label>
+                  <div className="relative">
+                    <ArrowUp className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 rotate-180" size={16} />
+                    <input 
+                      type="number" 
+                      placeholder="e.g. 10"
+                      className="w-full pl-10 pr-4 py-3 bg-gray-50 border rounded-xl"
+                      value={bulkStockReduce}
+                      onChange={(e) => setBulkStockReduce(e.target.value ? Number(e.target.value) : '')}
+                    />
                   </div>
                 </div>
               </div>

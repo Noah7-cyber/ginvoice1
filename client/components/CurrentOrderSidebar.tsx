@@ -10,6 +10,8 @@ interface CurrentOrderSidebarProps {
   setCart: React.Dispatch<React.SetStateAction<SaleItem[]>>;
   customerName: string;
   setCustomerName: (val: string) => void;
+  customerPhone: string;
+  setCustomerPhone: (val: string) => void;
   paymentMethod: PaymentMethod;
   setPaymentMethod: (val: PaymentMethod) => void;
   amountPaid: number;
@@ -29,7 +31,7 @@ interface CurrentOrderSidebarProps {
 
 const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
   cart, setCart, customerName, setCustomerName, paymentMethod, setPaymentMethod,
-  amountPaid, setAmountPaid, globalDiscount, setGlobalDiscount, isGlobalDiscountPercent,
+  customerPhone, setCustomerPhone, amountPaid, setAmountPaid, globalDiscount, setGlobalDiscount, isGlobalDiscountPercent,
   setIsGlobalDiscountPercent, signature, setSignature, isLocked, setIsLocked,
   onCompleteSale, onClose, products
 }) => {
@@ -77,6 +79,7 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
       id: `TX-${Date.now()}`,
       transactionDate: new Date().toISOString(),
       customerName: customerName || 'Walk-in Customer',
+      customerPhone: customerPhone || undefined,
       items: cart,
       subtotal: cartSubtotal,
       globalDiscount: finalDiscountValue,
@@ -120,6 +123,22 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
               placeholder="Guest Customer"
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
+              className="w-full pl-10 pr-4 py-3 bg-white border border-gray-100 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none font-bold shadow-sm"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Customer Phone</label>
+          <div className="relative">
+            <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+            <input 
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              placeholder="+234..."
+              value={customerPhone}
+              onChange={(e) => setCustomerPhone(e.target.value)}
               className="w-full pl-10 pr-4 py-3 bg-white border border-gray-100 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none font-bold shadow-sm"
             />
           </div>

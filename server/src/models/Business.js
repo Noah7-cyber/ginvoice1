@@ -11,6 +11,10 @@ const BusinessSchema = new mongoose.Schema({
   theme: { type: mongoose.Schema.Types.Mixed, default: {} },
   trialEndsAt: { type: Date, required: true },
   isSubscribed: { type: Boolean, default: false },
+  subscriptionExpiresAt: { type: Date },
+  paystackCustomerCode: { type: String },
+  paystackSubscriptionCode: { type: String },
+  paystackPlanCode: { type: String },
   createdAt: { type: Date, default: Date.now }
 });
 

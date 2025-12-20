@@ -14,6 +14,7 @@ const TransactionSchema = new mongoose.Schema({
   id: { type: String, required: true },
   transactionDate: { type: Date },
   customerName: { type: String },
+  customerPhone: { type: String },
   items: { type: [TransactionItemSchema], default: [] },
   subtotal: { type: mongoose.Schema.Types.Decimal128, default: 0 },
   globalDiscount: { type: mongoose.Schema.Types.Decimal128, default: 0 },

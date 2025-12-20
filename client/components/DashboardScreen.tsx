@@ -1,5 +1,5 @@
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -28,6 +28,7 @@ import {
 } from 'recharts';
 import { Transaction, Product } from '../types';
 import { CURRENCY } from '../constants';
+import { getAnalytics } from '../services/api';
 
 interface DashboardScreenProps {
   transactions: Transaction[];
@@ -35,7 +36,38 @@ interface DashboardScreenProps {
 }
 
 const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, products }) => {
-  const stats = useMemo(() => {
+  const [remoteAnalytics, setRemoteAnalytics] = useState<{
+    stats: {
+      totalRevenue: number;
+      totalProfit: number;
+      totalDebt: number;
+      totalSales: number;
+      cashSales: number;
+      transferSales: number;
+      revenueTrendText?: string;
+      profitTrendText?: string;
+    };
+    chartData: { date: string; amount: number }[];
+    topProducts: { name: string; qty: number }[];
+  } | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    if (!navigator.onLine) return;
+    if (!localStorage.getItem('ginvoice_auth_token_v1')) return;
+    getAnalytics()
+      .then((data) => {
+        if (active) setRemoteAnalytics(data);
+      })
+      .catch((err) => {
+        console.error('Analytics fetch failed', err);
+      });
+    return () => {
+      active = false;
+    };
+  }, [transactions.length]);
+
+  const localStats = useMemo(() => {
     const totalRevenue = transactions.reduce((sum, tx) => sum + tx.totalAmount, 0);
     const totalDebt = transactions.reduce((sum, tx) => sum + tx.balance, 0);
     
@@ -55,8 +87,11 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
     return { totalRevenue, totalProfit, totalSales: transactions.length, cashSales, transferSales, totalDebt };
   }, [transactions, products]);
 
+  const stats = remoteAnalytics?.stats || localStats;
+
   // Daily sales data for the chart
   const chartData = useMemo(() => {
+    if (remoteAnalytics?.chartData) return remoteAnalytics.chartData;
     const last7Days = Array.from({ length: 7 }, (_, i) => {
       const date = new Date();
       date.setDate(date.getDate() - i);
@@ -71,10 +106,11 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
       const displayDate = new Date(date).toLocaleDateString('en-NG', { weekday: 'short' });
       return { date: displayDate, amount: daySales };
     });
-  }, [transactions]);
+  }, [transactions, remoteAnalytics]);
 
   // Top products
   const topProducts = useMemo(() => {
+    if (remoteAnalytics?.topProducts) return remoteAnalytics.topProducts;
     const productSales: Record<string, { name: string, qty: number }> = {};
     transactions.forEach(tx => {
       tx.items.forEach(item => {
@@ -88,7 +124,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
     return Object.values(productSales)
       .sort((a, b) => b.qty - a.qty)
       .slice(0, 5);
-  }, [transactions]);
+  }, [transactions, remoteAnalytics]);
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
@@ -103,14 +139,14 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
           title="Total Revenue" 
           value={`${CURRENCY}${stats.totalRevenue.toLocaleString()}`} 
           icon={<DollarSign className="text-blue-600" />} 
-          trend="+12% from last month"
+          trend={stats.revenueTrendText || '+12% from last month'}
           color="bg-blue-50"
         />
         <StatCard 
           title="Estimated Profit" 
           value={`${CURRENCY}${stats.totalProfit.toLocaleString()}`} 
           icon={<TrendingUp className="text-green-600" />} 
-          trend="+8.4% from last month"
+          trend={stats.profitTrendText || '+8.4% from last month'}
           color="bg-green-50"
         />
         <StatCard 

@@ -6,11 +6,12 @@ const requireActiveSubscription = async (req, res, next) => {
     if (!business) return res.status(404).json({ message: 'Business not found' });
 
     const now = new Date();
-    const accessEndsAt = business.trialEndsAt ? new Date(business.trialEndsAt) : null;
-    const hasAccess = (business.isSubscribed && accessEndsAt && accessEndsAt >= now) || (!business.isSubscribed && accessEndsAt && accessEndsAt >= now);
+    const trialEndsAt = business.trialEndsAt ? new Date(business.trialEndsAt) : null;
+    const subscriptionEndsAt = business.subscriptionExpiresAt ? new Date(business.subscriptionExpiresAt) : null;
+    const hasAccess = (subscriptionEndsAt && subscriptionEndsAt >= now) || (trialEndsAt && trialEndsAt >= now);
 
     if (!hasAccess) {
-      return res.status(402).json({ message: 'Subscription required', trialEndsAt: business.trialEndsAt, isSubscribed: business.isSubscribed });
+      return res.status(402).json({ message: 'Subscription required', trialEndsAt: business.trialEndsAt, isSubscribed: business.isSubscribed, subscriptionExpiresAt: business.subscriptionExpiresAt });
     }
 
     req.business = business;

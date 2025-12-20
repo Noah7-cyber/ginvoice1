@@ -5,7 +5,6 @@ const Product = require('../models/Product');
 const Transaction = require('../models/Transaction');
 const Business = require('../models/Business');
 const auth = require('../middleware/auth');
-const requireActiveSubscription = require('../middleware/subscription');
 
 const router = express.Router();
 
@@ -33,7 +32,7 @@ router.get('/check', auth, async (req, res) => {
   }
 });
 
-router.post('/', auth, requireActiveSubscription, async (req, res) => {
+router.post('/', auth, async (req, res) => {
   try {
     const { products = [], transactions = [], business } = req.body || {};
     const businessId = req.businessId;
@@ -83,6 +82,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
               id: t.id,
               transactionDate: t.transactionDate ? new Date(t.transactionDate) : null,
               customerName: t.customerName,
+              customerPhone: t.customerPhone,
               items: (t.items || []).map((item) => ({
                 productId: item.productId,
                 productName: item.productName,
@@ -112,6 +112,28 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
     return res.json({ syncedAt: new Date().toISOString() });
   } catch (err) {
     return res.status(500).json({ message: 'Sync failed' });
+  }
+});
+
+router.delete('/products/:id', auth, async (req, res) => {
+  try {
+    const businessId = req.businessId;
+    const { id } = req.params;
+    await Product.deleteOne({ businessId, id });
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ message: 'Delete product failed' });
+  }
+});
+
+router.delete('/transactions/:id', auth, async (req, res) => {
+  try {
+    const businessId = req.businessId;
+    const { id } = req.params;
+    await Transaction.deleteOne({ businessId, id });
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ message: 'Delete transaction failed' });
   }
 });
 
