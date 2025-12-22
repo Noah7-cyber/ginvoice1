@@ -25,7 +25,7 @@ import InvoicePreview from './InvoicePreview';
 interface HistoryScreenProps {
   transactions: Transaction[];
   business: BusinessProfile;
-  onDeleteTransaction: (id: string) => void;
+  onDeleteTransaction: (id: string, restockItems: boolean) => void;
   onUpdateTransaction: (transaction: Transaction) => void;
 }
 
@@ -82,6 +82,17 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
       balance: Math.max(0, t.totalAmount - editAmountPaid)
     });
     setEditingId(null);
+  };
+
+  const handleDelete = (t: Transaction) => {
+    if (!navigator.onLine) {
+      alert('Delete requires an internet connection.');
+      return;
+    }
+    const confirmDelete = confirm('Are you sure you want to delete this invoice?');
+    if (!confirmDelete) return;
+    const restock = confirm('Do you want to add the sold items back to inventory stock?');
+    onDeleteTransaction(t.id, restock);
   };
 
   return (
@@ -213,7 +224,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
                         <>
                           <button onClick={() => setSelectedInvoice(t)} className="p-2 text-indigo-600 bg-indigo-50 rounded-lg"><FileText size={18} /></button>
                           <button onClick={() => handleEditClick(t)} className="p-2 text-gray-400 hover:text-indigo-600 rounded-lg"><Edit3 size={18} /></button>
-                          <button onClick={() => onDeleteTransaction(t.id)} className="p-2 text-gray-400 hover:text-red-600 rounded-lg"><Trash2 size={18} /></button>
+                          <button onClick={() => handleDelete(t)} className="p-2 text-gray-400 hover:text-red-600 rounded-lg"><Trash2 size={18} /></button>
                         </>
                       )}
                     </div>

@@ -2,7 +2,6 @@ const CACHE_NAME = 'ginvoice-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
-  'https://cdn.tailwindcss.com',
   'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&family=Dancing+Script:wght@400;700&family=Montserrat:wght@400;600;700;900&display=swap'
 ];
 
@@ -40,6 +39,10 @@ const isSafeAsset = (requestUrl, request) => {
   if (request.mode === 'navigate') return false;
   if (requestUrl.origin !== self.location.origin) return false;
   return requestUrl.pathname.startsWith('/assets/');
+};
+
+const isFontAsset = (requestUrl) => {
+  return requestUrl.hostname === 'fonts.googleapis.com' || requestUrl.hostname === 'fonts.gstatic.com';
 };
 
 self.addEventListener('install', (event) => {
@@ -101,6 +104,25 @@ self.addEventListener('fetch', (event) => {
             return response;
           })
           .catch(() => caches.match('/index.html'));
+      })
+    );
+    return;
+  }
+
+  if (isFontAsset(requestUrl)) {
+    event.respondWith(
+      caches.match(event.request).then((cachedResponse) => {
+        if (cachedResponse) return cachedResponse;
+        return fetch(event.request)
+          .then((response) => {
+            if (!response || response.status !== 200) return response;
+            const responseToCache = response.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
+            return response;
+          })
+          .catch(() => cachedResponse);
       })
     );
     return;

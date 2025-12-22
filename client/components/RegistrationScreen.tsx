@@ -9,6 +9,8 @@ interface RegistrationScreenProps {
 
 const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onManualLogin }) => {
   const [mode, setMode] = useState<'register' | 'login'>('register');
+  const [acceptedPolicy, setAcceptedPolicy] = useState(false);
+  const [showPolicy, setShowPolicy] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     address: '',
@@ -40,6 +42,10 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onM
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (mode === 'register') {
+      if (!acceptedPolicy) {
+        alert('Please accept the Privacy Policy to continue.');
+        return;
+      }
       if (formData.name && formData.phone && formData.ownerPassword && formData.staffPassword) {
         onRegister(formData);
       }
@@ -239,6 +245,26 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onM
           )}
 
           <div className="pt-4 space-y-4">
+            {mode === 'register' && (
+              <div className="flex items-start gap-3 text-xs text-gray-500">
+                <input
+                  type="checkbox"
+                  checked={acceptedPolicy}
+                  onChange={(e) => setAcceptedPolicy(e.target.checked)}
+                  className="mt-1"
+                />
+                <span>
+                  I agree to the Privacy Policy.
+                  <button
+                    type="button"
+                    onClick={() => setShowPolicy(true)}
+                    className="ml-2 text-indigo-600 font-bold hover:underline"
+                  >
+                    View
+                  </button>
+                </span>
+              </div>
+            )}
             <button 
               type="submit"
               className="w-full bg-indigo-600 text-white py-5 rounded-3xl font-black text-lg shadow-xl shadow-indigo-100 hover:bg-indigo-700 hover:-translate-y-1 transition-all flex items-center justify-center gap-3 active:scale-95"
@@ -266,6 +292,24 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onM
           </div>
         </form>
       </div>
+
+      {showPolicy && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden">
+            <div className="p-6 border-b flex justify-between items-center bg-indigo-600 text-white">
+              <h2 className="text-lg font-bold">Privacy Policy</h2>
+              <button onClick={() => setShowPolicy(false)}>Close</button>
+            </div>
+            <div className="p-6 space-y-3 text-sm text-gray-600 max-h-[60vh] overflow-y-auto">
+              <p>We collect only the information you provide to operate your store: business name, phone, email, and transaction records.</p>
+              <p>Your data is used to generate invoices, sync across devices, and improve app reliability.</p>
+              <p>Payment records are processed by Paystack. We do not store your card details.</p>
+              <p>We do not sell your data. Access is limited to your account and authorized staff.</p>
+              <p>You can request deletion of your business data by contacting support.</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

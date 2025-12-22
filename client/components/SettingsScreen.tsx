@@ -3,6 +3,7 @@ import React, { useState, useRef } from 'react';
 import { Store, Save, LayoutGrid, MapPin, Phone, Palette, Type, ShieldAlert, CheckCircle2, RefreshCw, CloudCheck, Upload, Trash2, Image as ImageIcon, MessageSquare, HeadphonesIcon, HelpCircle } from 'lucide-react';
 import { BusinessProfile, TabId } from '../types';
 import { THEME_COLORS, FONTS } from '../constants';
+import { verifyPayment } from '../services/api';
 
 interface SettingsScreenProps {
   business: BusinessProfile;
@@ -15,6 +16,8 @@ interface SettingsScreenProps {
 const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusiness, onManualSync, lastSynced, isSyncing }) => {
   const [formData, setFormData] = useState<BusinessProfile>(business);
   const [showSaved, setShowSaved] = useState(false);
+  const [paymentRef, setPaymentRef] = useState('');
+  const [verifyStatus, setVerifyStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -45,6 +48,18 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
       ? formData.staffPermissions.filter(t => t !== tab)
       : [...formData.staffPermissions, tab];
     setFormData({ ...formData, staffPermissions: next });
+  };
+
+  const handleVerifyPayment = async () => {
+    if (!paymentRef.trim()) return;
+    setVerifyStatus('loading');
+    try {
+      await verifyPayment(paymentRef.trim());
+      setVerifyStatus('success');
+      setPaymentRef('');
+    } catch (err) {
+      setVerifyStatus('error');
+    }
   };
 
   const PERMISSION_OPTIONS: { id: TabId; label: string; desc: string }[] = [
@@ -79,6 +94,25 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
           >
             {isSyncing ? 'SYNCING...' : 'SYNC NOW'}
           </button>
+          <div className="mt-2 w-full flex flex-col items-end gap-2">
+            <input
+              type="text"
+              placeholder="Payment Reference"
+              value={paymentRef}
+              onChange={(e) => setPaymentRef(e.target.value)}
+              className="w-full px-3 py-2 bg-white border border-indigo-100 rounded-xl text-xs font-bold text-gray-700"
+            />
+            <button
+              type="button"
+              onClick={handleVerifyPayment}
+              disabled={verifyStatus === 'loading'}
+              className="text-[10px] bg-gray-900 text-white px-3 py-1 rounded-full font-black hover:bg-black transition-colors disabled:opacity-50"
+            >
+              {verifyStatus === 'loading' ? 'VERIFYING...' : 'VERIFY PAYMENT'}
+            </button>
+            {verifyStatus === 'success' && <span className="text-[10px] text-emerald-600 font-bold">Payment verified.</span>}
+            {verifyStatus === 'error' && <span className="text-[10px] text-red-600 font-bold">Verification failed.</span>}
+          </div>
         </div>
       </div>
 

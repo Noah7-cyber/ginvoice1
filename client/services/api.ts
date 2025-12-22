@@ -119,6 +119,32 @@ export const getEntitlements = async () => {
   });
 };
 
+export const verifyPayment = async (reference: string) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/payments/verify', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ reference })
+  });
+};
+
+export const initializePayment = async (amount: number, email: string) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/payments/initialize', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ amount, email })
+  });
+};
+
 export const deleteProduct = async (id: string) => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');

@@ -18,8 +18,7 @@ import {
 import { InventoryState, UserRole, Product, Transaction, BusinessProfile, TabId, SaleItem, PaymentMethod } from './types';
 import { INITIAL_PRODUCTS } from './constants';
 import { saveState, loadState, syncWithBackend } from './services/storage';
-import { login, registerBusiness, saveAuthToken, clearAuthToken, deleteTransaction } from './services/api';
-import { getEntitlements } from './services/api';
+import { login, registerBusiness, saveAuthToken, clearAuthToken, deleteTransaction, getEntitlements, initializePayment } from './services/api';
 import SalesScreen from './components/SalesScreen';
 import InventoryScreen from './components/InventoryScreen';
 import DashboardScreen from './components/DashboardScreen';
@@ -33,8 +32,31 @@ import ForgotPasswordScreen from './components/ForgotPasswordScreen';
 const App: React.FC = () => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [subscriptionLocked, setSubscriptionLocked] = useState(false);
-  const [entitlements, setEntitlements] = useState<{ plan: 'FREE' | 'PRO'; expiresAt?: string | null } | null>(null);
+  const [subscriptionLocked, setSubscriptionLocked] = useState(() => {
+    try {
+      const cached = localStorage.getItem('ginvoice_entitlements_v1');
+      if (!cached) return false;
+      const parsed = JSON.parse(cached);
+      const trialExpired = parsed?.trialEndsAt ? new Date(parsed.trialEndsAt) < new Date() : false;
+      const isFree = parsed?.plan === 'FREE';
+      return Boolean(isFree && trialExpired);
+    } catch {
+      return false;
+    }
+  });
+  const [entitlements, setEntitlements] = useState<{
+    plan: 'FREE' | 'PRO';
+    expiresAt?: string | null;
+    trialEndsAt?: string | null;
+    subscriptionExpiresAt?: string | null;
+  } | null>(() => {
+    try {
+      const cached = localStorage.getItem('ginvoice_entitlements_v1');
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
   const [activeTab, setActiveTab] = useState<TabId>('sales');
   const [isCartOpen, setIsCartOpen] = useState(window.innerWidth > 1024);
   const [view, setView] = useState<'main' | 'forgot-password'>('main');
@@ -82,17 +104,47 @@ const App: React.FC = () => {
     return () => clearTimeout(timer);
   }, [state.products, state.transactions, state.business, state.isLoggedIn, triggerSync]);
 
+  const openPaymentLink = useCallback(async () => {
+    if (!navigator.onLine) {
+      alert('Please connect to the internet to subscribe.');
+      return;
+    }
+    if (!state.business.email) {
+      alert('Please add a business email in Settings before subscribing.');
+      return;
+    }
+    try {
+      const response = await initializePayment(2000, state.business.email);
+      const url = response?.data?.authorization_url;
+      if (url) {
+        window.open(url, '_blank');
+      } else {
+        alert('Payment initialization failed. Please try again.');
+      }
+    } catch (err) {
+      alert('Payment initialization failed. Please try again.');
+    }
+  }, [state.business.email]);
+
   const fetchEntitlements = useCallback(async () => {
     if (!navigator.onLine) return;
     try {
       const data = await getEntitlements();
-      setEntitlements({ plan: data.plan, expiresAt: data.expiresAt });
-      if (data.plan === 'FREE' && data.expiresAt && new Date(data.expiresAt) < new Date()) {
+      const next = {
+        plan: data.plan,
+        expiresAt: data.expiresAt,
+        trialEndsAt: data.trialEndsAt,
+        subscriptionExpiresAt: data.subscriptionExpiresAt
+      };
+      setEntitlements(next);
+      localStorage.setItem('ginvoice_entitlements_v1', JSON.stringify(next));
+      const trialExpired = data.trialEndsAt ? new Date(data.trialEndsAt) < new Date() : false;
+      if (data.plan === 'FREE' && trialExpired) {
         if (!subscriptionLocked) {
           setSubscriptionLocked(true);
           setActiveTab('history');
           alert('Your subscription has expired. Please complete payment to continue using premium features.');
-          window.open('https://paystack.shop/pay/gti5s0lqks', '_blank');
+          openPaymentLink();
         }
       } else if (subscriptionLocked) {
         setSubscriptionLocked(false);
@@ -100,7 +152,8 @@ const App: React.FC = () => {
     } catch (err) {
       console.error('Entitlements fetch failed', err);
     }
-  }, [subscriptionLocked]);
+  }, [subscriptionLocked, openPaymentLink]);
+
 
   useEffect(() => {
     const styleId = 'dynamic-theme';
@@ -150,6 +203,9 @@ const App: React.FC = () => {
           theme: state.business.theme
         });
         saveAuthToken(response.token);
+        if (response?.business?.trialEndsAt) {
+          details.trialEndsAt = response.business.trialEndsAt;
+        }
       }
     } catch (err) {
       console.error('Registration failed, continuing offline', err);
@@ -160,7 +216,7 @@ const App: React.FC = () => {
       isRegistered: true,
       isLoggedIn: true,
       role: 'owner',
-      business: { ...prev.business, ...details }
+      business: { ...prev.business, ...details, trialEndsAt: details.trialEndsAt || new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString() }
     }));
   };
 
@@ -223,12 +279,23 @@ const App: React.FC = () => {
     setState(prev => ({ ...prev, isLoggedIn: false }));
   };
 
-  const handleDeleteTransaction = async (id: string) => {
+  const handleDeleteTransaction = async (id: string, restockItems: boolean) => {
     if (!navigator.onLine) {
       alert('Delete requires an internet connection.');
       return;
     }
     try {
+      if (restockItems) {
+        setState(prev => {
+          const tx = prev.transactions.find(t => t.id === id);
+          if (!tx) return prev;
+          const updatedProducts = prev.products.map(p => {
+            const item = tx.items.find(i => i.productId === p.id);
+            return item ? { ...p, currentStock: p.currentStock + item.quantity } : p;
+          });
+          return { ...prev, products: updatedProducts };
+        });
+      }
       await deleteTransaction(id);
       setState(prev => ({ ...prev, transactions: prev.transactions.filter(t => t.id !== id) }));
     } catch (err) {
@@ -278,11 +345,12 @@ const App: React.FC = () => {
 
   const allowedTabs = useMemo(() => {
     const hasPro = entitlements?.plan === 'PRO';
+    const trialActive = entitlements?.trialEndsAt ? new Date(entitlements.trialEndsAt) >= new Date() : state.business.trialEndsAt ? new Date(state.business.trialEndsAt) >= new Date() : true;
+    if (entitlements && !hasPro && !trialActive) return ['history'] as TabId[];
     const baseOwnerTabs: TabId[] = ['sales', 'inventory', 'history'];
-    const ownerTabs = hasPro ? [...baseOwnerTabs, 'dashboard', 'settings'] : baseOwnerTabs;
+    const ownerTabs = [...baseOwnerTabs, 'dashboard', 'settings'];
     if (state.role === 'owner') return ownerTabs;
-    const staffTabs = Array.from(new Set(['sales', 'history', ...state.business.staffPermissions])) as TabId[];
-    return hasPro ? staffTabs : staffTabs.filter(tab => tab !== 'dashboard' && tab !== 'settings');
+    return Array.from(new Set(['sales', 'history', ...state.business.staffPermissions])) as TabId[];
   }, [state.role, state.business.staffPermissions, entitlements]);
 
   useEffect(() => {
@@ -290,6 +358,16 @@ const App: React.FC = () => {
       setActiveTab('history');
     }
   }, [allowedTabs, activeTab]);
+
+  useEffect(() => {
+    const trialExpired = entitlements?.trialEndsAt ? new Date(entitlements.trialEndsAt) < new Date() : false;
+    if (entitlements && entitlements.plan === 'FREE' && trialExpired && !subscriptionLocked) {
+      setSubscriptionLocked(true);
+      setActiveTab('history');
+      alert('Your subscription has expired. Please complete payment to continue using premium features.');
+      openPaymentLink();
+    }
+  }, [entitlements, subscriptionLocked, openPaymentLink]);
 
   if (!state.isRegistered) return <RegistrationScreen onRegister={handleRegister} onManualLogin={handleManualLogin} />;
   

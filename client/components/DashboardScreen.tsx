@@ -60,7 +60,12 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
         if (active) setRemoteAnalytics(data);
       })
       .catch((err) => {
-        console.error('Analytics fetch failed', err);
+        const status = err?.status;
+        if (status === 402 && active) {
+          setRemoteAnalytics(null);
+        } else {
+          console.error('Analytics fetch failed', err);
+        }
       });
     return () => {
       active = false;

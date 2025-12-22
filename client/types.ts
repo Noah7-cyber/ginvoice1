@@ -11,6 +11,7 @@ export interface BusinessProfile {
   logo?: string; // Base64 encoded image
   ownerPassword?: string;
   staffPassword?: string;
+  trialEndsAt?: string;
   theme: {
     primaryColor: string;
     fontFamily: string;
