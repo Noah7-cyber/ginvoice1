@@ -1,12 +1,13 @@
-const CACHE_NAME = 'ginvoice-v2';
+const CACHE_NAME = 'ginvoice-v3'; // Incremented version
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
-  'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&family=Dancing+Script:wght@400;700&family=Montserrat:wght@400;600;700;900&display=swap',
-  '../manifest.json', // Add this!
-  '/ginvoice.png'   // Add your icons too
+  '/manifest.json',
+  '/ginvoice.png',
+  'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&family=Dancing+Script:wght@400;700&family=Montserrat:wght@400;600;700;900&display=swap'
 ];
 
+// Routes that MUST go to the network (for your Syncing/Backend)
 const BYPASS_PATHS = [
   '/health',
   '/auth/',
@@ -28,32 +29,19 @@ const shouldBypass = (requestUrl, request) => {
   const pathname = requestUrl.pathname;
   const hasAuthHeader = request.headers.has('authorization');
   const hasCredentials = request.credentials === 'include';
-
   if (hasAuthHeader || hasCredentials) return true;
-
   return BYPASS_PATHS.some((path) => {
     if (path.endsWith('/')) return pathname.startsWith(path);
     return pathname === path || pathname.startsWith(path + '/');
   });
 };
 
-const isSafeAsset = (requestUrl, request) => {
-  if (request.mode === 'navigate') return false;
-  if (requestUrl.origin !== self.location.origin) return false;
-  return requestUrl.pathname.startsWith('/assets/');
-};
-
-const isFontAsset = (requestUrl) => {
-  return requestUrl.hostname === 'fonts.googleapis.com' || requestUrl.hostname === 'fonts.gstatic.com';
-};
-
+// Installation: Cache the core Shell
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
-    })
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS_TO_CACHE))
   );
-  self.skipWaiting();
+  self.skipWaiting(); // No hard refresh needed
 });
 
 self.addEventListener('activate', (event) => {
@@ -61,57 +49,50 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            return caches.delete(cacheName);
-          }
+          if (cacheName !== CACHE_NAME) return caches.delete(cacheName);
         })
       );
     })
   );
-  self.clients.claim();
+  self.clients.claim(); // Take control immediately
 });
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
-
   const requestUrl = new URL(event.request.url);
 
-  // 1. Bypass API/Auth calls
+  // 1. Critical Backend/Sync Routes: Network Only
   if (shouldBypass(requestUrl, event.request)) {
-    event.respondWith(
-      fetch(event.request).catch(() => jsonOfflineResponse())
-    );
+    event.respondWith(fetch(event.request).catch(() => jsonOfflineResponse()));
     return;
   }
 
-  // 2. Navigation (HTML)
+  // 2. Navigation: Network First, Fallback to index.html (for Offline)
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request)
-        .catch(() => caches.match('/index.html'))
+      fetch(event.request).catch(() => caches.match('/index.html'))
     );
     return;
   }
 
-  // 3. Static Assets (CSS, JS, Images)
-  // Use Cache-First strategy for assets to ensure PWA speed and offline stability
+  // 3. Static Assets: Cache First, then Network
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) return cachedResponse;
 
       return fetch(event.request).then((response) => {
-        // Only cache valid responses
+        // Only cache valid internal assets
         if (!response || response.status !== 200 || response.type !== 'basic') {
           return response;
         }
-
         const responseToCache = response.clone();
         caches.open(CACHE_NAME).then((cache) => {
           cache.put(event.request, responseToCache);
         });
         return response;
       });
+      // NOTE: No .catch(() => caches.match('/index.html')) here!
+      // This prevents the "Unexpected token <" error.
     })
   );
 });
-// Changes: bypass auth/api/sync/payment routes and credentialed requests; network-first for navigation; cache-first only for safe versioned assets; return JSON 503 when offline for bypassed routes.
