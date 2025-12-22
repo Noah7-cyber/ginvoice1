@@ -2,7 +2,9 @@ const CACHE_NAME = 'ginvoice-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
-  'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&family=Dancing+Script:wght@400;700&family=Montserrat:wght@400;600;700;900&display=swap'
+  'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&family=Dancing+Script:wght@400;700&family=Montserrat:wght@400;600;700;900&display=swap',
+  '../manifest.json', // Add this!
+  '/ginvoice.png'   // Add your icons too
 ];
 
 const BYPASS_PATHS = [
@@ -74,6 +76,7 @@ self.addEventListener('fetch', (event) => {
 
   const requestUrl = new URL(event.request.url);
 
+  // 1. Bypass API/Auth calls
   if (shouldBypass(requestUrl, event.request)) {
     event.respondWith(
       fetch(event.request).catch(() => jsonOfflineResponse())
@@ -81,54 +84,34 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // 2. Navigation (HTML)
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request)
-        .then((response) => response)
         .catch(() => caches.match('/index.html'))
     );
     return;
   }
 
-  if (isSafeAsset(requestUrl, event.request)) {
-    event.respondWith(
-      caches.match(event.request).then((cachedResponse) => {
-        if (cachedResponse) return cachedResponse;
-        return fetch(event.request)
-          .then((response) => {
-            if (!response || response.status !== 200) return response;
-            const responseToCache = response.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, responseToCache);
-            });
-            return response;
-          })
-          .catch(() => caches.match('/index.html'));
-      })
-    );
-    return;
-  }
+  // 3. Static Assets (CSS, JS, Images)
+  // Use Cache-First strategy for assets to ensure PWA speed and offline stability
+  event.respondWith(
+    caches.match(event.request).then((cachedResponse) => {
+      if (cachedResponse) return cachedResponse;
 
-  if (isFontAsset(requestUrl)) {
-    event.respondWith(
-      caches.match(event.request).then((cachedResponse) => {
-        if (cachedResponse) return cachedResponse;
-        return fetch(event.request)
-          .then((response) => {
-            if (!response || response.status !== 200) return response;
-            const responseToCache = response.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, responseToCache);
-            });
-            return response;
-          })
-          .catch(() => cachedResponse);
-      })
-    );
-    return;
-  }
+      return fetch(event.request).then((response) => {
+        // Only cache valid responses
+        if (!response || response.status !== 200 || response.type !== 'basic') {
+          return response;
+        }
 
-  event.respondWith(fetch(event.request));
+        const responseToCache = response.clone();
+        caches.open(CACHE_NAME).then((cache) => {
+          cache.put(event.request, responseToCache);
+        });
+        return response;
+      });
+    })
+  );
 });
-
 // Changes: bypass auth/api/sync/payment routes and credentialed requests; network-first for navigation; cache-first only for safe versioned assets; return JSON 503 when offline for bypassed routes.

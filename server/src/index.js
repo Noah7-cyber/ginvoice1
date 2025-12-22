@@ -4,6 +4,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const compression = require('compression');
+const helmet = require('helmet');
 
 const authRoutes = require('./routes/auth');
 const syncRoutes = require('./routes/sync');
@@ -13,10 +14,14 @@ const entitlementsRoutes = require('./routes/entitlements');
 
 const app = express();
 
+// Set security HTTP headers
+app.use(helmet());
+
 app.use(compression());
 
 app.use(cors({
-  origin: process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',') : '*',
+  // In production, default to false (block) if variable is missing, otherwise allow all (*) for dev
+  origin: process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',') : (process.env.NODE_ENV === 'production' ? false : '*'),
   credentials: true
 }));
 
