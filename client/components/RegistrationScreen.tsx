@@ -1,13 +1,16 @@
 
 import React, { useState, useRef } from 'react';
 import { ShoppingBag, MapPin, Phone, Mail, ArrowRight, Store, Sparkles, Upload, Trash2, Image as ImageIcon, Lock, ShieldCheck, UserCircle, Info, KeyRound } from 'lucide-react';
+import { useToast } from './ToastProvider';
 
 interface RegistrationScreenProps {
   onRegister: (details: { name: string, address: string, phone: string, email: string, logo?: string, ownerPassword?: string, staffPassword?: string }) => void;
   onManualLogin: (details: { email: string, pin: string }) => void;
+  onForgotPassword: () => void;
 }
 
-const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onManualLogin }) => {
+const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onManualLogin, onForgotPassword }) => {
+  const { addToast } = useToast();
   const [mode, setMode] = useState<'register' | 'login'>('register');
   const [acceptedPolicy, setAcceptedPolicy] = useState(false);
   const [showPolicy, setShowPolicy] = useState(false);
@@ -43,7 +46,7 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onM
     e.preventDefault();
     if (mode === 'register') {
       if (!acceptedPolicy) {
-        alert('Please accept the Privacy Policy to continue.');
+        addToast('Please accept the Privacy Policy to continue.', 'error');
         return;
       }
       if (formData.name && formData.phone && formData.ownerPassword && formData.staffPassword) {
@@ -241,6 +244,14 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onM
                   </div>
                 </div>
               </div>
+
+              <button 
+                type="button"
+                onClick={onForgotPassword}
+                className="text-xs font-bold text-gray-400 hover:text-indigo-600"
+              >
+                Forgot PIN?
+              </button>
             </div>
           )}
 

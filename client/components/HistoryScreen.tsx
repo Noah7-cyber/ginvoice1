@@ -21,6 +21,7 @@ import {
 import { Transaction, BusinessProfile } from '../types';
 import { CURRENCY } from '../constants';
 import InvoicePreview from './InvoicePreview';
+import { useToast } from './ToastProvider';
 
 interface HistoryScreenProps {
   transactions: Transaction[];
@@ -32,6 +33,7 @@ interface HistoryScreenProps {
 type ViewMode = 'invoices' | 'debtors';
 
 const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, onDeleteTransaction, onUpdateTransaction }) => {
+  const { addToast } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>('invoices');
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -86,7 +88,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
 
   const handleDelete = (t: Transaction) => {
     if (!navigator.onLine) {
-      alert('Delete requires an internet connection.');
+      addToast('Delete requires an internet connection.', 'error');
       return;
     }
     const confirmDelete = confirm('Are you sure you want to delete this invoice?');
@@ -282,7 +284,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
                         if (debtor.phone) {
                           window.location.href = `tel:${debtor.phone}`;
                         } else {
-                          alert('No phone number saved for this customer.');
+                          addToast('No phone number saved for this customer.', 'error');
                         }
                       }}
                       className="p-3 text-emerald-600 bg-emerald-50 rounded-xl hover:bg-emerald-100 transition-all border border-emerald-100"

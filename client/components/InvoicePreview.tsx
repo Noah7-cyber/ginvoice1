@@ -3,6 +3,7 @@ import React from 'react';
 import { Transaction, BusinessProfile } from '../types';
 import { CURRENCY } from '../constants';
 import { ShoppingBag, Printer, Share2, X, Download, Tag } from 'lucide-react';
+import { useToast } from './ToastProvider';
 
 interface InvoicePreviewProps {
   transaction: Transaction;
@@ -11,6 +12,7 @@ interface InvoicePreviewProps {
 }
 
 const InvoicePreview: React.FC<InvoicePreviewProps> = ({ transaction, business, onClose }) => {
+  const { addToast } = useToast();
   const handlePrint = () => {
     window.print();
   };
@@ -30,7 +32,7 @@ const InvoicePreview: React.FC<InvoicePreviewProps> = ({ transaction, business, 
       }
     } else {
       navigator.clipboard.writeText(shareText);
-      alert('Invoice details copied to clipboard!');
+      addToast('Invoice details copied to clipboard!', 'success');
     }
   };
 

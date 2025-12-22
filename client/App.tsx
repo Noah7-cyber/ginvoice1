@@ -19,6 +19,7 @@ import { InventoryState, UserRole, Product, Transaction, BusinessProfile, TabId,
 import { INITIAL_PRODUCTS } from './constants';
 import { saveState, loadState, syncWithBackend } from './services/storage';
 import { login, registerBusiness, saveAuthToken, clearAuthToken, deleteTransaction, getEntitlements, initializePayment } from './services/api';
+import { useToast } from './components/ToastProvider';
 import SalesScreen from './components/SalesScreen';
 import InventoryScreen from './components/InventoryScreen';
 import DashboardScreen from './components/DashboardScreen';
@@ -28,8 +29,10 @@ import HistoryScreen from './components/HistoryScreen';
 import RegistrationScreen from './components/RegistrationScreen';
 import CurrentOrderSidebar from './components/CurrentOrderSidebar';
 import ForgotPasswordScreen from './components/ForgotPasswordScreen';
+import SupportBot from './components/SupportBot';
 
 const App: React.FC = () => {
+  const { addToast } = useToast();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isSyncing, setIsSyncing] = useState(false);
   const [subscriptionLocked, setSubscriptionLocked] = useState(() => {
@@ -106,11 +109,11 @@ const App: React.FC = () => {
 
   const openPaymentLink = useCallback(async () => {
     if (!navigator.onLine) {
-      alert('Please connect to the internet to subscribe.');
+      addToast('Please connect to the internet to subscribe.', 'error');
       return;
     }
     if (!state.business.email) {
-      alert('Please add a business email in Settings before subscribing.');
+      addToast('Please add a business email in Settings before subscribing.', 'error');
       return;
     }
     try {
@@ -119,10 +122,10 @@ const App: React.FC = () => {
       if (url) {
         window.open(url, '_blank');
       } else {
-        alert('Payment initialization failed. Please try again.');
+        addToast('Payment initialization failed. Please try again.', 'error');
       }
     } catch (err) {
-      alert('Payment initialization failed. Please try again.');
+      addToast('Payment initialization failed. Please try again.', 'error');
     }
   }, [state.business.email]);
 
@@ -143,7 +146,7 @@ const App: React.FC = () => {
         if (!subscriptionLocked) {
           setSubscriptionLocked(true);
           setActiveTab('history');
-          alert('Your subscription has expired. Please complete payment to continue using premium features.');
+          addToast('Your subscription has expired. Please complete payment to continue using premium features.', 'error');
           openPaymentLink();
         }
       } else if (subscriptionLocked) {
@@ -242,7 +245,7 @@ const App: React.FC = () => {
     if (state.business.email === details.email && state.business.ownerPassword === details.pin) {
       setState(prev => ({ ...prev, isLoggedIn: true, role: 'owner', isRegistered: true }));
     } else {
-      alert("No matching store found for this email/PIN on this device.");
+      addToast('No matching store found for this email/PIN on this device.', 'error');
     }
   };
 
@@ -281,7 +284,7 @@ const App: React.FC = () => {
 
   const handleDeleteTransaction = async (id: string, restockItems: boolean) => {
     if (!navigator.onLine) {
-      alert('Delete requires an internet connection.');
+      addToast('Delete requires an internet connection.', 'error');
       return;
     }
     try {
@@ -299,7 +302,7 @@ const App: React.FC = () => {
       await deleteTransaction(id);
       setState(prev => ({ ...prev, transactions: prev.transactions.filter(t => t.id !== id) }));
     } catch (err) {
-      alert('Delete failed. Please try again.');
+      addToast('Delete failed. Please try again.', 'error');
     }
   };
   
@@ -364,12 +367,12 @@ const App: React.FC = () => {
     if (entitlements && entitlements.plan === 'FREE' && trialExpired && !subscriptionLocked) {
       setSubscriptionLocked(true);
       setActiveTab('history');
-      alert('Your subscription has expired. Please complete payment to continue using premium features.');
+      addToast('Your subscription has expired. Please complete payment to continue using premium features.', 'error');
       openPaymentLink();
     }
   }, [entitlements, subscriptionLocked, openPaymentLink]);
 
-  if (!state.isRegistered) return <RegistrationScreen onRegister={handleRegister} onManualLogin={handleManualLogin} />;
+  if (!state.isRegistered) return <RegistrationScreen onRegister={handleRegister} onManualLogin={handleManualLogin} onForgotPassword={() => setView('forgot-password')} />;
   
   if (!state.isLoggedIn) {
     if (view === 'forgot-password') {
@@ -501,6 +504,7 @@ const App: React.FC = () => {
           />
         </div>
       </div>
+      <SupportBot />
     </div>
   );
 };

@@ -5,6 +5,6 @@
 
 [[redirects]]
   from = "/api/*"
-  to = "https://YOUR_BACKEND_HOST/api/:splat"
+  to = "https://ginvoice1.onrender.com/api/:splat"
   status = 200
   force = true

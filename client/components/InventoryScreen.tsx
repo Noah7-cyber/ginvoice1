@@ -4,6 +4,7 @@ import { Plus, Search, Edit3, Trash2, CheckCircle2, X, ListTodo, Layers, Tag, Do
 import { Product } from '../types';
 import { CURRENCY, CATEGORIES } from '../constants';
 import { deleteProduct } from '../services/api';
+import { useToast } from './ToastProvider';
 
 interface InventoryScreenProps {
   products: Product[];
@@ -12,6 +13,7 @@ interface InventoryScreenProps {
 }
 
 const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdateProducts, isOwner }) => {
+  const { addToast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -102,7 +104,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
   const handleDeleteProduct = async (id: string) => {
     if (!navigator.onLine) {
-      alert('Delete requires an internet connection.');
+      addToast('Delete requires an internet connection.', 'error');
       return;
     }
     if (confirm('Are you sure you want to delete this item?')) {
@@ -110,7 +112,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
         await deleteProduct(id);
         onUpdateProducts(products.filter(p => p.id !== id));
       } catch (err) {
-        alert('Delete failed. Please try again.');
+        addToast('Delete failed. Please try again.', 'error');
       }
     }
   };
