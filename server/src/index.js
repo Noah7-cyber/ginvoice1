@@ -46,6 +46,13 @@ mongoose.connect(mongoUri, { autoIndex: true })
     app.listen(port, () => {
       console.log(`Server listening on ${port}`);
     });
+
+    if (paymentRoutes.reconcilePending) {
+      paymentRoutes.reconcilePending();
+      setInterval(() => {
+        paymentRoutes.reconcilePending();
+      }, 10 * 60 * 1000);
+    }
   })
   .catch(err => {
     console.error('Mongo connection failed', err);

@@ -2,6 +2,8 @@ const express = require('express');
 const crypto = require('crypto');
 
 const Business = require('../models/Business');
+const PaymentEvent = require('../models/PaymentEvent');
+const PaymentAttempt = require('../models/PaymentAttempt');
 const auth = require('../middleware/auth');
 const { sendMail } = require('../services/mail');
 
@@ -12,6 +14,34 @@ const getPaystackConfig = () => ({
   webhookSecret: process.env.PAYSTACK_WEBHOOK_SECRET,
   planCode: process.env.PAYSTACK_PLAN_CODE
 });
+
+const MIN_AMOUNT_KOBO = 200000;
+
+const isReferenceProcessed = async (reference) => {
+  if (!reference) return false;
+  const existing = await PaymentEvent.findOne({ reference }).lean();
+  return Boolean(existing);
+};
+
+const markReferenceProcessed = async (reference, eventType, businessId) => {
+  if (!reference) return;
+  try {
+    await PaymentEvent.create({ reference, eventType, businessId });
+  } catch (err) {
+    if (err?.code !== 11000) {
+      console.error('Payment event store failed', err);
+    }
+  }
+};
+
+const markAttemptStatus = async (reference, status) => {
+  if (!reference) return;
+  await PaymentAttempt.findOneAndUpdate(
+    { reference },
+    { $set: { status, lastCheckedAt: new Date() } },
+    { new: true }
+  );
+};
 
 const extendSubscription = async (business, days) => {
   const now = new Date();
@@ -32,6 +62,61 @@ const updatePaystackCodes = async (business, data) => {
   const planCode = data?.plan?.plan_code || data?.plan_code;
   if (planCode && business.paystackPlanCode !== planCode) {
     business.paystackPlanCode = planCode;
+  }
+};
+
+const verifyReference = async (reference, secretKey) => {
+  const response = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${secretKey}`,
+      'Content-Type': 'application/json'
+    }
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error('Paystack verify failed');
+  return data?.data;
+};
+
+const reconcilePending = async () => {
+  const { secretKey } = getPaystackConfig();
+  if (!secretKey) return;
+  const cutoff = new Date(Date.now() - 10 * 60 * 1000);
+  const pending = await PaymentAttempt.find({
+    status: 'pending',
+    $or: [{ lastCheckedAt: null }, { lastCheckedAt: { $lte: cutoff } }]
+  }).limit(25);
+
+  for (const attempt of pending) {
+    try {
+      await markAttemptStatus(attempt.reference, 'pending');
+      const details = await verifyReference(attempt.reference, secretKey);
+      if (details?.status !== 'success') continue;
+      if (Number(details?.amount || 0) < MIN_AMOUNT_KOBO) {
+        await markAttemptStatus(attempt.reference, 'failed');
+        continue;
+      }
+      const businessId = details?.metadata?.businessId;
+      if (!businessId || businessId !== attempt.businessId.toString()) {
+        await markAttemptStatus(attempt.reference, 'failed');
+        continue;
+      }
+      if (await isReferenceProcessed(attempt.reference)) {
+        await markAttemptStatus(attempt.reference, 'processed');
+        continue;
+      }
+      const business = await Business.findById(businessId);
+      if (!business) {
+        await markAttemptStatus(attempt.reference, 'failed');
+        continue;
+      }
+      await updatePaystackCodes(business, details);
+      await extendSubscription(business, 30);
+      await markReferenceProcessed(attempt.reference, 'reconcile', business._id);
+      await markAttemptStatus(attempt.reference, 'processed');
+    } catch (err) {
+      console.error('Payment reconcile failed', err);
+    }
   }
 };
 
@@ -70,6 +155,15 @@ router.post('/initialize', auth, async (req, res) => {
     const data = await response.json();
     if (!response.ok) return res.status(400).json({ message: 'Paystack init failed', data });
 
+    const reference = data?.data?.reference;
+    if (reference) {
+      await PaymentAttempt.findOneAndUpdate(
+        { reference },
+        { $set: { businessId: business._id, amountKobo: payload.amount, status: 'pending', lastCheckedAt: null } },
+        { upsert: true, new: true }
+      );
+    }
+
     return res.json(data);
   } catch (err) {
     return res.status(500).json({ message: 'Payment init failed' });
@@ -95,15 +189,28 @@ router.post('/verify', auth, async (req, res) => {
     if (!response.ok) return res.status(400).json({ message: 'Paystack verify failed', data });
 
     const details = data?.data;
+    if (details?.status !== 'success') {
+      return res.status(400).json({ message: 'Payment not successful' });
+    }
+    if (Number(details?.amount || 0) < MIN_AMOUNT_KOBO) {
+      return res.status(400).json({ message: 'Payment amount invalid' });
+    }
+
+    const referenceKey = details?.reference || reference;
+    if (await isReferenceProcessed(referenceKey)) {
+      return res.json({ ok: true, data });
+    }
+
     const businessId = details?.metadata?.businessId;
-    const email = details?.customer?.email;
-    const business = businessId
-      ? await Business.findById(businessId)
-      : await Business.findOne({ email });
+    if (!businessId) return res.status(400).json({ message: 'Missing business metadata' });
+    if (businessId !== req.businessId) return res.status(403).json({ message: 'Business mismatch' });
+    const business = await Business.findById(businessId);
 
     if (business) {
       await updatePaystackCodes(business, details);
       await extendSubscription(business, 30);
+      await markReferenceProcessed(referenceKey, 'verify', business._id);
+      await markAttemptStatus(referenceKey, 'processed');
     }
 
     return res.json({ ok: true, data });
@@ -127,16 +234,22 @@ router.post('/webhook', async (req, res) => {
     if (event?.event === 'charge.success') {
       const businessId = event?.data?.metadata?.businessId;
       const amountKobo = Number(event?.data?.amount || 0);
-      if (amountKobo < 200000) {
+      if (amountKobo < MIN_AMOUNT_KOBO) {
         return res.json({ received: true });
       }
-      const email = event?.data?.customer?.email;
-      const business = businessId
-        ? await Business.findById(businessId)
-        : await Business.findOne({ email });
+      if (!businessId) {
+        return res.json({ received: true });
+      }
+      const referenceKey = event?.data?.reference;
+      if (await isReferenceProcessed(referenceKey)) {
+        return res.json({ received: true });
+      }
+      const business = await Business.findById(businessId);
       if (business) {
         await updatePaystackCodes(business, event.data);
         await extendSubscription(business, 30);
+        await markReferenceProcessed(referenceKey, event.event, business._id);
+        await markAttemptStatus(referenceKey, 'processed');
 
         if (business.email) {
           // Subscription activation email
@@ -151,20 +264,38 @@ router.post('/webhook', async (req, res) => {
     }
 
     if (event?.event === 'subscription.create') {
-      const email = event?.data?.customer?.email;
-      const business = await Business.findOne({ email });
+      const businessId = event?.data?.metadata?.businessId;
+      const referenceKey = event?.data?.subscription_code || event?.data?.id;
+      if (await isReferenceProcessed(referenceKey)) {
+        return res.json({ received: true });
+      }
+      if (!businessId) {
+        return res.json({ received: true });
+      }
+      const business = await Business.findById(businessId);
       if (business) {
         await updatePaystackCodes(business, event.data);
         await extendSubscription(business, 30);
+        await markReferenceProcessed(referenceKey, event.event, business._id);
+        await markAttemptStatus(referenceKey, 'processed');
       }
     }
 
     if (event?.event === 'invoice.payment_succeeded') {
-      const email = event?.data?.customer?.email;
-      const business = await Business.findOne({ email });
+      const businessId = event?.data?.metadata?.businessId;
+      const referenceKey = event?.data?.invoice?.id || event?.data?.id;
+      if (await isReferenceProcessed(referenceKey)) {
+        return res.json({ received: true });
+      }
+      if (!businessId) {
+        return res.json({ received: true });
+      }
+      const business = await Business.findById(businessId);
       if (business) {
         await updatePaystackCodes(business, event.data?.subscription || event.data);
         await extendSubscription(business, 30);
+        await markReferenceProcessed(referenceKey, event.event, business._id);
+        await markAttemptStatus(referenceKey, 'processed');
       }
     }
 
@@ -174,4 +305,5 @@ router.post('/webhook', async (req, res) => {
   }
 });
 
+router.reconcilePending = reconcilePending;
 module.exports = router;
