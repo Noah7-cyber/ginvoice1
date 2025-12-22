@@ -37,7 +37,7 @@ export const syncWithBackend = async (state: InventoryState): Promise<string | n
   if (!loadAuthToken()) return null;
 
   try {
-    console.log('📡 BACKGROUND SYNC: Pushing local data to cloud...', {
+    console.log('📡 ', {
       business: state.business.name,
       transactions: state.transactions.length,
       timestamp: new Date().toLocaleTimeString()
