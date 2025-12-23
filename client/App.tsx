@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   ShoppingBag, 
   Package, 
@@ -30,6 +29,7 @@ import RegistrationScreen from './components/RegistrationScreen';
 import CurrentOrderSidebar from './components/CurrentOrderSidebar';
 import ForgotPasswordScreen from './components/ForgotPasswordScreen';
 import SupportBot from './components/SupportBot';
+import useServerWakeup from './services/useServerWakeup';
 
 const App: React.FC = () => {
   const { addToast } = useToast();
@@ -63,6 +63,21 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabId>('sales');
   const [isCartOpen, setIsCartOpen] = useState(window.innerWidth > 1024);
   const [view, setView] = useState<'main' | 'forgot-password'>('main');
+
+  // Server wakeup hook (non-blocking)
+  const { status: wakeStatus } = useServerWakeup();
+  const wakeToastShownRef = useRef(false);
+
+  // show a non-intrusive toast when server is waking
+  useEffect(() => {
+    if (wakeStatus === 'waking' && !wakeToastShownRef.current) {
+      addToast('Waking up cloud sync server...', 'info');
+      wakeToastShownRef.current = true;
+    } else if (wakeStatus !== 'waking') {
+      // reset so future wake cycles can show toast again once
+      wakeToastShownRef.current = false;
+    }
+  }, [wakeStatus, addToast]);
 
   const [state, setState] = useState<InventoryState>(() => {
     const persisted = loadState();
@@ -156,7 +171,6 @@ const App: React.FC = () => {
       console.error('Entitlements fetch failed', err);
     }
   }, [subscriptionLocked, openPaymentLink]);
-
 
   useEffect(() => {
     const styleId = 'dynamic-theme';
@@ -465,9 +479,9 @@ const App: React.FC = () => {
         <div className="flex-1 overflow-y-auto p-4 md:p-8">
           {activeTab === 'sales' && <SalesScreen products={state.products} onAddToCart={addToCart} />}
           {activeTab === 'inventory' && <InventoryScreen products={state.products} onUpdateProducts={p => setState({...state, products: p})} isOwner={state.role === 'owner'} />}
-          {activeTab === 'history' && <HistoryScreen transactions={state.transactions} business={state.business} onDeleteTransaction={handleDeleteTransaction} onUpdateTransaction={t => setState({...state, transactions: state.transactions.map(prev => prev.id === t.id ? t : prev)})} />}
+          {activeTab === 'history' && <HistoryScreen transactions={state.transactions} business={state.business} onDeleteTransaction={handleDeleteTransaction} onUpdateTransaction={t => setState({...state, transactions: state.transactions.map(tx => tx.id === t.id ? t : tx)})} />}
           {activeTab === 'dashboard' && state.role === 'owner' && <DashboardScreen transactions={state.transactions} products={state.products} />}
-          {activeTab === 'settings' && state.role === 'owner' && <SettingsScreen business={state.business} onUpdateBusiness={b => setState({...state, business: b})} onManualSync={triggerSync} lastSynced={state.lastSyncedAt} isSyncing={isSyncing} />}
+          {activeTab === 'settings' && state.role === 'owner' && <SettingsScreen business={state.business} onUpdateBusiness={b => setState({...state, business: b})} onManualSync={triggerSync} lastSyncedAt={state.lastSyncedAt} />}
         </div>
 
         {/* Mobile Bottom Nav */}
