@@ -12,9 +12,10 @@ import {
   ChevronRight,
   ShoppingCart,
   PanelRightClose,
-  PanelRightOpen
+  PanelRightOpen,
+  Wallet
 } from 'lucide-react';
-import { InventoryState, UserRole, Product, Transaction, BusinessProfile, TabId, SaleItem, PaymentMethod } from './types';
+import { InventoryState, UserRole, Product, Transaction, BusinessProfile, TabId, SaleItem, PaymentMethod, Expenditure } from './types';
 import { INITIAL_PRODUCTS } from './constants';
 import { saveState, loadState, syncWithBackend } from './services/storage';
 import { login, registerBusiness, saveAuthToken, clearAuthToken, deleteTransaction, getEntitlements, initializePayment } from './services/api';
@@ -25,6 +26,7 @@ import DashboardScreen from './components/DashboardScreen';
 import AuthScreen from './components/AuthScreen';
 import SettingsScreen from './components/SettingsScreen';
 import HistoryScreen from './components/HistoryScreen';
+import ExpenditureScreen from './components/ExpenditureScreen';
 import RegistrationScreen from './components/RegistrationScreen';
 import CurrentOrderSidebar from './components/CurrentOrderSidebar';
 import ForgotPasswordScreen from './components/ForgotPasswordScreen';
@@ -35,6 +37,7 @@ const App: React.FC = () => {
   const { addToast } = useToast();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isSyncing, setIsSyncing] = useState(false);
+  
   const [subscriptionLocked, setSubscriptionLocked] = useState(() => {
     try {
       const cached = localStorage.getItem('ginvoice_entitlements_v1');
@@ -47,6 +50,7 @@ const App: React.FC = () => {
       return false;
     }
   });
+
   const [entitlements, setEntitlements] = useState<{
     plan: 'FREE' | 'PRO';
     expiresAt?: string | null;
@@ -60,28 +64,26 @@ const App: React.FC = () => {
       return null;
     }
   });
+
   const [activeTab, setActiveTab] = useState<TabId>('sales');
   const [isCartOpen, setIsCartOpen] = useState(window.innerWidth > 1024);
   const [view, setView] = useState<'main' | 'forgot-password'>('main');
 
-  // Server wakeup hook (non-blocking)
   const { status: wakeStatus } = useServerWakeup();
   const wakeToastShownRef = useRef(false);
 
-  // show a non-intrusive toast when server is waking
   useEffect(() => {
     if (wakeStatus === 'waking' && !wakeToastShownRef.current) {
       addToast('Waking up cloud sync server...', 'info');
       wakeToastShownRef.current = true;
     } else if (wakeStatus !== 'waking') {
-      // reset so future wake cycles can show toast again once
       wakeToastShownRef.current = false;
     }
   }, [wakeStatus, addToast]);
 
   const [state, setState] = useState<InventoryState>(() => {
     const persisted = loadState();
-    return persisted || {
+    const base = persisted || {
       products: INITIAL_PRODUCTS,
       transactions: [],
       role: 'staff',
@@ -91,11 +93,13 @@ const App: React.FC = () => {
         name: '', address: '', phone: '', email: '',
         theme: { primaryColor: '#4f46e5', fontFamily: "'Inter', sans-serif" },
         staffPermissions: ['sales']
-      }
+      },
+      expenditures: []
     };
+    if (!base.expenditures) (base as InventoryState).expenditures = [];
+    return base as InventoryState;
   });
 
-  // Cart State
   const [cart, setCart] = useState<SaleItem[]>([]);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
@@ -120,7 +124,7 @@ const App: React.FC = () => {
       triggerSync();
     }, 1500);
     return () => clearTimeout(timer);
-  }, [state.products, state.transactions, state.business, state.isLoggedIn, triggerSync]);
+  }, [state.products, state.transactions, state.business, state.expenditures, state.isLoggedIn, triggerSync]);
 
   const openPaymentLink = useCallback(async () => {
     if (!navigator.onLine) {
@@ -142,7 +146,7 @@ const App: React.FC = () => {
     } catch (err) {
       addToast('Payment initialization failed. Please try again.', 'error');
     }
-  }, [state.business.email]);
+  }, [state.business.email, addToast]);
 
   const fetchEntitlements = useCallback(async () => {
     if (!navigator.onLine) return;
@@ -170,7 +174,7 @@ const App: React.FC = () => {
     } catch (err) {
       console.error('Entitlements fetch failed', err);
     }
-  }, [subscriptionLocked, openPaymentLink]);
+  }, [subscriptionLocked, openPaymentLink, addToast]);
 
   useEffect(() => {
     const styleId = 'dynamic-theme';
@@ -205,18 +209,15 @@ const App: React.FC = () => {
 
   useEffect(() => { saveState(state); }, [state]);
 
+  const updateExpenditures = (items: Expenditure[]) => {
+    setState(prev => ({ ...prev, expenditures: items }));
+  };
+
   const handleRegister = async (details: any) => {
     try {
       if (navigator.onLine) {
-        // Backend registration + token bootstrap for cross-device sync
         const response = await registerBusiness({
-          name: details.name,
-          email: details.email,
-          phone: details.phone,
-          address: details.address,
-          ownerPassword: details.ownerPassword,
-          staffPassword: details.staffPassword,
-          logo: details.logo,
+          ...details,
           theme: state.business.theme
         });
         saveAuthToken(response.token);
@@ -240,7 +241,6 @@ const App: React.FC = () => {
   const handleManualLogin = async (details: { email: string, pin: string }) => {
     try {
       if (navigator.onLine) {
-        // Backend login for cloud-backed stores
         const response = await login(details.email, details.pin);
         saveAuthToken(response.token);
         setState(prev => ({
@@ -266,7 +266,6 @@ const App: React.FC = () => {
   const handleLogin = async (pin: string, selectedRole: UserRole) => {
     try {
       if (navigator.onLine && state.business.email) {
-        // Backend login to unlock cloud sync token
         const response = await login(state.business.email, pin);
         saveAuthToken(response.token);
         setState(prev => ({
@@ -321,12 +320,7 @@ const App: React.FC = () => {
   };
   
   const handleResetBusiness = () => {
-    // Navigate back to setup/registration screen
-    setState(prev => ({
-      ...prev,
-      isRegistered: false,
-      isLoggedIn: false
-    }));
+    setState(prev => ({ ...prev, isRegistered: false, isLoggedIn: false }));
   };
 
   const addToCart = (product: Product) => {
@@ -363,12 +357,14 @@ const App: React.FC = () => {
   const allowedTabs = useMemo(() => {
     const hasPro = entitlements?.plan === 'PRO';
     const trialActive = entitlements?.trialEndsAt ? new Date(entitlements.trialEndsAt) >= new Date() : state.business.trialEndsAt ? new Date(state.business.trialEndsAt) >= new Date() : true;
+    
     if (entitlements && !hasPro && !trialActive) return ['history'] as TabId[];
-    const baseOwnerTabs: TabId[] = ['sales', 'inventory', 'history'];
-    const ownerTabs = [...baseOwnerTabs, 'dashboard', 'settings'];
+    
+    const ownerTabs: TabId[] = ['sales', 'inventory', 'history', 'dashboard', 'expenditure', 'settings'];
     if (state.role === 'owner') return ownerTabs;
+    
     return Array.from(new Set(['sales', 'history', ...state.business.staffPermissions])) as TabId[];
-  }, [state.role, state.business.staffPermissions, entitlements]);
+  }, [state.role, state.business.staffPermissions, entitlements, state.business.trialEndsAt]);
 
   useEffect(() => {
     if (!allowedTabs.includes(activeTab)) {
@@ -376,30 +372,13 @@ const App: React.FC = () => {
     }
   }, [allowedTabs, activeTab]);
 
-  useEffect(() => {
-    const trialExpired = entitlements?.trialEndsAt ? new Date(entitlements.trialEndsAt) < new Date() : false;
-    if (entitlements && entitlements.plan === 'FREE' && trialExpired && !subscriptionLocked) {
-      setSubscriptionLocked(true);
-      setActiveTab('history');
-      addToast('Your subscription has expired. Please complete payment to continue using premium features.', 'error');
-      openPaymentLink();
-    }
-  }, [entitlements, subscriptionLocked, openPaymentLink]);
-
   if (!state.isRegistered) return <RegistrationScreen onRegister={handleRegister} onManualLogin={handleManualLogin} onForgotPassword={() => setView('forgot-password')} />;
   
   if (!state.isLoggedIn) {
     if (view === 'forgot-password') {
       return <ForgotPasswordScreen onBack={() => setView('main')} businessName={state.business.name} />;
     }
-    return (
-      <AuthScreen 
-        onLogin={handleLogin} 
-        onForgotPassword={() => setView('forgot-password')} 
-        onResetBusiness={handleResetBusiness}
-        business={state.business} 
-      />
-    );
+    return <AuthScreen onLogin={handleLogin} onForgotPassword={() => setView('forgot-password')} onResetBusiness={handleResetBusiness} business={state.business} />;
   }
 
   return (
@@ -429,6 +408,7 @@ const App: React.FC = () => {
           {allowedTabs.includes('inventory') && <SidebarLink active={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')} icon={<Package />} label="Inventory" />}
           {allowedTabs.includes('history') && <SidebarLink active={activeTab === 'history'} onClick={() => setActiveTab('history')} icon={<History />} label="Billing" />}
           {allowedTabs.includes('dashboard') && <SidebarLink active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={<BarChart3 />} label="Analytics" />}
+          {allowedTabs.includes('expenditure') && <SidebarLink active={activeTab === 'expenditure'} onClick={() => setActiveTab('expenditure')} icon={<Wallet />} label="Expenditure" />}
           {allowedTabs.includes('settings') && <SidebarLink active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} icon={<Settings />} label="Store Settings" />}
         </nav>
         <div className="p-4 border-t border-white/10 space-y-2">
@@ -481,15 +461,25 @@ const App: React.FC = () => {
           {activeTab === 'inventory' && <InventoryScreen products={state.products} onUpdateProducts={p => setState({...state, products: p})} isOwner={state.role === 'owner'} />}
           {activeTab === 'history' && <HistoryScreen transactions={state.transactions} business={state.business} onDeleteTransaction={handleDeleteTransaction} onUpdateTransaction={t => setState({...state, transactions: state.transactions.map(tx => tx.id === t.id ? t : tx)})} />}
           {activeTab === 'dashboard' && state.role === 'owner' && <DashboardScreen transactions={state.transactions} products={state.products} />}
+          {activeTab === 'expenditure' && <ExpenditureScreen expenditures={state.expenditures} onUpdateExpenditures={updateExpenditures} />}
           {activeTab === 'settings' && state.role === 'owner' && <SettingsScreen business={state.business} onUpdateBusiness={b => setState({...state, business: b})} onManualSync={triggerSync} lastSyncedAt={state.lastSyncedAt} />}
         </div>
 
-        {/* Mobile Bottom Nav */}
+        {/* Mobile Bottom Nav - Dynamic */}
         <nav className="md:hidden bg-white border-t flex justify-around p-2 shrink-0 z-50">
-          <MobileNavLink active={activeTab === 'sales'} onClick={() => setActiveTab('sales')} icon={<ShoppingBag />} label="Sell" />
-          <MobileNavLink active={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')} icon={<Package />} label="Stock" />
-          <MobileNavLink active={activeTab === 'history'} onClick={() => setActiveTab('history')} icon={<History />} label="Bills" />
-          <MobileNavLink active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} icon={<Settings />} label="Store" />
+          {allowedTabs.map(tab => {
+            const mapIconLabel: Record<string, { icon: React.ReactNode; label: string }> = {
+              sales: { icon: <ShoppingBag />, label: 'Sell' },
+              inventory: { icon: <Package />, label: 'Stock' },
+              history: { icon: <History />, label: 'Bills' },
+              dashboard: { icon: <BarChart3 />, label: 'Analytics' },
+              settings: { icon: <Settings />, label: 'Store' },
+              expenditure: { icon: <Wallet />, label: 'Expend' }
+            };
+            const item = mapIconLabel[tab];
+            if (!item) return null;
+            return <MobileNavLink key={tab} active={activeTab === tab} onClick={() => setActiveTab(tab as TabId)} icon={item.icon} label={item.label} />;
+          })}
         </nav>
       </main>
 

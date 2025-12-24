@@ -1,7 +1,7 @@
-
+/* Updated: added 'expenditure' to TabId, and Expenditure type + expenditures array on InventoryState */
 export type UserRole = 'owner' | 'staff';
 
-export type TabId = 'sales' | 'inventory' | 'history' | 'dashboard' | 'settings';
+export type TabId = 'sales' | 'inventory' | 'history' | 'dashboard' | 'settings' | 'expenditure';
 
 export interface BusinessProfile {
   name: string;
@@ -57,6 +57,16 @@ export interface Transaction {
   staffId: string;
 }
 
+/* New: Expenditure item stored locally */
+export interface Expenditure {
+  id: string;
+  date: string;        // ISO string
+  amount: number;
+  category?: string;
+  note?: string;
+  createdBy?: string;  // staff id or 'owner'
+}
+
 export interface InventoryState {
   products: Product[];
   transactions: Transaction[];
@@ -65,6 +75,7 @@ export interface InventoryState {
   isRegistered: boolean;
   business: BusinessProfile;
   lastSyncedAt?: string;
+  expenditures?: Expenditure[]; // added optional to preserve backwards compatibility
 }
 
 export interface CartState {
