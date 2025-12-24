@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MessageCircle, X, Send, LifeBuoy } from 'lucide-react';
+import { MessageCircle, X, LifeBuoy } from 'lucide-react';
 import { useToast } from './ToastProvider';
 
 const SUPPORT_WHATSAPP = 'https://wa.me/2348051763431';
@@ -13,7 +13,8 @@ const FAQ: { id: string; q: string; a: string }[] = [
   { id: 'invoice', q: 'Invoice edits are not saving', a: 'Save the invoice edit, then allow auto-sync to push changes when online.' }
 ];
 
-const SupportBot: React.FC = () => {
+// Added embed prop to handle the two different display modes
+const SupportBot: React.FC<{ embed?: boolean }> = ({ embed = false }) => {
   const { addToast } = useToast();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<{ from: 'bot' | 'user'; text: string }[]>([
@@ -47,6 +48,38 @@ const SupportBot: React.FC = () => {
     window.open(SUPPORT_WHATSAPP, '_blank');
   };
 
+  // --- RENDERING LOGIC ---
+
+  // 1. INLINE MODE (For Settings Screen)
+  if (embed) {
+    return (
+      <div className="w-full">
+        {!open ? (
+          <button 
+            onClick={() => setOpen(true)} 
+            className="w-full py-3 bg-primary text-white rounded-xl font-black text-sm shadow-md flex items-center justify-center gap-2"
+          >
+            <LifeBuoy size={18} /> OPEN SUPPORT ASSISTANT
+          </button>
+        ) : (
+          <div className="border border-gray-100 rounded-2xl bg-white overflow-hidden shadow-inner">
+            <div className="p-3 bg-gray-50 border-b flex justify-between items-center">
+              <span className="text-xs font-black uppercase text-gray-400 tracking-widest">Support Chat</span>
+              <button onClick={() => setOpen(false)} className="text-[10px] font-bold text-red-500 uppercase">Close</button>
+            </div>
+            <ChatContent 
+              messages={messages} 
+              onQuestion={handleQuestion} 
+              onEmail={handleEscalateEmail} 
+              onWhatsapp={handleEscalateWhatsapp} 
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // 2. FLOATING MODE (Original)
   return (
     <>
       <button
@@ -69,52 +102,63 @@ const SupportBot: React.FC = () => {
                 <X size={18} />
               </button>
             </div>
-
-            <div className="p-4 space-y-3 max-h-[60vh] overflow-y-auto">
-              {messages.map((msg, idx) => (
-                <div
-                  key={idx}
-                  className={`text-sm ${msg.from === 'bot' ? 'text-gray-700' : 'text-primary font-bold text-right'}`}
-                >
-                  {msg.text}
-                </div>
-              ))}
-
-              <div className="pt-2 space-y-2">
-                {FAQ.map(item => (
-                  <button
-                    key={item.id}
-                    onClick={() => handleQuestion(item)}
-                    className="w-full text-left text-xs font-bold px-3 py-2 rounded-xl border border-gray-100 bg-gray-50 hover:bg-gray-100"
-                  >
-                    {item.q}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="p-4 border-t bg-white">
-              <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-2">Need a human?</div>
-              <div className="flex gap-2">
-                <button
-                  onClick={handleEscalateEmail}
-                  className="flex-1 bg-gray-900 text-white py-2 rounded-xl text-xs font-black"
-                >
-                  Email Support
-                </button>
-                <button
-                  onClick={handleEscalateWhatsapp}
-                  className="flex-1 bg-emerald-600 text-white py-2 rounded-xl text-xs font-black"
-                >
-                  WhatsApp
-                </button>
-              </div>
-            </div>
+            <ChatContent 
+              messages={messages} 
+              onQuestion={handleQuestion} 
+              onEmail={handleEscalateEmail} 
+              onWhatsapp={handleEscalateWhatsapp} 
+            />
           </div>
         </div>
       )}
     </>
   );
 };
+
+// Reusable Chat UI to keep the code clean
+const ChatContent: React.FC<{
+  messages: any[], 
+  onQuestion: (q: any) => void, 
+  onEmail: () => void, 
+  onWhatsapp: () => void
+}> = ({ messages, onQuestion, onEmail, onWhatsapp }) => (
+  <>
+    <div className="p-4 space-y-3 max-h-[40vh] overflow-y-auto bg-gray-50/50">
+      {messages.map((msg, idx) => (
+        <div
+          key={idx}
+          className={`text-sm p-3 rounded-2xl max-w-[85%] ${
+            msg.from === 'bot' 
+            ? 'bg-white text-gray-700 shadow-sm self-start' 
+            : 'bg-primary text-white font-bold ml-auto'
+          }`}
+        >
+          {msg.text}
+        </div>
+      ))}
+
+      <div className="pt-2 space-y-2">
+        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Quick FAQ</p>
+        {FAQ.map(item => (
+          <button
+            key={item.id}
+            onClick={() => onQuestion(item)}
+            className="w-full text-left text-xs font-bold px-3 py-2 rounded-xl border border-gray-100 bg-white hover:bg-gray-100 transition-colors"
+          >
+            {item.q}
+          </button>
+        ))}
+      </div>
+    </div>
+
+    <div className="p-4 border-t bg-white">
+      <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-2">Speak to a human</div>
+      <div className="flex gap-2">
+        <button onClick={onEmail} className="flex-1 bg-gray-900 text-white py-2 rounded-xl text-xs font-black">Email</button>
+        <button onClick={onWhatsapp} className="flex-1 bg-emerald-600 text-white py-2 rounded-xl text-xs font-black">WhatsApp</button>
+      </div>
+    </div>
+  </>
+);
 
 export default SupportBot;

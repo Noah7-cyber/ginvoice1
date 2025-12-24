@@ -1,54 +1,57 @@
-
+// storage.ts - local persistence and syncWithBackend
 import { InventoryState } from '../types';
-import { syncState, loadAuthToken } from './api';
+import { syncState } from './api';
 
-const STORAGE_KEY = 'ginvoice_data_v1';
+// Use localStorage for simplicity; can upgrade to IndexedDB for larger data sets.
+const STORAGE_KEY = 'ginvoice_v1_state';
 
 export const saveState = (state: InventoryState) => {
   try {
-    const serializedState = JSON.stringify(state);
-    localStorage.setItem(STORAGE_KEY, serializedState);
-    
-    // Auto-sync attempt if online happens in App.tsx via useEffect or network listeners
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (err) {
-    console.error('Could not save state', err);
+    console.warn('saveState failed', err);
   }
 };
 
-export const loadState = (): InventoryState | undefined => {
+export const loadState = (): InventoryState | null => {
   try {
-    const serializedState = localStorage.getItem(STORAGE_KEY);
-    if (serializedState === null) {
-      return undefined;
-    }
-    return JSON.parse(serializedState);
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as InventoryState;
   } catch (err) {
-    console.error('Could not load state', err);
-    return undefined;
-  }
-};
-
-/**
- * Triggers a full sync of local data to the backend.
- * Returns the timestamp of successful sync.
- */
-export const syncWithBackend = async (state: InventoryState): Promise<string | null> => {
-  if (!navigator.onLine) return null;
-  if (!loadAuthToken()) return null;
-
-  try {
-    console.log('📡 ', {
-      business: state.business.name,
-      transactions: state.transactions.length,
-      timestamp: new Date().toLocaleTimeString()
-    });
-    
-    // Push full offline state to backend
-    await syncState(state);
-    
-    return new Date().toISOString();
-  } catch (e) {
-    console.error('Sync failed', e);
+    console.warn('loadState failed', err);
     return null;
   }
 };
+
+/*
+ syncWithBackend(state)
+ - Posts local state to server /api/sync
+ - Server returns merged state (or partial update); we return lastSyncedAt value or null.
+ - We include expenditures in the sync payload.
+*/
+export const syncWithBackend = async (state: InventoryState) => {
+  try {
+    // Prepare a minimal sync payload to reduce payload size
+    const payload = {
+      p: state.products,        // keep keys short on server; client sends full product objects
+      t: state.transactions,
+      e: state.expenditures || [],
+      b: state.business,
+      lastSyncedAt: state.lastSyncedAt || null
+    };
+    const res = await syncState(payload as any); // server expects the compact payload
+    // server returns maybe { lastSyncedAt, products, transactions, expenditures }
+    if (res && res.lastSyncedAt) return res.lastSyncedAt;
+    return null;
+  } catch (err) {
+    console.warn('syncWithBackend failed', err);
+    return null;
+  }
+};
+
+/*
+  We intentionally do not auto-sync on every local change while online.
+  The App now triggers sync only on offline->online transitions.
+  The client can still call syncWithBackend manually (e.g., owner clicks sync).
+*/

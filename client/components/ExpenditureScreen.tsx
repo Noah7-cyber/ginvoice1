@@ -7,6 +7,7 @@ interface Props {
   expenditures: Expenditure[] | undefined;
   onUpdateExpenditures: (items: Expenditure[]) => void;
   isOwner?: boolean;
+  staffId?: string;
 }
 
 const defaultCategoryOptions = ['Personal', 'Supplies', 'Travel', 'Utilities', 'Other'];
@@ -17,7 +18,34 @@ function sumBetween(items: Expenditure[], since: Date) {
     .reduce((s, i) => s + (Number(i.amount) || 0), 0);
 }
 
-export default function ExpenditureScreen({ expenditures = [], onUpdateExpenditures }: Props) {
+function generateSparklineData(items: Expenditure[], days: number) {
+  // returns array of daily totals for the last `days` days (oldest -> newest)
+  const now = new Date();
+  const arr: number[] = Array.from({ length: days }).map(() => 0);
+  items.forEach(i => {
+    const d = new Date(i.date);
+    const diff = Math.floor((now.getTime() - d.getTime()) / (24 * 3600 * 1000));
+    if (diff >= 0 && diff < days) {
+      arr[days - 1 - diff] += Number(i.amount) || 0;
+    }
+  });
+  return arr;
+}
+
+function Sparkline({ data }: { data: number[] }) {
+  if (!data || data.length === 0) return <svg width="100" height="30" />;
+  const w = 100, h = 30;
+  const max = Math.max(...data, 1);
+  const step = w / (data.length - 1 || 1);
+  const pts = data.map((d, i) => `${i * step},${h - (d / max) * (h - 4)}`).join(' ');
+  return (
+    <svg width={w} height={h} className="block">
+      <polyline fill="none" stroke="#4f46e5" strokeWidth="2" points={pts} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export default function ExpenditureScreen({ expenditures = [], onUpdateExpenditures, isOwner }: Props) {
   const [amount, setAmount] = useState<string>('');
   const [category, setCategory] = useState<string>(defaultCategoryOptions[0]);
   const [note, setNote] = useState<string>('');
@@ -33,7 +61,10 @@ export default function ExpenditureScreen({ expenditures = [], onUpdateExpenditu
     return {
       last7: sumBetween(expenditures, start7),
       last30: sumBetween(expenditures, start30),
-      yearToDate: sumBetween(expenditures, startYear)
+      yearToDate: sumBetween(expenditures, startYear),
+      spark7: generateSparklineData(expenditures, 7),
+      spark30: generateSparklineData(expenditures, 30),
+      sparkYear: generateSparklineData(expenditures, 12) // monthly buckets could be later — keep simple
     };
   }, [expenditures]);
 
@@ -45,11 +76,11 @@ export default function ExpenditureScreen({ expenditures = [], onUpdateExpenditu
       date: new Date(date).toISOString(),
       amount: amt,
       category,
-      note
+      note,
+      createdBy: isOwner ? 'owner' : 'staff'
     };
     const next = [item, ...expenditures];
     onUpdateExpenditures(next);
-    // reset
     setAmount('');
     setNote('');
     setDate(new Date().toISOString().slice(0, 10));
@@ -67,14 +98,17 @@ export default function ExpenditureScreen({ expenditures = [], onUpdateExpenditu
         <div className="p-4 bg-white rounded shadow-sm">
           <div className="text-xs uppercase text-gray-500 font-bold">Last 7 days</div>
           <div className="text-2xl font-extrabold mt-2">₦{analytics.last7.toLocaleString()}</div>
+          <div className="mt-2"><Sparkline data={analytics.spark7} /></div>
         </div>
         <div className="p-4 bg-white rounded shadow-sm">
           <div className="text-xs uppercase text-gray-500 font-bold">Last 30 days</div>
           <div className="text-2xl font-extrabold mt-2">₦{analytics.last30.toLocaleString()}</div>
+          <div className="mt-2"><Sparkline data={analytics.spark30} /></div>
         </div>
         <div className="p-4 bg-white rounded shadow-sm">
           <div className="text-xs uppercase text-gray-500 font-bold">Year to date</div>
           <div className="text-2xl font-extrabold mt-2">₦{analytics.yearToDate.toLocaleString()}</div>
+          <div className="mt-2"><Sparkline data={analytics.sparkYear} /></div>
         </div>
       </section>
 

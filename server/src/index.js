@@ -5,7 +5,7 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const compression = require('compression');
 const helmet = require('helmet');
-
+const expendituresRouter = require('./routes/expenditures');
 const authRoutes = require('./routes/auth');
 const syncRoutes = require('./routes/sync');
 const paymentRoutes = require('./routes/payments');
@@ -42,6 +42,7 @@ app.use('/api/sync', syncRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/entitlements', entitlementsRoutes);
+app.use('/api/expenditures', expendituresRouter);
 
 const port = process.env.PORT || 4000;
 const mongoUri = process.env.MONGODB_URI || '';

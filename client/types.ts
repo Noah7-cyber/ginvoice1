@@ -16,15 +16,16 @@ export interface BusinessProfile {
     primaryColor: string;
     fontFamily: string;
   };
-  staffPermissions: TabId[];
+  // staffPermissions may include tab ids and special permissions like 'stock-management'
+  staffPermissions: (TabId | 'stock-management')[];
 }
 
 export interface Product {
   id: string;
   name: string;
   category: string;
-  costPrice: number;
-  sellingPrice: number;
+  costPrice: number;     // NOTE: client uses integers (kobo) when interacting with server
+  sellingPrice: number;  // stored as integer kobo values when synced
   currentStock: number;
   unit: string;
 }
@@ -36,7 +37,7 @@ export interface SaleItem {
   productName: string;
   quantity: number;
   unitPrice: number;
-  discount: number; 
+  discount: number;
   total: number;
 }
 
@@ -52,7 +53,7 @@ export interface Transaction {
   paymentMethod: PaymentMethod;
   amountPaid: number;
   balance: number;
-  signature?: string; 
+  signature?: string;
   isSignatureLocked?: boolean;
   staffId: string;
 }
@@ -61,7 +62,7 @@ export interface Transaction {
 export interface Expenditure {
   id: string;
   date: string;        // ISO string
-  amount: number;
+  amount: number;      // in main currency units on client (e.g., Naira) but server expects integer kobo
   category?: string;
   note?: string;
   createdBy?: string;  // staff id or 'owner'

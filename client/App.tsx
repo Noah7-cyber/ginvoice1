@@ -37,6 +37,7 @@ const App: React.FC = () => {
   const { addToast } = useToast();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isSyncing, setIsSyncing] = useState(false);
+  const wasOnlineRef = useRef(navigator.onLine);
   
   const [subscriptionLocked, setSubscriptionLocked] = useState(() => {
     try {
@@ -84,7 +85,7 @@ const App: React.FC = () => {
   const [state, setState] = useState<InventoryState>(() => {
     const persisted = loadState();
     const base = persisted || {
-      products: INITIAL_PRODUCTS,
+      products: INITIAL_PRODUCTS.slice(0, 1), // Keep 1 sample product
       transactions: [],
       role: 'staff',
       isLoggedIn: false,
@@ -96,7 +97,7 @@ const App: React.FC = () => {
       },
       expenditures: []
     };
-    if (!base.expenditures) (base as InventoryState).expenditures = [];
+    if (!base.expenditures) base.expenditures = [];
     return base as InventoryState;
   });
 
@@ -118,36 +119,6 @@ const App: React.FC = () => {
     setIsSyncing(false);
   }, [state]);
 
-  useEffect(() => {
-    if (!navigator.onLine || !state.isLoggedIn) return;
-    const timer = setTimeout(() => {
-      triggerSync();
-    }, 1500);
-    return () => clearTimeout(timer);
-  }, [state.products, state.transactions, state.business, state.expenditures, state.isLoggedIn, triggerSync]);
-
-  const openPaymentLink = useCallback(async () => {
-    if (!navigator.onLine) {
-      addToast('Please connect to the internet to subscribe.', 'error');
-      return;
-    }
-    if (!state.business.email) {
-      addToast('Please add a business email in Settings before subscribing.', 'error');
-      return;
-    }
-    try {
-      const response = await initializePayment(2000, state.business.email);
-      const url = response?.data?.authorization_url;
-      if (url) {
-        window.open(url, '_blank');
-      } else {
-        addToast('Payment initialization failed. Please try again.', 'error');
-      }
-    } catch (err) {
-      addToast('Payment initialization failed. Please try again.', 'error');
-    }
-  }, [state.business.email, addToast]);
-
   const fetchEntitlements = useCallback(async () => {
     if (!navigator.onLine) return;
     try {
@@ -165,7 +136,7 @@ const App: React.FC = () => {
         if (!subscriptionLocked) {
           setSubscriptionLocked(true);
           setActiveTab('history');
-          addToast('Your subscription has expired. Please complete payment to continue using premium features.', 'error');
+          addToast('Your subscription has expired. Please complete payment to continue.', 'error');
           openPaymentLink();
         }
       } else if (subscriptionLocked) {
@@ -174,7 +145,47 @@ const App: React.FC = () => {
     } catch (err) {
       console.error('Entitlements fetch failed', err);
     }
-  }, [subscriptionLocked, openPaymentLink, addToast]);
+  }, [subscriptionLocked, addToast]);
+
+  // Sync optimization: Only sync when transitioning from offline to online
+  useEffect(() => {
+    const handleOnline = async () => {
+      setIsOnline(true);
+      if (!wasOnlineRef.current && state.isLoggedIn) {
+        setIsSyncing(true);
+        const syncTime = await syncWithBackend(state);
+        if (syncTime) setState(prev => ({ ...prev, lastSyncedAt: syncTime }));
+        setIsSyncing(false);
+      }
+      await fetchEntitlements();
+    };
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [state, fetchEntitlements]);
+
+  useEffect(() => {
+    wasOnlineRef.current = isOnline;
+  }, [isOnline]);
+
+  const openPaymentLink = useCallback(async () => {
+    if (!navigator.onLine) {
+      addToast('Please connect to the internet to subscribe.', 'error');
+      return;
+    }
+    try {
+      const response = await initializePayment(2000, state.business.email);
+      const url = response?.data?.authorization_url;
+      if (url) window.open(url, '_blank');
+    } catch (err) {
+      addToast('Payment initialization failed.', 'error');
+    }
+  }, [state.business.email, addToast]);
 
   useEffect(() => {
     const styleId = 'dynamic-theme';
@@ -187,25 +198,8 @@ const App: React.FC = () => {
     styleTag.innerHTML = `
       :root { --primary: ${state.business.theme.primaryColor}; --primary-bg: ${state.business.theme.primaryColor}15; }
       body { font-family: ${state.business.theme.fontFamily}; }
-      .bg-primary { background-color: var(--primary); }
-      .text-primary { color: var(--primary); }
-      .border-primary { border-color: var(--primary); }
     `;
   }, [state.business.theme]);
-
-  useEffect(() => {
-    const hO = () => { setIsOnline(true); fetchEntitlements(); triggerSync(); };
-    const hF = () => setIsOnline(false);
-    window.addEventListener('online', hO);
-    window.addEventListener('offline', hF);
-    return () => { window.removeEventListener('online', hO); window.removeEventListener('offline', hF); };
-  }, [triggerSync, fetchEntitlements]);
-
-  useEffect(() => {
-    if (state.isLoggedIn) {
-      fetchEntitlements();
-    }
-  }, [state.isLoggedIn, fetchEntitlements]);
 
   useEffect(() => { saveState(state); }, [state]);
 
@@ -216,51 +210,17 @@ const App: React.FC = () => {
   const handleRegister = async (details: any) => {
     try {
       if (navigator.onLine) {
-        const response = await registerBusiness({
-          ...details,
-          theme: state.business.theme
-        });
+        const response = await registerBusiness({ ...details, theme: state.business.theme });
         saveAuthToken(response.token);
-        if (response?.business?.trialEndsAt) {
-          details.trialEndsAt = response.business.trialEndsAt;
-        }
+        if (response?.business?.trialEndsAt) details.trialEndsAt = response.business.trialEndsAt;
       }
-    } catch (err) {
-      console.error('Registration failed, continuing offline', err);
-    }
+    } catch (err) { console.error('Registration error', err); }
 
     setState(prev => ({
       ...prev,
-      isRegistered: true,
-      isLoggedIn: true,
-      role: 'owner',
+      isRegistered: true, isLoggedIn: true, role: 'owner',
       business: { ...prev.business, ...details, trialEndsAt: details.trialEndsAt || new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString() }
     }));
-  };
-
-  const handleManualLogin = async (details: { email: string, pin: string }) => {
-    try {
-      if (navigator.onLine) {
-        const response = await login(details.email, details.pin);
-        saveAuthToken(response.token);
-        setState(prev => ({
-          ...prev,
-          isLoggedIn: true,
-          role: response.role,
-          isRegistered: true,
-          business: { ...prev.business, ...response.business }
-        }));
-        return;
-      }
-    } catch (err) {
-      console.error('Remote login failed, falling back to local', err);
-    }
-
-    if (state.business.email === details.email && state.business.ownerPassword === details.pin) {
-      setState(prev => ({ ...prev, isLoggedIn: true, role: 'owner', isRegistered: true }));
-    } else {
-      addToast('No matching store found for this email/PIN on this device.', 'error');
-    }
   };
 
   const handleLogin = async (pin: string, selectedRole: UserRole) => {
@@ -268,18 +228,11 @@ const App: React.FC = () => {
       if (navigator.onLine && state.business.email) {
         const response = await login(state.business.email, pin);
         saveAuthToken(response.token);
-        setState(prev => ({
-          ...prev,
-          role: response.role,
-          isLoggedIn: true,
-          business: { ...prev.business, ...response.business }
-        }));
+        setState(prev => ({ ...prev, role: response.role, isLoggedIn: true, business: { ...prev.business, ...response.business } }));
         setActiveTab('sales');
         return true;
       }
-    } catch (err) {
-      console.error('Remote login failed, using local pin', err);
-    }
+    } catch (err) { console.error('Offline fallback login used'); }
 
     const correctPassword = selectedRole === 'owner' ? state.business.ownerPassword : state.business.staffPassword;
     if (pin === correctPassword) {
@@ -297,7 +250,7 @@ const App: React.FC = () => {
 
   const handleDeleteTransaction = async (id: string, restockItems: boolean) => {
     if (!navigator.onLine) {
-      addToast('Delete requires an internet connection.', 'error');
+      addToast('Delete requires internet.', 'error');
       return;
     }
     try {
@@ -314,15 +267,10 @@ const App: React.FC = () => {
       }
       await deleteTransaction(id);
       setState(prev => ({ ...prev, transactions: prev.transactions.filter(t => t.id !== id) }));
-    } catch (err) {
-      addToast('Delete failed. Please try again.', 'error');
-    }
-  };
-  
-  const handleResetBusiness = () => {
-    setState(prev => ({ ...prev, isRegistered: false, isLoggedIn: false }));
+    } catch (err) { addToast('Delete failed.', 'error'); }
   };
 
+  // POS UX fix: No auto-open on mobile
   const addToCart = (product: Product) => {
     if (product.currentStock <= 0) return;
     setCart(prev => {
@@ -339,7 +287,7 @@ const App: React.FC = () => {
         unitPrice: product.sellingPrice, discount: 0, total: product.sellingPrice
       }];
     });
-    if (window.innerWidth < 768) setIsCartOpen(true);
+    // Explicit manual toggle only on mobile now
   };
 
   const handleCompleteSale = (transaction: Transaction) => {
@@ -356,70 +304,40 @@ const App: React.FC = () => {
 
   const allowedTabs = useMemo(() => {
     const hasPro = entitlements?.plan === 'PRO';
-    const trialActive = entitlements?.trialEndsAt ? new Date(entitlements.trialEndsAt) >= new Date() : state.business.trialEndsAt ? new Date(state.business.trialEndsAt) >= new Date() : true;
-    
+    const trialActive = entitlements?.trialEndsAt ? new Date(entitlements.trialEndsAt) >= new Date() : true;
     if (entitlements && !hasPro && !trialActive) return ['history'] as TabId[];
     
     const ownerTabs: TabId[] = ['sales', 'inventory', 'history', 'dashboard', 'expenditure', 'settings'];
-    if (state.role === 'owner') return ownerTabs;
-    
-    return Array.from(new Set(['sales', 'history', ...state.business.staffPermissions])) as TabId[];
-  }, [state.role, state.business.staffPermissions, entitlements, state.business.trialEndsAt]);
+    return state.role === 'owner' ? ownerTabs : Array.from(new Set(['sales', 'history', ...state.business.staffPermissions])) as TabId[];
+  }, [state.role, state.business.staffPermissions, entitlements]);
 
-  useEffect(() => {
-    if (!allowedTabs.includes(activeTab)) {
-      setActiveTab('history');
-    }
-  }, [allowedTabs, activeTab]);
-
-  if (!state.isRegistered) return <RegistrationScreen onRegister={handleRegister} onManualLogin={handleManualLogin} onForgotPassword={() => setView('forgot-password')} />;
-  
-  if (!state.isLoggedIn) {
-    if (view === 'forgot-password') {
-      return <ForgotPasswordScreen onBack={() => setView('main')} businessName={state.business.name} />;
-    }
-    return <AuthScreen onLogin={handleLogin} onForgotPassword={() => setView('forgot-password')} onResetBusiness={handleResetBusiness} business={state.business} />;
-  }
+  if (!state.isRegistered) return <RegistrationScreen onRegister={handleRegister} onManualLogin={() => {}} onForgotPassword={() => setView('forgot-password')} />;
+  if (!state.isLoggedIn) return <AuthScreen onLogin={handleLogin} onForgotPassword={() => setView('forgot-password')} onResetBusiness={() => setState(prev => ({...prev, isRegistered: false}))} business={state.business} />;
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row h-screen overflow-hidden">
-      {/* Sidebar - Desktop Nav */}
+      {/* Sidebar */}
       <aside className="hidden md:flex flex-col w-64 bg-primary text-white shrink-0">
         <div className="p-6">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-3 truncate">
-              {state.business.logo ? (
-                <img src={state.business.logo} alt="Logo" className="w-10 h-10 rounded-lg object-cover bg-white p-1" />
-              ) : (
-                <ShoppingBag size={32} className="text-white shrink-0" />
-              )}
-              <h1 className="text-2xl font-black truncate">{state.business.name}</h1>
-            </div>
+          <div className="flex items-center gap-3 truncate">
+            {state.business.logo ? <img src={state.business.logo} alt="Logo" className="w-10 h-10 rounded-lg bg-white p-1" /> : <ShoppingBag size={32} />}
+            <h1 className="text-2xl font-black truncate">{state.business.name}</h1>
           </div>
-          <div className="mt-4 space-y-2">
-            <div className="flex items-center gap-2 text-[10px] font-bold uppercase opacity-60">
-              {isOnline ? <Wifi size={12} className="text-emerald-400" /> : <WifiOff size={12} className="text-orange-400" />}
-              {isOnline ? 'Cloud Sync Active' : 'Offline Mode'}
-            </div>
+          <div className="mt-4 flex items-center gap-2 text-[10px] font-bold uppercase opacity-60">
+            {isOnline ? <Wifi size={12} className="text-emerald-400" /> : <WifiOff size={12} className="text-orange-400" />}
+            {isOnline ? 'Cloud Sync Active' : 'Offline Mode'}
           </div>
         </div>
         <nav className="flex-1 px-4 py-4 space-y-1">
-          {allowedTabs.includes('sales') && <SidebarLink active={activeTab === 'sales'} onClick={() => setActiveTab('sales')} icon={<ShoppingBag />} label="POS Sales" />}
-          {allowedTabs.includes('inventory') && <SidebarLink active={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')} icon={<Package />} label="Inventory" />}
-          {allowedTabs.includes('history') && <SidebarLink active={activeTab === 'history'} onClick={() => setActiveTab('history')} icon={<History />} label="Billing" />}
-          {allowedTabs.includes('dashboard') && <SidebarLink active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={<BarChart3 />} label="Analytics" />}
-          {allowedTabs.includes('expenditure') && <SidebarLink active={activeTab === 'expenditure'} onClick={() => setActiveTab('expenditure')} icon={<Wallet />} label="Expenditure" />}
-          {allowedTabs.includes('settings') && <SidebarLink active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} icon={<Settings />} label="Store Settings" />}
+          {allowedTabs.map(tab => (
+            <SidebarLink key={tab} active={activeTab === tab} onClick={() => setActiveTab(tab)} icon={
+              tab === 'sales' ? <ShoppingBag /> : tab === 'inventory' ? <Package /> : tab === 'history' ? <History /> : 
+              tab === 'dashboard' ? <BarChart3 /> : tab === 'expenditure' ? <Wallet /> : <Settings />
+            } label={tab.charAt(0).toUpperCase() + tab.slice(1)} />
+          ))}
         </nav>
-        <div className="p-4 border-t border-white/10 space-y-2">
-          <button 
-            onClick={() => setIsCartOpen(!isCartOpen)} 
-            className="w-full hidden lg:flex items-center gap-2 px-4 py-2 hover:bg-white/10 rounded-lg transition-colors text-xs font-bold"
-          >
-            {isCartOpen ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
-            {isCartOpen ? 'Collapse Bill' : 'Expand Bill'}
-          </button>
-          <button onClick={handleLogout} className="w-full flex items-center gap-2 px-4 py-2 hover:bg-white/10 rounded-lg transition-colors text-sm font-bold">
+        <div className="p-4 border-t border-white/10">
+          <button onClick={handleLogout} className="w-full flex items-center gap-2 px-4 py-2 hover:bg-white/10 rounded-lg text-sm font-bold">
             <LogOut size={18} /> Logout
           </button>
         </div>
@@ -428,87 +346,46 @@ const App: React.FC = () => {
       {/* Main Workspace */}
       <main className="flex-1 flex flex-col overflow-hidden relative">
         <header className="bg-white border-b p-4 flex justify-between items-center shrink-0">
-          <div className="flex items-center gap-2 truncate">
-            {state.business.logo && <img src={state.business.logo} alt="Logo" className="md:hidden w-8 h-8 rounded object-cover" />}
-            <h1 className="text-lg font-black text-primary truncate md:hidden">{state.business.name}</h1>
-            <div className="hidden md:flex items-center gap-2 text-gray-400 text-xs font-bold uppercase tracking-widest">
-              <span className="capitalize">{state.role} Mode</span>
-              <span className="opacity-30">/</span>
-              <span>{activeTab}</span>
-            </div>
+          <h1 className="text-lg font-black text-primary md:hidden">{state.business.name}</h1>
+          <div className="hidden md:flex items-center gap-2 text-gray-400 text-xs font-bold uppercase tracking-widest">
+            <span>{state.role} Mode</span> <span className="opacity-30">/</span> <span>{activeTab}</span>
           </div>
-          <div className="flex items-center gap-3">
-            <button onClick={handleLogout} className="md:hidden flex flex-col items-center gap-0.5 text-gray-500 hover:text-red-600 transition-colors">
-              <LogOut size={22} />
-              <span className="text-[9px] font-black uppercase leading-none">Log Out</span>
-            </button>
-            <button 
-              onClick={() => setIsCartOpen(!isCartOpen)} 
-              className={`relative p-2 rounded-xl transition-all ${isCartOpen ? 'bg-primary text-white' : 'text-primary bg-indigo-50'}`}
-            >
-              <ShoppingCart size={24} />
-              {cart.length > 0 && !isCartOpen && (
-                <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] font-black w-5 h-5 flex items-center justify-center rounded-full animate-bounce">
-                  {cart.length}
-                </span>
-              )}
-            </button>
-          </div>
+          <button onClick={() => setIsCartOpen(!isCartOpen)} className={`relative p-2 rounded-xl transition-all ${isCartOpen ? 'bg-primary text-white' : 'text-primary bg-indigo-50'}`}>
+            <ShoppingCart size={24} />
+            {cart.length > 0 && !isCartOpen && <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] font-black w-5 h-5 flex items-center justify-center rounded-full animate-bounce">{cart.length}</span>}
+          </button>
         </header>
         
         <div className="flex-1 overflow-y-auto p-4 md:p-8">
           {activeTab === 'sales' && <SalesScreen products={state.products} onAddToCart={addToCart} />}
-          {activeTab === 'inventory' && <InventoryScreen products={state.products} onUpdateProducts={p => setState({...state, products: p})} isOwner={state.role === 'owner'} />}
-          {activeTab === 'history' && <HistoryScreen transactions={state.transactions} business={state.business} onDeleteTransaction={handleDeleteTransaction} onUpdateTransaction={t => setState({...state, transactions: state.transactions.map(tx => tx.id === t.id ? t : tx)})} />}
+          {activeTab === 'inventory' && <InventoryScreen products={state.products} onUpdateProducts={p => setState(prev => ({ ...prev, products: p }))} isOwner={state.role === 'owner'} />}
+          {activeTab === 'history' && <HistoryScreen transactions={state.transactions} business={state.business} onDeleteTransaction={handleDeleteTransaction} onUpdateTransaction={t => setState(prev => ({ ...prev, transactions: prev.transactions.map(tx => tx.id === t.id ? t : tx) }))} />}
           {activeTab === 'dashboard' && state.role === 'owner' && <DashboardScreen transactions={state.transactions} products={state.products} />}
-          {activeTab === 'expenditure' && <ExpenditureScreen expenditures={state.expenditures} onUpdateExpenditures={updateExpenditures} />}
-          {activeTab === 'settings' && state.role === 'owner' && <SettingsScreen business={state.business} onUpdateBusiness={b => setState({...state, business: b})} onManualSync={triggerSync} lastSyncedAt={state.lastSyncedAt} />}
+          {activeTab === 'expenditure' && <ExpenditureScreen expenditures={state.expenditures} onUpdateExpenditures={updateExpenditures} isOwner={state.role === 'owner'} />}
+          {activeTab === 'settings' && state.role === 'owner' && <SettingsScreen business={state.business} onUpdateBusiness={b => setState(prev => ({ ...prev, business: b }))} onManualSync={triggerSync} lastSyncedAt={state.lastSyncedAt} />}
         </div>
 
-        {/* Mobile Bottom Nav - Dynamic */}
+        {/* Mobile Bottom Nav */}
         <nav className="md:hidden bg-white border-t flex justify-around p-2 shrink-0 z-50">
-          {allowedTabs.map(tab => {
-            const mapIconLabel: Record<string, { icon: React.ReactNode; label: string }> = {
-              sales: { icon: <ShoppingBag />, label: 'Sell' },
-              inventory: { icon: <Package />, label: 'Stock' },
-              history: { icon: <History />, label: 'Bills' },
-              dashboard: { icon: <BarChart3 />, label: 'Analytics' },
-              settings: { icon: <Settings />, label: 'Store' },
-              expenditure: { icon: <Wallet />, label: 'Expend' }
-            };
-            const item = mapIconLabel[tab];
-            if (!item) return null;
-            return <MobileNavLink key={tab} active={activeTab === tab} onClick={() => setActiveTab(tab as TabId)} icon={item.icon} label={item.label} />;
-          })}
+          {allowedTabs.map(tab => (
+            <MobileNavLink key={tab} active={activeTab === tab} onClick={() => setActiveTab(tab)} icon={
+              tab === 'sales' ? <ShoppingBag /> : tab === 'inventory' ? <Package /> : tab === 'history' ? <History /> : 
+              tab === 'dashboard' ? <BarChart3 /> : tab === 'expenditure' ? <Wallet /> : <Settings />
+            } label={tab === 'expenditure' ? 'Expend' : tab.charAt(0).toUpperCase() + tab.slice(1, 4)} />
+          ))}
         </nav>
       </main>
 
       {/* Cart Sidebar */}
-      <div className={`
-        fixed inset-y-0 right-0 z-[60] transition-all duration-300 ease-in-out md:relative md:inset-auto md:z-auto
-        ${isCartOpen ? 'translate-x-0 w-full max-w-sm md:w-80 lg:w-96 border-l shadow-2xl md:shadow-none' : 'translate-x-full w-0 overflow-hidden border-none'}
-      `}>
-        {isCartOpen && window.innerWidth < 768 && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm -z-10" onClick={() => setIsCartOpen(false)} />
-        )}
+      <div className={`fixed inset-y-0 right-0 z-[60] transition-all duration-300 ease-in-out md:relative md:inset-auto md:z-auto ${isCartOpen ? 'translate-x-0 w-full max-w-sm md:w-80 lg:w-96 border-l shadow-2xl md:shadow-none' : 'translate-x-full w-0 overflow-hidden'}`}>
+        {isCartOpen && window.innerWidth < 768 && <div className="fixed inset-0 bg-black/40 backdrop-blur-sm -z-10" onClick={() => setIsCartOpen(false)} />}
         <div className="h-full bg-white flex flex-col">
-          <CurrentOrderSidebar 
-            cart={cart} setCart={setCart}
-            customerName={customerName} setCustomerName={setCustomerName}
-            customerPhone={customerPhone} setCustomerPhone={setCustomerPhone}
-            paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod}
-            amountPaid={amountPaid} setAmountPaid={setAmountPaid}
-            globalDiscount={globalDiscount} setGlobalDiscount={setGlobalDiscount}
-            isGlobalDiscountPercent={isGlobalDiscountPercent} setIsGlobalDiscountPercent={setIsGlobalDiscountPercent}
-            signature={signature} setSignature={setSignature}
-            isLocked={isLocked} setIsLocked={setIsLocked}
-            onCompleteSale={handleCompleteSale}
-            onClose={() => setIsCartOpen(false)}
-            products={state.products}
-          />
+          <CurrentOrderSidebar cart={cart} setCart={setCart} customerName={customerName} setCustomerName={setCustomerName} customerPhone={customerPhone} setCustomerPhone={setCustomerPhone} paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod} amountPaid={amountPaid} setAmountPaid={setAmountPaid} globalDiscount={globalDiscount} setGlobalDiscount={setGlobalDiscount} isGlobalDiscountPercent={isGlobalDiscountPercent} setIsGlobalDiscountPercent={setIsGlobalDiscountPercent} signature={signature} setSignature={setSignature} isLocked={isLocked} setIsLocked={setIsLocked} onCompleteSale={handleCompleteSale} onClose={() => setIsCartOpen(false)} products={state.products} />
         </div>
       </div>
-      <SupportBot />
+
+      {/* SupportBot only visible in Settings tab */}
+      {activeTab === 'settings' && <SupportBot />}
     </div>
   );
 };
