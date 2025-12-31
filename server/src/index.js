@@ -41,7 +41,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/sync', syncRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/analytics', analyticsRoutes);
-app.use('/entitlements', entitlementsRoutes);
+app.use('/api/entitlements', entitlementsRoutes);
 app.use('/api/expenditures', expendituresRouter);
 
 const port = process.env.PORT || 4000;

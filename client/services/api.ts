@@ -111,7 +111,7 @@ export const getEntitlements = async () => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');
 
-  return request('/entitlements', {
+  return request('/api/entitlements', {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${token}`
