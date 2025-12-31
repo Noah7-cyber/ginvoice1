@@ -44,7 +44,8 @@ router.post('/', auth, async (req, res) => {
           phone: business.phone,
           address: business.address,
           logo: business.logo,
-          theme: business.theme
+          theme: business.theme,
+          lastActiveAt: new Date()
         }
       });
     }
@@ -59,10 +60,14 @@ router.post('/', auth, async (req, res) => {
               id: p.id,
               name: p.name,
               category: p.category,
-              unit: p.unit,
-              stock: p.currentStock,
+              baseUnit: p.baseUnit || 'Piece',
+              stock: p.stock,
               costPrice: toDecimal(p.costPrice),
-              sellingPrice: toDecimal(p.sellingPrice),
+              units: Array.isArray(p.units) ? p.units.map(u => ({
+                name: u.name,
+                multiplier: u.multiplier,
+                sellingPrice: toDecimal(u.sellingPrice)
+              })) : [],
               updatedAt: new Date()
             }
           },

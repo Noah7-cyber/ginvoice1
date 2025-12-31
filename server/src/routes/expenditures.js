@@ -6,7 +6,7 @@ const Expenditure = require('../models/Expenditure');
 // Assumes you have an auth middleware that sets:
 // req.userId (id of the authenticated user), req.userRole ('owner'|'staff'), and req.business (business record) or req.businessId
 // If your auth middleware uses different names, adapt the checks below accordingly.
-const auth = require('./middleware/auth'); // adjust path if needed
+const auth = require('../middleware/auth'); // adjust path if needed
 
 // Helper permission check: owner OR staff with 'stock-management' permission
 function canManageExpenditures(req) {
