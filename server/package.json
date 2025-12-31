@@ -5,7 +5,8 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "nodemon src/index.js"
+    "dev": "nodemon src/index.js",
+    "test": "MONGODB_URI=mongodb://localhost:27017/ginvoice-test jest --detectOpenHandles"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -19,6 +20,8 @@
     "nodemailer": "^6.9.16"
   },
   "devDependencies": {
-    "nodemon": "^3.1.11"
+    "jest": "^30.2.0",
+    "nodemon": "^3.1.11",
+    "supertest": "^7.1.4"
   }
 }

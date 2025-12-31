@@ -15,7 +15,8 @@ const BusinessSchema = new mongoose.Schema({
   paystackCustomerCode: { type: String },
   paystackSubscriptionCode: { type: String },
   paystackPlanCode: { type: String },
-  createdAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: Date.now },
+  lastActiveAt: { type: Date, default: Date.now }
 });
 
 module.exports = mongoose.model('Business', BusinessSchema);

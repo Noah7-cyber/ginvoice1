@@ -11,6 +11,7 @@ const syncRoutes = require('./routes/sync');
 const paymentRoutes = require('./routes/payments');
 const analyticsRoutes = require('./routes/analytics');
 const entitlementsRoutes = require('./routes/entitlements');
+const { archiveInactiveBusinesses } = require('./services/archiver');
 
 const app = express();
 
@@ -47,20 +48,28 @@ app.use('/api/expenditures', expendituresRouter);
 const port = process.env.PORT || 4000;
 const mongoUri = process.env.MONGODB_URI || '';
 
-mongoose.connect(mongoUri, { autoIndex: true })
-  .then(() => {
-    app.listen(port, () => {
-      console.log(`Server listening on ${port}`);
-    });
+if (require.main === module) {
+  mongoose.connect(mongoUri, { autoIndex: true })
+    .then(() => {
+      app.listen(port, () => {
+        console.log(`Server listening on ${port}`);
+      });
 
-    if (paymentRoutes.reconcilePending) {
-      paymentRoutes.reconcilePending();
-      setInterval(() => {
+      if (paymentRoutes.reconcilePending) {
         paymentRoutes.reconcilePending();
-      }, 10 * 60 * 1000);
-    }
-  })
-  .catch(err => {
-    console.error('Mongo connection failed', err);
-    process.exit(1);
-  });
+        setInterval(() => {
+          paymentRoutes.reconcilePending();
+        }, 10 * 60 * 1000);
+      }
+
+      // Schedule daily archival task
+      setInterval(archiveInactiveBusinesses, 24 * 60 * 60 * 1000);
+      archiveInactiveBusinesses(); // Run once on startup
+    })
+    .catch(err => {
+      console.error('Mongo connection failed', err);
+      process.exit(1);
+    });
+}
+
+module.exports = app;
