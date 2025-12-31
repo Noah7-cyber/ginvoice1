@@ -1,12 +1,12 @@
 
 import React, { useState } from 'react';
 import { Search, Plus, Package, ShoppingCart, X } from 'lucide-react';
-import { Product, ProductUnit, TransactionItem } from '../types';
+import { Product, ProductUnit, SaleItem } from '../types';
 import { CURRENCY } from '../constants';
 
 interface SalesScreenProps {
   products: Product[];
-  onAddToCart: (item: Omit<TransactionItem, 'id'>) => void;
+  onAddToCart: (item: SaleItem) => void;
 }
 
 const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart }) => {
