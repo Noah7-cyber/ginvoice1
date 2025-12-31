@@ -20,14 +20,19 @@ export interface BusinessProfile {
   staffPermissions: (TabId | 'stock-management')[];
 }
 
+export interface ProductUnit {
+  name: string;
+  multiplier: number;
+  sellingPrice: number;
+}
+
 export interface Product {
   id: string;
   name: string;
   category: string;
-  costPrice: number;     // NOTE: client uses integers (kobo) when interacting with server
-  sellingPrice: number;  // stored as integer kobo values when synced
-  currentStock: number;
-  unit: string;
+  costPrice: number;
+  stock: number;
+  units: ProductUnit[];
 }
 
 export type PaymentMethod = 'cash' | 'transfer' | 'credit';
@@ -36,6 +41,7 @@ export interface SaleItem {
   productId: string;
   productName: string;
   quantity: number;
+  unit: string;
   unitPrice: number;
   discount: number;
   total: number;

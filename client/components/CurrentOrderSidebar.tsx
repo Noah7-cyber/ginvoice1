@@ -47,12 +47,16 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
   const cartTotal = Math.max(0, cartSubtotal - finalDiscountValue);
   const balance = Math.max(0, cartTotal - amountPaid);
 
-  const updateQuantity = (productId: string, delta: number) => {
+  const updateQuantity = (productId: string, unitName: string, delta: number) => {
     setCart(prev => prev.map(item => {
-      if (item.productId === productId) {
+      if (item.productId === productId && item.unit === unitName) {
         const newQty = Math.max(1, item.quantity + delta);
         const product = products.find(p => p.id === productId);
-        if (product && newQty > product.currentStock) return item;
+        const unit = product?.units.find(u => u.name === unitName);
+        if (product && unit) {
+          const stockInSelectedUnit = Math.floor((product.stock || 0) / unit.multiplier);
+          if (newQty > stockInSelectedUnit) return item;
+        }
         return { ...item, quantity: newQty, total: (newQty * item.unitPrice) - item.discount };
       }
       return item;
@@ -69,8 +73,8 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
     }));
   };
 
-  const removeFromCart = (productId: string) => {
-    setCart(prev => prev.filter(item => item.productId !== productId));
+  const removeFromCart = (productId: string, unit: string) => {
+    setCart(prev => prev.filter(item => !(item.productId === productId && item.unit === unit)));
   };
 
   const handleCheckout = () => {
@@ -153,27 +157,27 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
             </div>
           ) : (
             cart.map(item => (
-              <div key={item.productId} className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm relative group">
+              <div key={`${item.productId}-${item.unit}`} className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm relative group">
                 <div className="flex justify-between items-start mb-2">
                   <div className="min-w-0 flex-1">
-                    <p className="font-bold text-gray-900 text-sm truncate">{item.productName}</p>
-                    <p className="text-[10px] text-gray-400">{CURRENCY}{item.unitPrice.toLocaleString()} / unit</p>
+                    <p className="font-bold text-gray-900 text-sm truncate">{item.productName} <span className="text-gray-400 font-medium">({item.unit})</span></p>
+                    <p className="text-[10px] text-gray-400">{CURRENCY}{item.unitPrice.toLocaleString()} / {item.unit}</p>
                   </div>
-                  <button onClick={() => removeFromCart(item.productId)} className="text-gray-300 hover:text-red-500">
+                  <button onClick={() => removeFromCart(item.productId, item.unit)} className="text-gray-300 hover:text-red-500">
                     <Trash2 size={16} />
                   </button>
                 </div>
 
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <button onClick={() => updateQuantity(item.productId, -1)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-50 border text-gray-600 hover:text-primary"><Minus size={14} /></button>
+                    <button onClick={() => updateQuantity(item.productId, item.unit, -1)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-50 border text-gray-600 hover:text-primary"><Minus size={14} /></button>
                     <span className="text-sm font-black w-6 text-center">{item.quantity}</span>
-                    <button onClick={() => updateQuantity(item.productId, 1)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-50 border text-gray-600 hover:text-primary"><Plus size={14} /></button>
+                    <button onClick={() => updateQuantity(item.productId, item.unit, 1)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-50 border text-gray-600 hover:text-primary"><Plus size={14} /></button>
                   </div>
                   <div className="text-right">
                     <p className="font-black text-gray-900">{CURRENCY}{item.total.toLocaleString()}</p>
                     <button 
-                      onClick={() => setActiveDiscountEdit(activeDiscountEdit === item.productId ? null : item.productId)}
+                      onClick={() => setActiveDiscountEdit(activeDiscountEdit === `${item.productId}-${item.unit}` ? null : `${item.productId}-${item.unit}`)}
                       className={`text-[9px] font-black uppercase tracking-tighter px-1.5 py-0.5 rounded ${item.discount > 0 ? 'bg-red-100 text-red-600' : 'text-gray-400 hover:text-primary'}`}
                     >
                       {item.discount > 0 ? `Saved ${CURRENCY}${item.discount}` : 'Add Discount'}
@@ -181,7 +185,7 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
                   </div>
                 </div>
 
-                {activeDiscountEdit === item.productId && (
+                {activeDiscountEdit === `${item.productId}-${item.unit}` && (
                   <input 
                     type="number"
                     autoFocus

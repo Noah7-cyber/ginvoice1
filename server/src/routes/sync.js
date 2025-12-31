@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 
 const Product = require('../models/Product');
 const Transaction = require('../models/Transaction');
+const Expenditure = require('../models/Expenditure');
 const Business = require('../models/Business');
 const auth = require('../middleware/auth');
 
@@ -34,7 +35,7 @@ router.get('/check', auth, async (req, res) => {
 
 router.post('/', auth, async (req, res) => {
   try {
-    const { products = [], transactions = [], business } = req.body || {};
+    const { products = [], transactions = [], expenditures = [], business } = req.body || {};
     const businessId = req.businessId;
 
     if (business && typeof business === 'object') {
@@ -59,10 +60,13 @@ router.post('/', auth, async (req, res) => {
               id: p.id,
               name: p.name,
               category: p.category,
-              unit: p.unit,
-              stock: p.currentStock,
+              stock: p.stock,
               costPrice: toDecimal(p.costPrice),
-              sellingPrice: toDecimal(p.sellingPrice),
+              units: (p.units || []).map(u => ({
+                name: u.name,
+                multiplier: u.multiplier,
+                sellingPrice: toDecimal(u.sellingPrice)
+              })),
               updatedAt: new Date()
             }
           },
@@ -73,44 +77,90 @@ router.post('/', auth, async (req, res) => {
     }
 
     if (Array.isArray(transactions) && transactions.length > 0) {
-      const txOps = transactions.map((t) => ({
+      const productUpdateOps = [];
+      const txOps = transactions.map((t) => {
+        (t.items || []).forEach(item => {
+          const product = products.find(p => p.id === item.productId);
+          if (product) {
+            const unit = (product.units || []).find(u => u.name === item.unit);
+            if (unit) {
+              const stockDeduction = item.quantity * unit.multiplier;
+              productUpdateOps.push({
+                updateOne: {
+                  filter: { businessId, id: item.productId },
+                  update: { $inc: { stock: -stockDeduction } }
+                }
+              });
+            }
+          }
+        });
+
+        return {
+          updateOne: {
+            filter: { businessId, id: t.id },
+            update: {
+              $set: {
+                businessId,
+                id: t.id,
+                transactionDate: t.transactionDate ? new Date(t.transactionDate) : null,
+                customerName: t.customerName,
+                customerPhone: t.customerPhone,
+                items: (t.items || []).map((item) => ({
+                  productId: item.productId,
+                  productName: item.productName,
+                  quantity: item.quantity,
+                  unit: item.unit,
+                  unitPrice: toDecimal(item.unitPrice),
+                  discount: toDecimal(item.discount),
+                  total: toDecimal(item.total)
+                })),
+                subtotal: toDecimal(t.subtotal),
+                globalDiscount: toDecimal(t.globalDiscount),
+                totalAmount: toDecimal(t.totalAmount),
+                paymentMethod: t.paymentMethod,
+                amountPaid: toDecimal(t.amountPaid),
+                balance: toDecimal(t.balance),
+                signature: t.signature,
+                isSignatureLocked: t.isSignatureLocked,
+                staffId: t.staffId,
+                createdAt: t.transactionDate ? new Date(t.transactionDate) : new Date()
+              }
+            },
+            upsert: true
+          }
+        };
+      });
+
+      if (productUpdateOps.length > 0) {
+        await Product.bulkWrite(productUpdateOps, { ordered: false });
+      }
+      await Transaction.bulkWrite(txOps, { ordered: false });
+    }
+
+    if (Array.isArray(expenditures) && expenditures.length > 0) {
+      const expenditureOps = expenditures.map((e) => ({
         updateOne: {
-          filter: { businessId, id: t.id },
+          filter: { businessId, id: e.id },
           update: {
             $set: {
               businessId,
-              id: t.id,
-              transactionDate: t.transactionDate ? new Date(t.transactionDate) : null,
-              customerName: t.customerName,
-              customerPhone: t.customerPhone,
-              items: (t.items || []).map((item) => ({
-                productId: item.productId,
-                productName: item.productName,
-                quantity: item.quantity,
-                unitPrice: toDecimal(item.unitPrice),
-                discount: toDecimal(item.discount),
-                total: toDecimal(item.total)
-              })),
-              subtotal: toDecimal(t.subtotal),
-              globalDiscount: toDecimal(t.globalDiscount),
-              totalAmount: toDecimal(t.totalAmount),
-              paymentMethod: t.paymentMethod,
-              amountPaid: toDecimal(t.amountPaid),
-              balance: toDecimal(t.balance),
-              signature: t.signature,
-              isSignatureLocked: t.isSignatureLocked,
-              staffId: t.staffId,
-              createdAt: t.transactionDate ? new Date(t.transactionDate) : new Date()
+              id: e.id,
+              date: e.date ? new Date(e.date) : new Date(),
+              amount: e.amount,
+              category: e.category,
+              note: e.note,
+              createdBy: e.createdBy
             }
           },
           upsert: true
         }
       }));
-      await Transaction.bulkWrite(txOps, { ordered: false });
+      await Expenditure.bulkWrite(expenditureOps, { ordered: false });
     }
 
     return res.json({ syncedAt: new Date().toISOString() });
   } catch (err) {
+    console.error('Sync error:', err);
     return res.status(500).json({ message: 'Sync failed' });
   }
 });
