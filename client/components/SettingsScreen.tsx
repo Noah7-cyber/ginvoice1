@@ -1,8 +1,8 @@
 import React, { useState, useRef } from 'react';
-import { Store, Save, LayoutGrid, MapPin, Phone, Palette, Type, ShieldAlert, CheckCircle2, RefreshCw, CloudCheck, Upload, Trash2, Image as ImageIcon, MessageSquare, HeadphonesIcon, HelpCircle } from 'lucide-react';
+import { Store, Save, LayoutGrid, MapPin, Phone, Palette, Type, ShieldAlert, CheckCircle2, RefreshCw, CloudCheck, Upload, Trash2, Image as ImageIcon, MessageSquare, HeadphonesIcon, HelpCircle, Lock, LogOut } from 'lucide-react';
 import { BusinessProfile, TabId } from '../types';
 import { THEME_COLORS, FONTS } from '../constants';
-import { verifyPayment } from '../services/api';
+import { verifyPayment, changeBusinessPins } from '../services/api';
 import SupportBot from './SupportBot'; // Integrated SupportBot
 
 interface SettingsScreenProps {
@@ -11,13 +11,21 @@ interface SettingsScreenProps {
   onManualSync?: () => void;
   lastSynced?: string;
   isSyncing?: boolean;
+  onLogout?: () => void;
 }
 
-const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusiness, onManualSync, lastSynced, isSyncing }) => {
+const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusiness, onManualSync, lastSynced, isSyncing, onLogout }) => {
   const [formData, setFormData] = useState<BusinessProfile>(business);
   const [showSaved, setShowSaved] = useState(false);
   const [paymentRef, setPaymentRef] = useState('');
   const [verifyStatus, setVerifyStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+
+  // Security State
+  const [currentOwnerPin, setCurrentOwnerPin] = useState('');
+  const [newStaffPin, setNewStaffPin] = useState('');
+  const [newOwnerPin, setNewOwnerPin] = useState('');
+  const [securityMsg, setSecurityMsg] = useState('');
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -62,6 +70,22 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
       setPaymentRef('');
     } catch (err) {
       setVerifyStatus('error');
+    }
+  };
+
+  const handleUpdatePins = async () => {
+    if (!currentOwnerPin) return setSecurityMsg('Current Owner PIN required');
+    if (!newStaffPin && !newOwnerPin) return setSecurityMsg('Enter at least one new PIN');
+
+    try {
+      await changeBusinessPins(currentOwnerPin, newStaffPin || undefined, newOwnerPin || undefined);
+      setSecurityMsg('PINs updated successfully');
+      setCurrentOwnerPin('');
+      setNewStaffPin('');
+      setNewOwnerPin('');
+      setTimeout(() => setSecurityMsg(''), 3000);
+    } catch (err: any) {
+      setSecurityMsg(err.message || 'Failed to update PINs');
     }
   };
 
@@ -186,6 +210,29 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
           </div>
         </div>
 
+        {/* Security / PINs */}
+        <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
+          <h2 className="text-lg font-bold flex items-center gap-2"><Lock className="text-orange-500" /> Security</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+              <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Current Owner PIN *</label>
+              <input type="password" value={currentOwnerPin} onChange={e => setCurrentOwnerPin(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold text-center tracking-widest" placeholder="****" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">New Staff PIN</label>
+              <input type="text" value={newStaffPin} onChange={e => setNewStaffPin(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold text-center tracking-widest" placeholder="Optional" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">New Owner PIN</label>
+              <input type="text" value={newOwnerPin} onChange={e => setNewOwnerPin(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold text-center tracking-widest" placeholder="Optional" />
+            </div>
+          </div>
+          <div className="flex justify-between items-center">
+             <p className={`text-xs font-bold ${securityMsg.includes('success') ? 'text-green-600' : 'text-red-500'}`}>{securityMsg}</p>
+             <button type="button" onClick={handleUpdatePins} className="text-xs font-black uppercase text-white bg-gray-900 px-6 py-3 rounded-xl hover:bg-black transition-all">Update PINs</button>
+          </div>
+        </div>
+
         {/* Support Section */}
         <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
           <h2 className="text-lg font-bold flex items-center gap-2"><HelpCircle className="text-emerald-600" /> Support & Help</h2>
@@ -211,9 +258,16 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
         {/* Action Button */}
         <div className="flex items-center justify-between bg-white p-6 rounded-3xl shadow-lg border-t-4 border-primary sticky bottom-4 z-[50]">
           <div>{showSaved && <p className="text-green-600 font-bold animate-bounce">✓ Changes saved!</p>}</div>
-          <button type="submit" className="bg-primary text-white px-10 py-4 rounded-2xl font-black shadow-xl hover:opacity-90 transition-all flex items-center gap-2 active:scale-95">
-            <Save size={20} /> Update Business
-          </button>
+          <div className="flex items-center gap-4">
+             {onLogout && (
+               <button type="button" onClick={onLogout} className="bg-red-50 text-red-600 px-6 py-4 rounded-2xl font-black shadow-sm hover:bg-red-100 transition-all flex items-center gap-2 active:scale-95">
+                 <LogOut size={20} /> Logout
+               </button>
+             )}
+             <button type="submit" className="bg-primary text-white px-10 py-4 rounded-2xl font-black shadow-xl hover:opacity-90 transition-all flex items-center gap-2 active:scale-95">
+               <Save size={20} /> Update Business
+             </button>
+          </div>
         </div>
       </form>
     </div>

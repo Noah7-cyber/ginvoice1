@@ -39,7 +39,7 @@ router.post('/register', async (req, res) => {
 
     const ownerPin = await bcrypt.hash(ownerPassword, 10);
     const staffPin = await bcrypt.hash(staffPassword, 10);
-    const trialEndsAt = new Date(Date.now() + 45 * 24 * 60 * 60 * 1000);
+    const trialEndsAt = new Date(Date.now() + 40 * 24 * 60 * 60 * 1000);
 
     const business = await Business.create({
       name,
@@ -121,6 +121,36 @@ router.post('/forgot-password', async (req, res) => {
     return res.json({ sent: result.sent });
   } catch (err) {
     return res.status(500).json({ message: 'Recovery request failed' });
+  }
+});
+
+router.put('/change-pins', require('../middleware/auth'), async (req, res) => {
+  try {
+    const { currentOwnerPin, newStaffPin, newOwnerPin } = req.body;
+    if (!currentOwnerPin) return res.status(400).json({ message: 'Current owner PIN required' });
+    if (!newStaffPin && !newOwnerPin) return res.status(400).json({ message: 'No new PINs provided' });
+
+    const business = await Business.findById(req.businessId);
+    if (!business) return res.status(404).json({ message: 'Business not found' });
+
+    // Verify current owner PIN
+    const isOwner = await bcrypt.compare(currentOwnerPin, business.ownerPin);
+    if (!isOwner) return res.status(401).json({ message: 'Invalid current PIN' });
+
+    if (newStaffPin) {
+      if (newStaffPin.length < 4) return res.status(400).json({ message: 'PIN too short' });
+      business.staffPin = await bcrypt.hash(newStaffPin, 10);
+    }
+
+    if (newOwnerPin) {
+      if (newOwnerPin.length < 4) return res.status(400).json({ message: 'PIN too short' });
+      business.ownerPin = await bcrypt.hash(newOwnerPin, 10);
+    }
+
+    await business.save();
+    return res.json({ message: 'PINs updated successfully' });
+  } catch (err) {
+    return res.status(500).json({ message: 'Failed to update PINs' });
   }
 });
 
