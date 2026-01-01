@@ -61,6 +61,10 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const requestUrl = new URL(event.request.url);
 
+  if (requestUrl.protocol === 'chrome-extension:') {
+    return;
+  }
+
   // 1. Critical Backend/Sync Routes: Network Only
   if (shouldBypass(requestUrl, event.request)) {
     event.respondWith(fetch(event.request).catch(() => jsonOfflineResponse()));
