@@ -230,26 +230,27 @@ const App: React.FC = () => {
     setState(prev => ({
       ...prev,
       isRegistered: true, isLoggedIn: true, role: 'owner',
-      business: { ...prev.business, ...details, trialEndsAt: details.trialEndsAt || new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString() }
+      business: { ...prev.business, ...details, trialEndsAt: details.trialEndsAt || new Date(Date.now() + 40 * 24 * 60 * 60 * 1000).toISOString() }
     }));
   };
 
   const handleLogin = async (pin: string, selectedRole: UserRole) => {
+    // Strictly enforce online login as requested
+    if (!navigator.onLine) {
+      addToast('Login requires internet connection.', 'error');
+      return false;
+    }
+
     try {
-      if (navigator.onLine && state.business.email) {
+      if (state.business.email) {
         const response = await login(state.business.email, pin);
         saveAuthToken(response.token);
         setState(prev => ({ ...prev, role: response.role, isLoggedIn: true, business: { ...prev.business, ...response.business } }));
         setActiveTab('sales');
         return true;
       }
-    } catch (err) { console.error('Offline fallback login used'); }
-
-    const correctPassword = selectedRole === 'owner' ? state.business.ownerPassword : state.business.staffPassword;
-    if (pin === correctPassword) {
-      setState(prev => ({ ...prev, role: selectedRole, isLoggedIn: true }));
-      setActiveTab('sales');
-      return true;
+    } catch (err) {
+      console.error('Login failed', err);
     }
     return false;
   };
@@ -314,13 +315,22 @@ const App: React.FC = () => {
   };
 
   const allowedTabs = useMemo(() => {
-    const hasPro = entitlements?.plan === 'PRO';
-    const trialActive = entitlements?.trialEndsAt ? new Date(entitlements.trialEndsAt) >= new Date() : true;
-    if (entitlements && !hasPro && !trialActive) return ['history'] as TabId[];
+    // Robust check for subscription status using both entitlements and persisted state
+    const hasPro = entitlements?.plan === 'PRO' || state.business.isSubscribed;
+
+    // Check trial status from multiple sources, defaulting to strict check if offline
+    const entitlementTrial = entitlements?.trialEndsAt ? new Date(entitlements.trialEndsAt) : null;
+    const businessTrial = state.business.trialEndsAt ? new Date(state.business.trialEndsAt) : null;
+
+    // Use the latest valid date we have
+    const trialEndDate = entitlementTrial || businessTrial;
+    const trialActive = trialEndDate ? trialEndDate >= new Date() : false;
+
+    if (!hasPro && !trialActive) return ['history'] as TabId[];
     
     const ownerTabs: TabId[] = ['sales', 'inventory', 'history', 'dashboard', 'expenditure', 'settings'];
     return state.role === 'owner' ? ownerTabs : Array.from(new Set(['sales', 'history', ...state.business.staffPermissions])) as TabId[];
-  }, [state.role, state.business.staffPermissions, entitlements]);
+  }, [state.role, state.business.staffPermissions, entitlements, state.business.trialEndsAt, state.business.isSubscribed]);
 
   if (!state.isRegistered) return <RegistrationScreen onRegister={handleRegister} onManualLogin={() => {}} onForgotPassword={() => setView('forgot-password')} />;
   if (!state.isLoggedIn) return <AuthScreen onLogin={handleLogin} onForgotPassword={() => setView('forgot-password')} onResetBusiness={() => setState(prev => ({...prev, isRegistered: false}))} business={state.business} />;
@@ -373,7 +383,7 @@ const App: React.FC = () => {
           {activeTab === 'history' && <HistoryScreen transactions={state.transactions} business={state.business} onDeleteTransaction={handleDeleteTransaction} onUpdateTransaction={t => setState(prev => ({ ...prev, transactions: prev.transactions.map(tx => tx.id === t.id ? t : tx) }))} />}
           {activeTab === 'dashboard' && state.role === 'owner' && <DashboardScreen transactions={state.transactions} products={state.products} />}
           {activeTab === 'expenditure' && <ExpenditureScreen expenditures={state.expenditures} onUpdateExpenditures={updateExpenditures} isOwner={state.role === 'owner'} />}
-          {activeTab === 'settings' && state.role === 'owner' && <SettingsScreen business={state.business} onUpdateBusiness={b => setState(prev => ({ ...prev, business: b }))} onManualSync={triggerSync} lastSyncedAt={state.lastSyncedAt} />}
+          {activeTab === 'settings' && state.role === 'owner' && <SettingsScreen business={state.business} onUpdateBusiness={b => setState(prev => ({ ...prev, business: b }))} onManualSync={triggerSync} lastSyncedAt={state.lastSyncedAt} onLogout={handleLogout} />}
         </div>
 
         {/* Mobile Bottom Nav */}

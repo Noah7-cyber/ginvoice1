@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ginvoice-v3'; // Incremented version
+const CACHE_NAME = 'ginvoice-v4'; // Incremented version for new build system
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -67,7 +67,12 @@ self.addEventListener('fetch', (event) => {
 
   // 1. Critical Backend/Sync Routes: Network Only
   if (shouldBypass(requestUrl, event.request)) {
-    event.respondWith(fetch(event.request).catch(() => jsonOfflineResponse()));
+    event.respondWith(
+      fetch(event.request).catch((err) => {
+        console.error('[SW] Bypass Fetch Failed (likely CORS or Offline):', err, event.request.url);
+        return jsonOfflineResponse();
+      })
+    );
     return;
   }
 
@@ -80,23 +85,35 @@ self.addEventListener('fetch', (event) => {
   }
 
   // 3. Static Assets: Cache First, then Network
+  // We specifically ensure that JS/CSS assets from our origin are cached for offline usage
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) return cachedResponse;
 
       return fetch(event.request).then((response) => {
         // Only cache valid internal assets
+        // We ensure we cache bundled assets (.js, .css)
+        const isAsset = requestUrl.pathname.match(/\.(js|css|png|jpg|jpeg|svg|woff2)$/);
+        const isInternal = requestUrl.origin === location.origin;
+
         if (!response || response.status !== 200 || response.type !== 'basic') {
-          return response;
+             // If it's an external asset (like fonts), we might still want to cache if 'cors'
+             if (response && response.status === 200 && response.type === 'cors' && isAsset) {
+                 // cache font
+             } else {
+                 return response;
+             }
         }
-        const responseToCache = response.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
-        });
+
+        // Cache internal assets aggressively for offline support
+        if (isInternal || (response.type === 'cors' && isAsset)) {
+            const responseToCache = response.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+            });
+        }
         return response;
       });
-      // NOTE: No .catch(() => caches.match('/index.html')) here!
-      // This prevents the "Unexpected token <" error.
     })
   );
 });
