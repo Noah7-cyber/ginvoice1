@@ -5,6 +5,12 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const compression = require('compression');
 const helmet = require('helmet');
+const { archiveInactiveBusinesses } = require('./services/archiver');
+const decimal128ToNumberPlugin = require('./services/mongoosePlugin');
+
+// Register the plugin globally for all schemas BEFORE models are loaded via routes
+mongoose.plugin(decimal128ToNumberPlugin);
+
 const expendituresRouter = require('./routes/expenditures');
 const authRoutes = require('./routes/auth');
 const syncRoutes = require('./routes/sync');
@@ -23,7 +29,9 @@ app.use(compression());
 
 app.use(cors({
   // In production, default to false (block) if variable is missing, otherwise allow all (*) for dev
-  origin: process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',') : (process.env.NODE_ENV === 'production' ? false : '*'),
+  origin: process.env.FRONTEND_URL
+    ? process.env.FRONTEND_URL.split(',').map(url => url.replace(/\/$/, ''))
+    : (process.env.NODE_ENV === 'production' ? false : '*'),
   credentials: true
 }));
 

@@ -21,16 +21,23 @@ export const clearAuthToken = () => {
 };
 
 const request = async (path: string, options: RequestInit = {}) => {
-  const res = await fetch(buildUrl(path), {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {})
-    }
-  });
+  let res;
+  try {
+    res = await fetch(buildUrl(path), {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options.headers || {})
+      }
+    });
+  } catch (networkErr) {
+    console.error('[API] Network request failed:', networkErr);
+    throw networkErr;
+  }
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
+    console.error('[API] Request returned error status:', res.status, data);
     const message = data?.message || 'Request failed';
     const err = new Error(message) as Error & { status?: number; data?: any };
     err.status = res.status;

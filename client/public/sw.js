@@ -67,7 +67,12 @@ self.addEventListener('fetch', (event) => {
 
   // 1. Critical Backend/Sync Routes: Network Only
   if (shouldBypass(requestUrl, event.request)) {
-    event.respondWith(fetch(event.request).catch(() => jsonOfflineResponse()));
+    event.respondWith(
+      fetch(event.request).catch((err) => {
+        console.error('[SW] Bypass Fetch Failed (likely CORS or Offline):', err, event.request.url);
+        return jsonOfflineResponse();
+      })
+    );
     return;
   }
 
