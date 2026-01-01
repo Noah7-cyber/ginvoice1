@@ -33,14 +33,15 @@ export const loadState = (): InventoryState | null => {
 export const syncWithBackend = async (state: InventoryState) => {
   try {
     // Prepare a minimal sync payload to reduce payload size
+    // Corrected to use full keys as expected by the server
     const payload = {
-      p: state.products,        // keep keys short on server; client sends full product objects
-      t: state.transactions,
-      e: state.expenditures || [],
-      b: state.business,
+      products: state.products,
+      transactions: state.transactions,
+      expenditures: state.expenditures || [],
+      business: state.business,
       lastSyncedAt: state.lastSyncedAt || null
     };
-    const res = await syncState(payload as any); // server expects the compact payload
+    const res = await syncState(payload as any);
     // server returns maybe { lastSyncedAt, products, transactions, expenditures }
     if (res && res.lastSyncedAt) return res.lastSyncedAt;
     return null;

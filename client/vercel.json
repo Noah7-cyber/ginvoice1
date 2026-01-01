@@ -1,0 +1,16 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:match*",
+      "destination": "https://ginvoice1.onrender.com/api/:match*"
+    },
+    {
+      "source": "/entitlements",
+      "destination": "https://ginvoice1.onrender.com/entitlements"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
