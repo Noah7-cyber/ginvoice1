@@ -138,10 +138,12 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onForgotPassword, onRe
               </div>
 
               {error && <p className="text-center text-xs font-bold text-red-500 animate-bounce">Incorrect PIN. Try again.</p>}
+              {!navigator.onLine && <p className="text-center text-xs font-bold text-orange-500 animate-pulse">Internet Connection Required</p>}
 
               <button 
                 type="submit"
-                className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black shadow-lg hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-2"
+                disabled={!navigator.onLine}
+                className="w-full bg-indigo-600 disabled:bg-gray-400 text-white py-4 rounded-2xl font-black shadow-lg hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-2"
               >
                 Access Store <ArrowRight size={18} />
               </button>

@@ -95,6 +95,19 @@ export const checkSyncAccess = async () => {
   });
 };
 
+export const changeBusinessPins = async (currentOwnerPin: string, newStaffPin?: string, newOwnerPin?: string) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/auth/change-pins', {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ currentOwnerPin, newStaffPin, newOwnerPin })
+  });
+};
+
 export const getAnalytics = async () => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');

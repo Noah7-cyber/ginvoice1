@@ -10,12 +10,17 @@ describe('Expenditures API', () => {
   const userId = new mongoose.Types.ObjectId().toString();
 
   // Connect to MongoDB before running tests
+  let mongod;
   beforeAll(async () => {
-    const mongoUri = process.env.TEST_MONGODB_URI || process.env.MONGODB_URI;
-    if (!mongoUri) {
-      throw new Error("MongoDB URI not found. Please set MONGODB_URI or TEST_MONGODB_URI environment variable.");
-    }
-    await mongoose.connect(mongoUri);
+    const { MongoMemoryServer } = require('mongodb-memory-server');
+    mongod = await MongoMemoryServer.create();
+    const uri = mongod.getUri();
+
+    // Register the global plugin we added
+    const decimal128ToNumberPlugin = require('../services/mongoosePlugin');
+    mongoose.plugin(decimal128ToNumberPlugin);
+
+    await mongoose.connect(uri);
 
     if (!process.env.JWT_SECRET) {
       process.env.JWT_SECRET = 'a-test-secret-that-is-long-enough';
@@ -30,7 +35,8 @@ describe('Expenditures API', () => {
 
   // Disconnect from MongoDB after all tests are done
   afterAll(async () => {
-    await mongoose.connection.close();
+    await mongoose.disconnect();
+    if (mongod) await mongod.stop();
   });
 
   describe('POST /api/expenditures', () => {
