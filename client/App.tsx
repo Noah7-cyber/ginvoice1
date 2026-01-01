@@ -203,6 +203,17 @@ const App: React.FC = () => {
 
   useEffect(() => { saveState(state); }, [state]);
 
+  // Auto-sync every 10 minutes
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      if (state.isLoggedIn) {
+        triggerSync();
+      }
+    }, 10 * 60 * 1000); // 10 minutes
+
+    return () => clearInterval(intervalId);
+  }, [state.isLoggedIn, triggerSync]);
+
   const updateExpenditures = (items: Expenditure[]) => {
     setState(prev => ({ ...prev, expenditures: items }));
   };
