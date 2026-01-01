@@ -18,7 +18,7 @@ import {
 import { InventoryState, UserRole, Product, Transaction, BusinessProfile, TabId, SaleItem, PaymentMethod, Expenditure } from './types';
 import { INITIAL_PRODUCTS } from './constants';
 import { saveState, loadState, syncWithBackend } from './services/storage';
-import { login, registerBusiness, saveAuthToken, clearAuthToken, deleteTransaction, getEntitlements, initializePayment } from './services/api';
+import { login, registerBusiness, saveAuthToken, clearAuthToken, deleteTransaction, getEntitlements, initializePayment, fetchRemoteState } from './services/api';
 import { useToast } from './components/ToastProvider';
 import SalesScreen from './components/SalesScreen';
 import InventoryScreen from './components/InventoryScreen';
@@ -234,6 +234,47 @@ const App: React.FC = () => {
     }));
   };
 
+  const handleManualLogin = async (credentials: { email: string, pin: string }) => {
+    if (!navigator.onLine) {
+      addToast('Login requires internet connection.', 'error');
+      return;
+    }
+
+    try {
+      const response = await login(credentials.email, credentials.pin);
+      saveAuthToken(response.token);
+
+      // Attempt to restore data from server
+      let restoredData: Partial<InventoryState> = {};
+      try {
+        const remoteData = await fetchRemoteState();
+        if (remoteData) {
+          restoredData = {
+            products: remoteData.products || [],
+            transactions: remoteData.transactions || [],
+            expenditures: remoteData.expenditures || []
+          };
+        }
+      } catch (syncErr) {
+        console.warn('Failed to restore data during login', syncErr);
+        addToast('Logged in, but failed to load data. Please sync manually.', 'info');
+      }
+
+      setState(prev => ({
+        ...prev,
+        isRegistered: true,
+        isLoggedIn: true,
+        role: response.role,
+        business: { ...prev.business, ...response.business },
+        ...restoredData
+      }));
+
+    } catch (err: any) {
+      console.error('Manual login failed', err);
+      addToast(err.message || 'Login failed. Check your credentials.', 'error');
+    }
+  };
+
   const handleLogin = async (pin: string, selectedRole: UserRole) => {
     // Strictly enforce online login as requested
     if (!navigator.onLine) {
@@ -332,7 +373,7 @@ const App: React.FC = () => {
     return state.role === 'owner' ? ownerTabs : Array.from(new Set(['sales', 'history', ...state.business.staffPermissions])) as TabId[];
   }, [state.role, state.business.staffPermissions, entitlements, state.business.trialEndsAt, state.business.isSubscribed]);
 
-  if (!state.isRegistered) return <RegistrationScreen onRegister={handleRegister} onManualLogin={() => {}} onForgotPassword={() => setView('forgot-password')} />;
+  if (!state.isRegistered) return <RegistrationScreen onRegister={handleRegister} onManualLogin={handleManualLogin} onForgotPassword={() => setView('forgot-password')} />;
   if (!state.isLoggedIn) return <AuthScreen onLogin={handleLogin} onForgotPassword={() => setView('forgot-password')} onResetBusiness={() => setState(prev => ({...prev, isRegistered: false}))} business={state.business} />;
 
   return (

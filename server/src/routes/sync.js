@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const Product = require('../models/Product');
 const Transaction = require('../models/Transaction');
 const Business = require('../models/Business');
+const Expenditure = require('../models/Expenditure');
 const auth = require('../middleware/auth');
 
 const router = express.Router();
@@ -29,6 +30,24 @@ router.get('/check', auth, async (req, res) => {
     });
   } catch (err) {
     return res.status(500).json({ message: 'Sync check failed' });
+  }
+});
+
+router.get('/', auth, async (req, res) => {
+  try {
+    const businessId = req.businessId;
+    // We don't use .lean() here so that the global decimal128ToNumberPlugin applies during JSON serialization
+    const products = await Product.find({ businessId });
+    const transactions = await Transaction.find({ businessId });
+    const expenditures = await Expenditure.find({ businessId });
+
+    return res.json({
+      products,
+      transactions,
+      expenditures
+    });
+  } catch (err) {
+    return res.status(500).json({ message: 'Fetch state failed' });
   }
 });
 
