@@ -17,6 +17,8 @@ const syncRoutes = require('./routes/sync');
 const paymentRoutes = require('./routes/payments');
 const analyticsRoutes = require('./routes/analytics');
 const entitlementsRoutes = require('./routes/entitlements');
+const { archiveInactiveBusinesses } = require('./services/archiver');
+const decimal128ToNumberPlugin = require('./services/mongoosePlugin');
 
 const app = express();
 
@@ -56,6 +58,9 @@ const port = process.env.PORT || 4000;
 const mongoUri = process.env.MONGODB_URI || '';
 
 if (require.main === module) {
+  // Register the plugin globally for all schemas
+  mongoose.plugin(decimal128ToNumberPlugin);
+
   mongoose.connect(mongoUri, { autoIndex: true })
     .then(() => {
       app.listen(port, () => {
