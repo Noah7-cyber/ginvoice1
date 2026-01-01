@@ -90,6 +90,18 @@ export const syncState = async (state: InventoryState) => {
   });
 };
 
+export const fetchRemoteState = async () => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/sync', {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+};
+
 export const checkSyncAccess = async () => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');
