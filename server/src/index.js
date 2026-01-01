@@ -17,7 +17,7 @@ const syncRoutes = require('./routes/sync');
 const paymentRoutes = require('./routes/payments');
 const analyticsRoutes = require('./routes/analytics');
 const entitlementsRoutes = require('./routes/entitlements');
-const { archiveInactiveBusinesses } = require('./services/archiver');
+
 const decimal128ToNumberPlugin = require('./services/mongoosePlugin');
 
 const app = express();
