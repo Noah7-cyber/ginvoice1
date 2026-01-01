@@ -1,3 +1,4 @@
+
 require('dotenv').config();
 
 const express = require('express');
@@ -5,20 +6,22 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const compression = require('compression');
 const helmet = require('helmet');
+
+// 1. Import Services & Plugins FIRST
 const { archiveInactiveBusinesses } = require('./services/archiver');
 const decimal128ToNumberPlugin = require('./services/mongoosePlugin');
 
-// Register the plugin globally for all schemas BEFORE models are loaded via routes
+// 2. IMPORTANT: Register Plugin GLOBALLY before importing routes
+// This ensures that when the routes load the Models, the plugin is already applied.
 mongoose.plugin(decimal128ToNumberPlugin);
 
+// 3. Import Routes (Now safe to load models)
 const expendituresRouter = require('./routes/expenditures');
 const authRoutes = require('./routes/auth');
 const syncRoutes = require('./routes/sync');
 const paymentRoutes = require('./routes/payments');
 const analyticsRoutes = require('./routes/analytics');
 const entitlementsRoutes = require('./routes/entitlements');
-
-const decimal128ToNumberPlugin = require('./services/mongoosePlugin');
 
 const app = express();
 
