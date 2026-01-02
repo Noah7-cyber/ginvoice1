@@ -47,10 +47,10 @@ const request = async (path: string, options: RequestInit = {}) => {
   return data;
 };
 
-export const login = async (email: string, pin: string) => {
+export const login = async (email: string, pin: string, role?: string) => {
   return request('/api/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ email, pin })
+    body: JSON.stringify({ email, pin, role })
   });
 };
 

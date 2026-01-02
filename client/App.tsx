@@ -114,8 +114,22 @@ const App: React.FC = () => {
   const triggerSync = useCallback(async () => {
     if (!navigator.onLine) return;
     setIsSyncing(true);
-    const syncTime = await syncWithBackend(state);
-    if (syncTime) setState(prev => ({ ...prev, lastSyncedAt: syncTime }));
+    const result = await syncWithBackend(state);
+    if (result) {
+      if (typeof result === 'string') {
+        // Legacy handling if backend only returned string (timestamp)
+        setState(prev => ({ ...prev, lastSyncedAt: result }));
+      } else {
+        // New full sync response
+        setState(prev => ({
+          ...prev,
+          lastSyncedAt: result.lastSyncedAt,
+          products: result.products || prev.products,
+          transactions: result.transactions || prev.transactions,
+          expenditures: result.expenditures || prev.expenditures
+        }));
+      }
+    }
     setIsSyncing(false);
   }, [state]);
 
@@ -153,8 +167,20 @@ const App: React.FC = () => {
       setIsOnline(true);
       if (!wasOnlineRef.current && state.isLoggedIn) {
         setIsSyncing(true);
-        const syncTime = await syncWithBackend(state);
-        if (syncTime) setState(prev => ({ ...prev, lastSyncedAt: syncTime }));
+        const result = await syncWithBackend(state);
+        if (result) {
+          if (typeof result === 'string') {
+            setState(prev => ({ ...prev, lastSyncedAt: result }));
+          } else {
+             setState(prev => ({
+              ...prev,
+              lastSyncedAt: result.lastSyncedAt,
+              products: result.products || prev.products,
+              transactions: result.transactions || prev.transactions,
+              expenditures: result.expenditures || prev.expenditures
+            }));
+          }
+        }
         setIsSyncing(false);
       }
       await fetchEntitlements();
@@ -284,7 +310,8 @@ const App: React.FC = () => {
 
     try {
       if (state.business.email) {
-        const response = await login(state.business.email, pin);
+        // Pass selectedRole to login to prevent privilege escalation
+        const response = await login(state.business.email, pin, selectedRole);
         saveAuthToken(response.token);
         setState(prev => ({ ...prev, role: response.role, isLoggedIn: true, business: { ...prev.business, ...response.business } }));
         setActiveTab('sales');

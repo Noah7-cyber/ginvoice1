@@ -133,7 +133,18 @@ router.post('/', auth, async (req, res) => {
       await Transaction.bulkWrite(txOps, { ordered: false });
     }
 
-    return res.json({ syncedAt: new Date().toISOString() });
+    // Fetch the latest state to return to the client (Two-way sync)
+    // We don't use .lean() here so that the global decimal128ToNumberPlugin applies during JSON serialization
+    const fetchedProducts = await Product.find({ businessId });
+    const fetchedTransactions = await Transaction.find({ businessId });
+    const fetchedExpenditures = await Expenditure.find({ businessId });
+
+    return res.json({
+      syncedAt: new Date().toISOString(),
+      products: fetchedProducts,
+      transactions: fetchedTransactions,
+      expenditures: fetchedExpenditures
+    });
   } catch (err) {
     return res.status(500).json({ message: 'Sync failed' });
   }
