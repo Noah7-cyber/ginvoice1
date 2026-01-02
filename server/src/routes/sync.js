@@ -53,7 +53,8 @@ router.get('/', auth, async (req, res) => {
 
 router.post('/', auth, async (req, res) => {
   try {
-    const { products = [], transactions = [], business } = req.body || {};
+    // 1. Destructure expenditures from body
+    const { products = [], transactions = [], expenditures = [], business } = req.body || {};
     const businessId = req.businessId;
 
     if (business && typeof business === 'object') {
@@ -69,6 +70,7 @@ router.post('/', auth, async (req, res) => {
       });
     }
 
+    // 2. Fix Product Units to include costPrice
     if (Array.isArray(products) && products.length > 0) {
       const productOps = products.map((p) => ({
         updateOne: {
@@ -85,7 +87,8 @@ router.post('/', auth, async (req, res) => {
               units: Array.isArray(p.units) ? p.units.map(u => ({
                 name: u.name,
                 multiplier: u.multiplier,
-                sellingPrice: toDecimal(u.sellingPrice)
+                sellingPrice: toDecimal(u.sellingPrice),
+                costPrice: toDecimal(u.costPrice) // <--- ADDED: Persist cost price
               })) : [],
               updatedAt: new Date()
             }
@@ -97,7 +100,7 @@ router.post('/', auth, async (req, res) => {
     }
 
     if (Array.isArray(transactions) && transactions.length > 0) {
-      const txOps = transactions.map((t) => ({
+       const txOps = transactions.map((t) => ({
         updateOne: {
           filter: { businessId, id: t.id },
           update: {
@@ -133,11 +136,32 @@ router.post('/', auth, async (req, res) => {
       await Transaction.bulkWrite(txOps, { ordered: false });
     }
 
-    // Fetch the latest state to return to the client (Two-way sync)
-    // We don't use .lean() here so that the global decimal128ToNumberPlugin applies during JSON serialization
+    // 3. Add Logic to Save Expenditures
+    if (Array.isArray(expenditures) && expenditures.length > 0) {
+      const expOps = expenditures.map((e) => ({
+        updateOne: {
+          filter: { businessId, id: e.id },
+          update: {
+            $set: {
+              businessId,
+              id: e.id,
+              date: e.date ? new Date(e.date) : new Date(),
+              amount: toDecimal(e.amount),
+              category: e.category,
+              note: e.note,
+              createdBy: e.createdBy
+            }
+          },
+          upsert: true
+        }
+      }));
+      await Expenditure.bulkWrite(expOps, { ordered: false });
+    }
+
+    // Fetch latest state to return
     const fetchedProducts = await Product.find({ businessId });
     const fetchedTransactions = await Transaction.find({ businessId });
-    const fetchedExpenditures = await Expenditure.find({ businessId });
+    const fetchedExpenditures = await Expenditure.find({ businessId }); // <--- Include in response
 
     return res.json({
       syncedAt: new Date().toISOString(),
@@ -146,6 +170,7 @@ router.post('/', auth, async (req, res) => {
       expenditures: fetchedExpenditures
     });
   } catch (err) {
+    console.error(err);
     return res.status(500).json({ message: 'Sync failed' });
   }
 });

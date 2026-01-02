@@ -24,6 +24,7 @@ export interface ProductUnit {
   name: string;
   multiplier: number;
   sellingPrice: number;
+  costPrice?: number;
 }
 
 export interface Product {
