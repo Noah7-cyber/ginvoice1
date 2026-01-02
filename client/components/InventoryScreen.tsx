@@ -182,10 +182,17 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
           <option value="All">All Categories</option>
           {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
         </select>
+        {/* Mobile Select All Toggle */}
+        <button
+           onClick={selectAll}
+           className="md:hidden px-4 py-2 bg-gray-100 rounded-lg text-sm font-bold text-gray-600"
+        >
+          {selectedIds.size === filteredProducts.length ? 'Deselect All' : 'Select All'}
+        </button>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
+      {/* Desktop Table View */}
+      <div className="hidden md:block bg-white rounded-2xl shadow-sm border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead className="bg-gray-50 border-b">
@@ -254,6 +261,68 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Mobile Card View */}
+      <div className="md:hidden space-y-3">
+        {filteredProducts.map(product => (
+          <div
+             key={product.id}
+             className={`bg-white p-4 rounded-2xl shadow-sm border flex flex-col gap-3 transition-colors ${selectedIds.has(product.id) ? 'ring-2 ring-primary bg-indigo-50/30' : ''}`}
+             onClick={() => toggleSelection(product.id)}
+          >
+             <div className="flex justify-between items-start">
+                <div className="flex gap-3 items-start">
+                   <input
+                      type="checkbox"
+                      className="mt-1 w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
+                      checked={selectedIds.has(product.id)}
+                      onChange={(e) => { e.stopPropagation(); toggleSelection(product.id); }}
+                    />
+                    <div>
+                      <h3 className="font-bold text-gray-900">{product.name}</h3>
+                      <p className="text-xs text-gray-400">#{product.id.slice(-5)}</p>
+                    </div>
+                </div>
+                <span className="px-2 py-1 bg-gray-100 rounded text-[10px] font-bold uppercase text-gray-500">
+                  {product.category}
+                </span>
+             </div>
+
+             <div className="flex justify-between items-center bg-gray-50 p-3 rounded-xl">
+                 <div className="flex flex-col">
+                    <span className="text-[10px] uppercase font-bold text-gray-400">Stock</span>
+                    <span className={`font-bold ${product.currentStock < 10 ? 'text-red-500' : 'text-gray-900'}`}>{product.currentStock} {product.baseUnit}</span>
+                 </div>
+                 <div className="flex flex-col text-right">
+                    <span className="text-[10px] uppercase font-bold text-gray-400">Price</span>
+                    <span className="font-black text-gray-900">{formatCurrency(product.sellingPrice)}</span>
+                 </div>
+             </div>
+
+             <div className="flex justify-end gap-2 border-t pt-3 mt-1">
+                 <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingProductId(product.id);
+                      setNewProduct({ ...product });
+                      setIsModalOpen(true);
+                    }}
+                    className="px-3 py-2 bg-gray-100 text-gray-600 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-gray-200"
+                  >
+                    <Edit3 size={14} /> Edit
+                  </button>
+                  {isOwner && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.id); }}
+                      className="px-3 py-2 bg-red-50 text-red-600 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-red-100"
+                    >
+                      <Trash2 size={14} /> Delete
+                    </button>
+                  )}
+             </div>
+          </div>
+        ))}
       </div>
 
       {/* Bulk Edit Panel */}
@@ -346,7 +415,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
       {/* Add Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b flex justify-between items-center bg-primary text-white">
               <h2 className="text-xl font-bold">Register New Product</h2>
               <button onClick={() => setIsModalOpen(false)}><X size={24} /></button>

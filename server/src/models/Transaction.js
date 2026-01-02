@@ -4,6 +4,8 @@ const TransactionItemSchema = new mongoose.Schema({
   productId: { type: String, required: true },
   productName: { type: String, required: true },
   quantity: { type: Number, required: true },
+  unit: { type: String }, // Name of the unit (e.g., "Box")
+  multiplier: { type: Number, default: 1 }, // Multiplier for the unit (e.g., 12)
   unitPrice: { type: mongoose.Schema.Types.Decimal128, default: 0 },
   discount: { type: mongoose.Schema.Types.Decimal128, default: 0 },
   total: { type: mongoose.Schema.Types.Decimal128, default: 0 }
