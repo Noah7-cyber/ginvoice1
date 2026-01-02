@@ -39,7 +39,7 @@ const ExpenditureScreen: React.FC = () => {
       setExpenditures(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       console.error('Error fetching expenditures:', error);
-      showToast('Failed to fetch expenditures', 'error');
+      addToast('Failed to fetch expenditures', 'error');
     } finally {
       setLoading(false);
     }
@@ -75,16 +75,16 @@ const ExpenditureScreen: React.FC = () => {
             description: '',
             paymentMethod: 'Cash'
           });
-          showToast('Expenditure saved successfully', 'success');
+          addToast('Expenditure saved successfully', 'success');
       } else {
           // Fallback: reload list if we can't parse the new item
           await fetchExpenditures();
           setShowAddModal(false);
-          showToast('Expenditure saved successfully', 'success');
+          addToast('Expenditure saved successfully', 'success');
       }
     } catch (error) {
       console.error('Error saving expenditure:', error);
-      showToast('Failed to save expenditure', 'error');
+      addToast('Failed to save expenditure', 'error');
     }
   };
 
