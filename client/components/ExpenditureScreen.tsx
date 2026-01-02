@@ -35,7 +35,8 @@ const ExpenditureScreen: React.FC = () => {
   const fetchExpenditures = async () => {
     try {
       const res = await api.get('/expenditures');
-      setExpenditures(res.data);
+      // Fix: Ensure we always default to an empty array if data is missing
+      setExpenditures(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       console.error('Error fetching expenditures:', error);
       showToast('Failed to fetch expenditures', 'error');
@@ -101,7 +102,7 @@ const ExpenditureScreen: React.FC = () => {
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                  <tr><td colSpan={5} className="px-6 py-4 text-center">Loading...</td></tr>
-              ) : expenditures.length === 0 ? (
+              ) : (!expenditures || expenditures.length === 0) ? (
                  <tr><td colSpan={5} className="px-6 py-4 text-center text-gray-500">No expenditures recorded.</td></tr>
               ) : (
                 expenditures.map((exp) => (
