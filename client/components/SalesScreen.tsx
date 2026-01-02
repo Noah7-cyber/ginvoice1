@@ -109,8 +109,8 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart }) => {
 
       {/* Unit Selection Modal */}
       {selectedProduct && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in">
-            <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl animate-in fade-in">
                 <div className="p-4 border-b bg-gray-50">
                     <h3 className="font-bold text-lg text-gray-900">Select Unit</h3>
                     <p className="text-xs text-gray-500">Sell {selectedProduct.name} as...</p>
