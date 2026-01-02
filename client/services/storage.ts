@@ -17,7 +17,19 @@ export const loadState = (): InventoryState | null => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as InventoryState;
+    const state = JSON.parse(raw) as InventoryState;
+
+    // Data Sanitization: Ensure products have valid numeric fields
+    if (state.products) {
+      state.products = state.products.map(p => ({
+        ...p,
+        sellingPrice: typeof p.sellingPrice === 'number' ? p.sellingPrice : 0,
+        costPrice: typeof p.costPrice === 'number' ? p.costPrice : 0,
+        currentStock: typeof p.currentStock === 'number' ? p.currentStock : 0
+      }));
+    }
+
+    return state;
   } catch (err) {
     console.warn('loadState failed', err);
     return null;
