@@ -25,7 +25,8 @@ router.post('/', auth, async (req, res) => {
       date,
       description,
       paymentMethod,
-      business: req.user.businessId,
+      // FIX: Add fallback to req.user.id to match the GET route logic
+      business: req.user.businessId || req.user.id,
       user: req.user.id
     });
     const expenditure = await newExpenditure.save();
