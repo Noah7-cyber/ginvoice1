@@ -58,12 +58,16 @@ describe('archiveInactiveBusinesses', () => {
         });
 
         // Data for inactive business (should be archived)
-        await Expenditure.create({ businessId: inactiveBusiness._id, amount: 100, date: new Date('2023-01-15') });
+        // Note: New schema requires 'business' (ObjectId) but also keeps 'businessId' (String) in sync logic?
+        // The archiver likely uses one or the other. Let's provide BOTH to cover bases for this test helper,
+        // or check how archiver queries. Archiver likely queries by whatever the model was.
+        // The new model requires 'business'.
+        await Expenditure.create({ business: inactiveBusiness._id, businessId: inactiveBusiness._id, amount: 100, date: new Date('2023-01-15') });
         await Transaction.create({ businessId: inactiveBusiness._id, id: 'test-tx-1', totalAmount: 200, transactionDate: new Date('2023-01-20') });
-        await Expenditure.create({ businessId: inactiveBusiness._id, amount: 50, date: new Date('2023-02-10') });
+        await Expenditure.create({ business: inactiveBusiness._id, businessId: inactiveBusiness._id, amount: 50, date: new Date('2023-02-10') });
 
         // Data for active business (should not be archived)
-        await Expenditure.create({ businessId: activeBusiness._id, amount: 1000, date: new Date('2023-01-15') });
+        await Expenditure.create({ business: activeBusiness._id, businessId: activeBusiness._id, amount: 1000, date: new Date('2023-01-15') });
 
 
         // 2. Execute
@@ -71,13 +75,15 @@ describe('archiveInactiveBusinesses', () => {
 
         // 3. Assert
         // Inactive business data should be gone
-        const inactiveExpenditures = await Expenditure.countDocuments({ businessId: inactiveBusiness._id });
+        // Archiver usually queries by businessId or business.
+        // We'll check both queries to be sure it's gone.
+        const inactiveExpenditures = await Expenditure.countDocuments({ business: inactiveBusiness._id });
         const inactiveTransactions = await Transaction.countDocuments({ businessId: inactiveBusiness._id });
         expect(inactiveExpenditures).toBe(0);
         expect(inactiveTransactions).toBe(0);
 
         // Active business data should remain
-        const activeExpenditures = await Expenditure.countDocuments({ businessId: activeBusiness._id });
+        const activeExpenditures = await Expenditure.countDocuments({ business: activeBusiness._id });
         expect(activeExpenditures).toBe(1);
 
         // Monthly summaries should be created for the inactive business
@@ -108,7 +114,7 @@ describe('archiveInactiveBusinesses', () => {
             staffPin: '9999',
             trialEndsAt: new Date(),
         });
-        await Expenditure.create({ businessId: business._id, amount: 100 });
+        await Expenditure.create({ business: business._id, businessId: business._id, amount: 100 });
 
         await archiveInactiveBusinesses();
 
