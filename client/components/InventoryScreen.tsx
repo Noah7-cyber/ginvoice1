@@ -328,8 +328,8 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
       {/* Bulk Edit Panel */}
       {isBulkEditOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
-          <div className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-10">
-            <div className="p-6 border-b flex justify-between items-center bg-indigo-600 text-white">
+          <div className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-10 max-h-[85vh] overflow-y-auto">
+            <div className="p-6 border-b flex justify-between items-center bg-indigo-600 text-white shrink-0 sticky top-0 bg-indigo-600 z-10">
               <h2 className="text-xl font-bold flex items-center gap-2"><Layers size={24} /> Bulk Edit Items</h2>
               <button onClick={() => setIsBulkEditOpen(false)}><X size={24} /></button>
             </div>
