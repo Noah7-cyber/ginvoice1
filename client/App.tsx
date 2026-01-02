@@ -241,7 +241,13 @@ const App: React.FC = () => {
   }, [state.isLoggedIn, triggerSync]);
 
   const updateExpenditures = (items: Expenditure[]) => {
-    setState(prev => ({ ...prev, expenditures: items }));
+    const nextState = { ...state, expenditures: items };
+    setState(nextState);
+
+    // TRIGGER IMMEDIATE SYNC
+    if (navigator.onLine) {
+      syncWithBackend(nextState).catch(err => console.error("Expenditure sync failed", err));
+    }
   };
 
   const handleRegister = async (details: any) => {
