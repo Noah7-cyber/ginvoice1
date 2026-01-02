@@ -24,7 +24,6 @@ export interface ProductUnit {
   name: string;
   multiplier: number;
   sellingPrice: number;
-  costPrice?: number; // Added optional costPrice for units if needed
 }
 
 export interface Product {
@@ -47,11 +46,7 @@ export interface SaleItem {
   unitPrice: number;
   discount: number;
   total: number;
-  selectedUnit?: ProductUnit; // Track which unit was sold (local state)
-
-  // Fields for synced/restored transactions
-  unit?: string;
-  multiplier?: number;
+  selectedUnit?: ProductUnit; // Track which unit was sold
 }
 
 export interface Transaction {
