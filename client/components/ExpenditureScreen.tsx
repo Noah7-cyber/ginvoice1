@@ -107,7 +107,10 @@ const ExpenditureScreen: React.FC = () => {
               ) : (
                 expenditures.map((exp) => (
                   <tr key={exp._id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm text-gray-600">{new Date(exp.date).toLocaleDateString()}</td>
+                    <td className="px-6 py-4 text-sm text-gray-600">
+                        {/* FIX: Check if date exists before formatting, otherwise show placeholder */}
+                        {exp.date ? new Date(exp.date).toLocaleDateString() : 'N/A'}
+                    </td>
                     <td className="px-6 py-4 text-sm font-medium text-gray-900">{exp.title}</td>
                     <td className="px-6 py-4 text-sm text-gray-600">
                       <span className="px-2 py-1 rounded-full bg-gray-100 text-xs text-gray-600">{exp.category}</span>
