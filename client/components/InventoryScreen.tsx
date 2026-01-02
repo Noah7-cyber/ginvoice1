@@ -231,7 +231,9 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                       <span className="font-bold text-gray-800">{product.currentStock} {product.baseUnit}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 font-black text-gray-900">{formatCurrency(product.sellingPrice)}</td>
+                 <td className="px-6 py-4 font-black text-gray-900">
+  {CURRENCY}{(product.sellingPrice || 0).toLocaleString()}
+</td>
                   <td className="px-6 py-4">
                     <div className="flex gap-2">
                       <button
@@ -408,7 +410,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Cost Price ({CURRENCY})</label>
                   <input required type="number" className="w-full px-4 py-3 rounded-xl border" value={newProduct.costPrice} onChange={e => setNewProduct({...newProduct, costPrice: Number(e.target.value)})} />

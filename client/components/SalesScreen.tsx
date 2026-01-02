@@ -124,7 +124,7 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart }) => {
                             <p className="font-bold text-gray-900 group-hover:text-primary">{selectedProduct.baseUnit}</p>
                             <p className="text-xs text-gray-400">1 Unit</p>
                         </div>
-                        <span className="font-black text-gray-900">{formatCurrency(selectedProduct.sellingPrice)}</span>
+                        <span className="font-black text-gray-900">{CURRENCY}{selectedProduct.sellingPrice.toLocaleString()}</span>
                     </button>
                     {selectedProduct.units?.map((u, i) => (
                         <button
@@ -136,7 +136,7 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart }) => {
                                 <p className="font-bold text-gray-900 group-hover:text-primary">{u.name}</p>
                                 <p className="text-xs text-gray-400">Contains {u.multiplier} {selectedProduct.baseUnit}s</p>
                             </div>
-                            <span className="font-black text-gray-900">{formatCurrency(u.sellingPrice)}</span>
+                            <span className="font-black text-gray-900">{CURRENCY}{u.sellingPrice.toLocaleString()}</span>
                         </button>
                     ))}
                 </div>
