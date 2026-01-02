@@ -17,7 +17,7 @@ const ExpenditureScreen: React.FC = () => {
   const [expenditures, setExpenditures] = useState<Expenditure[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [loading, setLoading] = useState(true);
-  const { showToast } = useToast();
+  const { addToast } = useToast();
 
   const [formData, setFormData] = useState({
     title: '',
