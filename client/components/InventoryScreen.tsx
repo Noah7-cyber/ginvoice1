@@ -230,7 +230,9 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                       <span className="font-bold text-gray-800">{product.currentStock} {product.baseUnit}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 font-black text-gray-900">{CURRENCY}{product.sellingPrice.toLocaleString()}</td>
+                 <td className="px-6 py-4 font-black text-gray-900">
+  {CURRENCY}{(product.sellingPrice || 0).toLocaleString()}
+</td>
                   <td className="px-6 py-4">
                     <div className="flex gap-2">
                       <button
