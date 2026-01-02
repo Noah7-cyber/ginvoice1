@@ -15,7 +15,7 @@ import {
   PanelRightOpen,
   Wallet
 } from 'lucide-react';
-import { InventoryState, UserRole, Product, Transaction, BusinessProfile, TabId, SaleItem, PaymentMethod, Expenditure } from './types';
+import { InventoryState, UserRole, Product, ProductUnit, Transaction, BusinessProfile, TabId, SaleItem, PaymentMethod, Expenditure } from './types';
 import { INITIAL_PRODUCTS } from './constants';
 import { saveState, loadState, syncWithBackend } from './services/storage';
 import { login, registerBusiness, saveAuthToken, clearAuthToken, deleteTransaction, getEntitlements, initializePayment, fetchRemoteState } from './services/api';
@@ -351,20 +351,38 @@ const App: React.FC = () => {
   };
 
   // POS UX fix: No auto-open on mobile
-  const addToCart = (product: Product) => {
-    if (product.currentStock <= 0) return;
+  const addToCart = (product: Product, unit?: ProductUnit) => {
+    const multiplier = unit ? unit.multiplier : 1;
+    if (product.currentStock < multiplier) return;
+
     setCart(prev => {
-      const existing = prev.find(item => item.productId === product.id);
-      if (existing) {
-        if (existing.quantity >= product.currentStock) return prev;
-        return prev.map(item => item.productId === product.id 
-          ? { ...item, quantity: item.quantity + 1, total: (item.quantity + 1) * item.unitPrice - item.discount }
-          : item
-        );
+      const existingIndex = prev.findIndex(item =>
+        item.productId === product.id &&
+        ((!unit && !item.selectedUnit) || (unit && item.selectedUnit?.name === unit.name))
+      );
+
+      if (existingIndex >= 0) {
+        const item = prev[existingIndex];
+        // Simple stock check (not accounting for mixed units of same product)
+        if (product.currentStock < (item.quantity + 1) * multiplier) return prev;
+
+        const newCart = [...prev];
+        newCart[existingIndex] = {
+          ...item,
+          quantity: item.quantity + 1,
+          total: (item.quantity + 1) * item.unitPrice - item.discount
+        };
+        return newCart;
       }
+
       return [...prev, {
-        productId: product.id, productName: product.name, quantity: 1,
-        unitPrice: product.sellingPrice, discount: 0, total: product.sellingPrice
+        productId: product.id,
+        productName: unit ? `${product.name} (${unit.name})` : product.name,
+        quantity: 1,
+        unitPrice: unit ? unit.sellingPrice : product.sellingPrice,
+        discount: 0,
+        total: unit ? unit.sellingPrice : product.sellingPrice,
+        selectedUnit: unit
       }];
     });
     // Explicit manual toggle only on mobile now
@@ -373,8 +391,15 @@ const App: React.FC = () => {
   const handleCompleteSale = (transaction: Transaction) => {
     setState(prev => {
       const updatedProducts = prev.products.map(p => {
-        const itemInSale = transaction.items.find(i => i.productId === p.id);
-        return itemInSale ? { ...p, currentStock: Math.max(0, p.currentStock - itemInSale.quantity) } : p;
+        const itemsInSale = transaction.items.filter(i => i.productId === p.id);
+        if (itemsInSale.length === 0) return p;
+
+        const totalDeduction = itemsInSale.reduce((sum, item) => {
+            const multiplier = item.selectedUnit ? item.selectedUnit.multiplier : 1;
+            return sum + (item.quantity * multiplier);
+        }, 0);
+
+        return { ...p, currentStock: Math.max(0, p.currentStock - totalDeduction) };
       });
       return { ...prev, products: updatedProducts, transactions: [transaction, ...prev.transactions] };
     });

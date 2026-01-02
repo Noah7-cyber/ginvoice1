@@ -1,17 +1,18 @@
 
 import React, { useState } from 'react';
 import { Search, Plus, Package, ShoppingCart } from 'lucide-react';
-import { Product } from '../types';
+import { Product, ProductUnit } from '../types';
 import { CURRENCY } from '../constants';
 
 interface SalesScreenProps {
   products: Product[];
-  onAddToCart: (product: Product) => void;
+  onAddToCart: (product: Product, unit?: ProductUnit) => void;
 }
 
 const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All');
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
   const categories = Array.from(new Set(products.map(p => p.category)));
 
@@ -21,6 +22,14 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart }) => {
     const matchesCat = categoryFilter === 'All' || p.category === categoryFilter;
     return matchesSearch && matchesCat;
   });
+
+  const handleProductClick = (p: Product) => {
+    if (p.units && p.units.length > 0) {
+      setSelectedProduct(p);
+    } else {
+      onAddToCart(p);
+    }
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -62,7 +71,7 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart }) => {
           filtered.map(p => (
             <button
               key={p.id}
-              onClick={() => onAddToCart(p)}
+              onClick={() => handleProductClick(p)}
               disabled={p.currentStock <= 0}
               className={`
                 group flex items-center gap-4 p-4 bg-white border border-gray-50 rounded-2xl shadow-sm transition-all text-left
@@ -84,7 +93,7 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart }) => {
                   <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
                     p.currentStock < 10 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'
                   }`}>
-                    {p.currentStock} {p.unit}s
+                    {p.currentStock} {p.baseUnit}s
                   </span>
                 </div>
               </div>
@@ -96,6 +105,44 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart }) => {
           ))
         )}
       </div>
+
+      {/* Unit Selection Modal */}
+      {selectedProduct && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in">
+            <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
+                <div className="p-4 border-b bg-gray-50">
+                    <h3 className="font-bold text-lg text-gray-900">Select Unit</h3>
+                    <p className="text-xs text-gray-500">Sell {selectedProduct.name} as...</p>
+                </div>
+                <div className="p-4 space-y-2">
+                    <button
+                        onClick={() => { onAddToCart(selectedProduct); setSelectedProduct(null); }}
+                        className="w-full flex justify-between items-center p-4 border rounded-xl hover:border-primary hover:bg-indigo-50 transition-all group"
+                    >
+                        <div className="text-left">
+                            <p className="font-bold text-gray-900 group-hover:text-primary">{selectedProduct.baseUnit}</p>
+                            <p className="text-xs text-gray-400">1 Unit</p>
+                        </div>
+                        <span className="font-black text-gray-900">{CURRENCY}{selectedProduct.sellingPrice.toLocaleString()}</span>
+                    </button>
+                    {selectedProduct.units?.map((u, i) => (
+                        <button
+                            key={i}
+                            onClick={() => { onAddToCart(selectedProduct, u); setSelectedProduct(null); }}
+                            className="w-full flex justify-between items-center p-4 border rounded-xl hover:border-primary hover:bg-indigo-50 transition-all group"
+                        >
+                            <div className="text-left">
+                                <p className="font-bold text-gray-900 group-hover:text-primary">{u.name}</p>
+                                <p className="text-xs text-gray-400">Contains {u.multiplier} {selectedProduct.baseUnit}s</p>
+                            </div>
+                            <span className="font-black text-gray-900">{CURRENCY}{u.sellingPrice.toLocaleString()}</span>
+                        </button>
+                    ))}
+                </div>
+                <button onClick={() => setSelectedProduct(null)} className="w-full p-4 bg-gray-50 font-bold text-gray-500 hover:bg-gray-100">Cancel</button>
+            </div>
+        </div>
+      )}
     </div>
   );
 };
