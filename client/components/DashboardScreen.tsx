@@ -51,11 +51,13 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
     topProducts: { name: string; qty: number }[];
   } | null>(null);
 
+  const [timeRange, setTimeRange] = useState<'7d' | '30d' | '1y'>('7d');
+
   useEffect(() => {
     let active = true;
     if (!navigator.onLine) return;
     if (!localStorage.getItem('ginvoice_auth_token_v1')) return;
-    getAnalytics()
+    getAnalytics(timeRange)
       .then((data) => {
         if (active) setRemoteAnalytics(data);
       })
@@ -70,7 +72,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
     return () => {
       active = false;
     };
-  }, [transactions.length]);
+  }, [transactions.length, timeRange]);
 
   const localStats = useMemo(() => {
     const totalRevenue = transactions.reduce((sum, tx) => sum + tx.totalAmount, 0);
@@ -175,8 +177,19 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
         <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border">
           <div className="flex items-center justify-between mb-6">
             <h3 className="font-bold text-gray-800 flex items-center gap-2">
-              <Calendar className="text-indigo-600" size={20} /> Sales Performance (Last 7 Days)
+              <Calendar className="text-indigo-600" size={20} /> Sales Performance
             </h3>
+            <div className="flex gap-2">
+              {['7d', '30d', '1y'].map(r => (
+                <button
+                  key={r}
+                  onClick={() => setTimeRange(r as any)}
+                  className={`px-3 py-1 rounded-full text-xs font-bold ${timeRange === r ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600'}`}
+                >
+                  {r === '7d' ? 'Weekly' : r === '30d' ? 'Monthly' : 'Yearly'}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
