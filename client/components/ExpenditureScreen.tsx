@@ -35,8 +35,12 @@ const ExpenditureScreen: React.FC = () => {
   const fetchExpenditures = async () => {
     try {
       const res = await api.get('/expenditures');
-      // Fix: Ensure we always default to an empty array if data is missing
-      setExpenditures(Array.isArray(res.data) ? res.data : []);
+
+      // FIX: Check if 'res' is the array (unwrapped) OR if 'res.data' is the array
+      // This ensures it works regardless of the Axios interceptor configuration
+      const validData = Array.isArray(res) ? res : (res?.data && Array.isArray(res.data) ? res.data : []);
+
+      setExpenditures(validData);
     } catch (error) {
       console.error('Error fetching expenditures:', error);
       addToast('Failed to fetch expenditures', 'error');
