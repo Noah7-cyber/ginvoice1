@@ -389,22 +389,42 @@ const App: React.FC = () => {
   };
 
   const handleCompleteSale = (transaction: Transaction) => {
-    setState(prev => {
-      const updatedProducts = prev.products.map(p => {
-        const itemsInSale = transaction.items.filter(i => i.productId === p.id);
-        if (itemsInSale.length === 0) return p;
+    // 1. Calculate new state first
+    const updatedProducts = state.products.map(p => {
+      const itemsInSale = transaction.items.filter(i => i.productId === p.id);
+      if (itemsInSale.length === 0) return p;
 
-        const totalDeduction = itemsInSale.reduce((sum, item) => {
-            const multiplier = item.selectedUnit ? item.selectedUnit.multiplier : 1;
-            return sum + (item.quantity * multiplier);
-        }, 0);
+      const totalDeduction = itemsInSale.reduce((sum, item) => {
+          const multiplier = item.selectedUnit ? item.selectedUnit.multiplier : 1;
+          return sum + (item.quantity * multiplier);
+      }, 0);
 
-        return { ...p, currentStock: Math.max(0, p.currentStock - totalDeduction) };
-      });
-      return { ...prev, products: updatedProducts, transactions: [transaction, ...prev.transactions] };
+      return { ...p, currentStock: Math.max(0, p.currentStock - totalDeduction) };
     });
+
+    const nextState = {
+      ...state,
+      products: updatedProducts,
+      transactions: [transaction, ...state.transactions]
+    };
+
+    // 2. Update UI
+    setState(nextState);
     setCart([]); setCustomerName(''); setCustomerPhone(''); setAmountPaid(0); setGlobalDiscount(0); setSignature(''); setIsLocked(false);
     if (window.innerWidth < 768) setIsCartOpen(false);
+
+    // 3. PUSH to Server immediately (Fire and Forget)
+    if (navigator.onLine) {
+      syncWithBackend(nextState).catch(err => console.error("Instant sync failed:", err));
+    }
+  };
+
+  const handleUpdateProducts = (products: Product[]) => {
+    const nextState = { ...state, products };
+    setState(nextState);
+    if (navigator.onLine) {
+      syncWithBackend(nextState).catch(err => console.error("Instant sync failed:", err));
+    }
   };
 
   const allowedTabs = useMemo(() => {
@@ -472,7 +492,7 @@ const App: React.FC = () => {
         
         <div className="flex-1 overflow-y-auto p-4 md:p-8">
           {activeTab === 'sales' && <SalesScreen products={state.products} onAddToCart={addToCart} />}
-          {activeTab === 'inventory' && <InventoryScreen products={state.products} onUpdateProducts={p => setState(prev => ({ ...prev, products: p }))} isOwner={state.role === 'owner'} />}
+          {activeTab === 'inventory' && <InventoryScreen products={state.products} onUpdateProducts={handleUpdateProducts} isOwner={state.role === 'owner'} />}
           {activeTab === 'history' && <HistoryScreen transactions={state.transactions} business={state.business} onDeleteTransaction={handleDeleteTransaction} onUpdateTransaction={t => setState(prev => ({ ...prev, transactions: prev.transactions.map(tx => tx.id === t.id ? t : tx) }))} />}
           {activeTab === 'dashboard' && state.role === 'owner' && <DashboardScreen transactions={state.transactions} products={state.products} />}
           {activeTab === 'expenditure' && <ExpenditureScreen expenditures={state.expenditures} onUpdateExpenditures={updateExpenditures} isOwner={state.role === 'owner'} />}
