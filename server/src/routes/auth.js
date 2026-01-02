@@ -78,23 +78,38 @@ router.post('/register', async (req, res) => {
 
 router.post('/login', async (req, res) => {
   try {
-    const { email, pin } = req.body || {};
+    const { email, pin, role } = req.body || {};
     if (!email || !pin) return res.status(400).json({ message: 'Email and pin required' });
 
     const business = await Business.findOne({ email });
     if (!business) return res.status(404).json({ message: 'Business not found' });
 
-    const isOwner = await bcrypt.compare(pin, business.ownerPin);
-    const isStaff = isOwner ? false : await bcrypt.compare(pin, business.staffPin);
+    let isOwner = false;
+    let isStaff = false;
+
+    if (role) {
+      // If role is specified, check strictly against that role
+      if (role === 'owner') {
+        isOwner = await bcrypt.compare(pin, business.ownerPin);
+      } else if (role === 'staff') {
+        isStaff = await bcrypt.compare(pin, business.staffPin);
+      }
+    } else {
+      // Legacy behavior: check owner first, then staff
+      isOwner = await bcrypt.compare(pin, business.ownerPin);
+      if (!isOwner) {
+        isStaff = await bcrypt.compare(pin, business.staffPin);
+      }
+    }
 
     if (!isOwner && !isStaff) return res.status(401).json({ message: 'Invalid credentials' });
 
-    const role = isOwner ? 'owner' : 'staff';
-    const token = buildToken(business._id.toString(), role);
+    const finalRole = isOwner ? 'owner' : 'staff';
+    const token = buildToken(business._id.toString(), finalRole);
 
     return res.json({
       token,
-      role,
+      role: finalRole,
       business: sanitizeBusiness(business)
     });
   } catch (err) {

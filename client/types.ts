@@ -20,6 +20,13 @@ export interface BusinessProfile {
   staffPermissions: (TabId | 'stock-management')[];
 }
 
+export interface ProductUnit {
+  name: string;
+  multiplier: number;
+  sellingPrice: number;
+  costPrice?: number; // Added optional costPrice for units if needed
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -27,7 +34,8 @@ export interface Product {
   costPrice: number;     // NOTE: client uses integers (kobo) when interacting with server
   sellingPrice: number;  // stored as integer kobo values when synced
   currentStock: number;
-  unit: string;
+  baseUnit: string;      // Renamed from 'unit'
+  units: ProductUnit[];  // Alternative units (e.g., Packs)
 }
 
 export type PaymentMethod = 'cash' | 'transfer' | 'credit';
@@ -39,6 +47,11 @@ export interface SaleItem {
   unitPrice: number;
   discount: number;
   total: number;
+  selectedUnit?: ProductUnit; // Track which unit was sold (local state)
+
+  // Fields for synced/restored transactions
+  unit?: string;
+  multiplier?: number;
 }
 
 export interface Transaction {
