@@ -9,7 +9,7 @@ type Toast = {
 };
 
 type ToastContextValue = {
-  addToast: (message: string, variant?: ToastVariant) => void;
+  addToast: (message: string, variant?: ToastVariant, duration?: number) => void;
 };
 
 const ToastContext = createContext<ToastContextValue | null>(null);
@@ -17,12 +17,12 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const addToast = useCallback((message: string, variant: ToastVariant = 'info') => {
+  const addToast = useCallback((message: string, variant: ToastVariant = 'info', duration: number = 3500) => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     setToasts(prev => [...prev, { id, message, variant }]);
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
-    }, 3500);
+    }, duration);
   }, []);
 
   return (
