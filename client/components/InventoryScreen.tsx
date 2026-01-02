@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Plus, Search, Edit3, Trash2, CheckCircle2, X, ListTodo, Layers, Tag, DollarSign, ArrowUp } from 'lucide-react';
 import { Product } from '../types';
 import { CURRENCY, CATEGORIES } from '../constants';
+import { formatCurrency } from '../utils/currency';
 import { deleteProduct } from '../services/api';
 import { useToast } from './ToastProvider';
 
@@ -417,6 +418,10 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Selling Price ({CURRENCY})</label>
                   <input required type="number" className="w-full px-4 py-3 rounded-xl border" value={newProduct.sellingPrice} onChange={e => setNewProduct({...newProduct, sellingPrice: Number(e.target.value)})} />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Stock Quantity</label>
+                  <input required type="number" className="w-full px-4 py-3 rounded-xl border" value={newProduct.currentStock} onChange={e => setNewProduct({...newProduct, currentStock: Number(e.target.value)})} />
                 </div>
               </div>
               <div className="pt-4 flex gap-3">

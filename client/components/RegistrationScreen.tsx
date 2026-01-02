@@ -1,6 +1,8 @@
 
 import React, { useState, useRef } from 'react';
 import { ShoppingBag, MapPin, Phone, Mail, ArrowRight, Store, Sparkles, Upload, Trash2, Image as ImageIcon, Lock, ShieldCheck, UserCircle, Info, KeyRound } from 'lucide-react';
+import PhoneInput from 'react-phone-input-2';
+import 'react-phone-input-2/lib/style.css';
 import { useToast } from './ToastProvider';
 
 interface RegistrationScreenProps {
@@ -49,8 +51,25 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onM
         addToast('Please accept the Privacy Policy to continue.', 'error');
         return;
       }
+
+      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+      // Phone validation is handled by the component somewhat, but we can verify length
+      // const phoneRegex = /^\+?[1-9]\d{6,14}$/; // PhoneInput returns clean digits usually
+
+      if (formData.email && !emailRegex.test(formData.email)) {
+        addToast('Invalid email address format', 'error');
+        return;
+      }
+
+      if (!formData.phone || formData.phone.length < 8) {
+         addToast('Invalid phone number format', 'error');
+         return;
+      }
+
       if (formData.name && formData.phone && formData.ownerPassword && formData.staffPassword) {
         onRegister(formData);
+      } else {
+        addToast('Please fill in all required fields', 'error');
       }
     } else {
       onManualLogin(loginData);
@@ -128,17 +147,15 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onM
                   <div className="relative">
                     <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 ml-1">Phone Number *</label>
                     <div className="relative">
-                      <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                      <input 
-                        required
-                        type="tel" 
-                        inputMode="tel"
-                        autoComplete="tel"
-                        pattern="[0-9+\\(\\)\\-\\s]{7,}"
-                        placeholder="080..."
-                        className="w-full pl-12 pr-4 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-indigo-600 outline-none font-bold text-gray-800 transition-all"
+                      {/* PhoneInput replaces the input */}
+                      <PhoneInput
+                        country={'ng'}
                         value={formData.phone}
-                        onChange={e => setFormData({...formData, phone: e.target.value})}
+                        onChange={phone => setFormData({ ...formData, phone })}
+                        inputClass="!w-full !py-6 !pl-14 !bg-gray-50 !border-none !rounded-2xl !text-gray-800 !font-bold"
+                        buttonClass="!bg-gray-50 !border-none !rounded-l-2xl !pl-2"
+                        containerClass="!w-full"
+                        dropdownClass="!shadow-xl !rounded-xl"
                       />
                     </div>
                   </div>

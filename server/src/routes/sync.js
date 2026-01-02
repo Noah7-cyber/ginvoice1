@@ -80,7 +80,7 @@ router.post('/', auth, async (req, res) => {
               name: p.name,
               category: p.category,
               baseUnit: p.baseUnit || 'Piece',
-              stock: p.stock,
+              stock: p.currentStock !== undefined ? p.currentStock : p.stock,
               costPrice: toDecimal(p.costPrice),
               units: Array.isArray(p.units) ? p.units.map(u => ({
                 name: u.name,

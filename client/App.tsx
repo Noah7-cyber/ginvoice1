@@ -385,6 +385,7 @@ const App: React.FC = () => {
         selectedUnit: unit
       }];
     });
+    addToast("Added", "success", 1500);
     // Explicit manual toggle only on mobile now
   };
 
@@ -480,7 +481,10 @@ const App: React.FC = () => {
       {/* Main Workspace */}
       <main className="flex-1 flex flex-col overflow-hidden relative">
         <header className="bg-white border-b p-4 flex justify-between items-center shrink-0">
-          <h1 className="text-lg font-black text-primary md:hidden">{state.business.name}</h1>
+          <div className="md:hidden flex items-center gap-2 overflow-hidden">
+             {state.business.logo && <img src={state.business.logo} alt="Logo" className="w-8 h-8 rounded-lg bg-white p-0.5 border shrink-0" />}
+             <h1 className="text-lg font-black text-primary truncate">{state.business.name}</h1>
+          </div>
           <div className="hidden md:flex items-center gap-2 text-gray-400 text-xs font-bold uppercase tracking-widest">
             <span>{state.role} Mode</span> <span className="opacity-30">/</span> <span>{activeTab}</span>
           </div>

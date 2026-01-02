@@ -1,3 +1,9 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  input::placeholder, textarea::placeholder {
+    @apply text-gray-400 font-normal opacity-100;
+  }
+}

@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Search, Plus, Package, ShoppingCart } from 'lucide-react';
 import { Product, ProductUnit } from '../types';
 import { CURRENCY } from '../constants';
+import { formatCurrency } from '../utils/currency';
 
 interface SalesScreenProps {
   products: Product[];
@@ -89,7 +90,7 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart }) => {
                 <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest truncate">{p.category}</p>
                 <h3 className="font-bold text-gray-900 truncate leading-tight mb-1">{p.name}</h3>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm font-black text-primary">{CURRENCY}{p.sellingPrice.toLocaleString()}</span>
+                  <span className="text-sm font-black text-primary">{formatCurrency(p.sellingPrice)}</span>
                   <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
                     p.currentStock < 10 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'
                   }`}>
