@@ -15,10 +15,10 @@ import {
   PanelRightOpen,
   Wallet
 } from 'lucide-react';
-import { InventoryState, UserRole, Product, Transaction, BusinessProfile, TabId, SaleItem, PaymentMethod, Expenditure } from './types';
+import { InventoryState, UserRole, Product, ProductUnit, Transaction, BusinessProfile, TabId, SaleItem, PaymentMethod, Expenditure } from './types';
 import { INITIAL_PRODUCTS } from './constants';
 import { saveState, loadState, syncWithBackend } from './services/storage';
-import { login, registerBusiness, saveAuthToken, clearAuthToken, deleteTransaction, getEntitlements, initializePayment } from './services/api';
+import { login, registerBusiness, saveAuthToken, clearAuthToken, deleteTransaction, getEntitlements, initializePayment, fetchRemoteState } from './services/api';
 import { useToast } from './components/ToastProvider';
 import SalesScreen from './components/SalesScreen';
 import InventoryScreen from './components/InventoryScreen';
@@ -114,8 +114,22 @@ const App: React.FC = () => {
   const triggerSync = useCallback(async () => {
     if (!navigator.onLine) return;
     setIsSyncing(true);
-    const syncTime = await syncWithBackend(state);
-    if (syncTime) setState(prev => ({ ...prev, lastSyncedAt: syncTime }));
+    const result = await syncWithBackend(state);
+    if (result) {
+      if (typeof result === 'string') {
+        // Legacy handling if backend only returned string (timestamp)
+        setState(prev => ({ ...prev, lastSyncedAt: result }));
+      } else {
+        // New full sync response
+        setState(prev => ({
+          ...prev,
+          lastSyncedAt: result.lastSyncedAt,
+          products: result.products || prev.products,
+          transactions: result.transactions || prev.transactions,
+          expenditures: result.expenditures || prev.expenditures
+        }));
+      }
+    }
     setIsSyncing(false);
   }, [state]);
 
@@ -153,8 +167,20 @@ const App: React.FC = () => {
       setIsOnline(true);
       if (!wasOnlineRef.current && state.isLoggedIn) {
         setIsSyncing(true);
-        const syncTime = await syncWithBackend(state);
-        if (syncTime) setState(prev => ({ ...prev, lastSyncedAt: syncTime }));
+        const result = await syncWithBackend(state);
+        if (result) {
+          if (typeof result === 'string') {
+            setState(prev => ({ ...prev, lastSyncedAt: result }));
+          } else {
+             setState(prev => ({
+              ...prev,
+              lastSyncedAt: result.lastSyncedAt,
+              products: result.products || prev.products,
+              transactions: result.transactions || prev.transactions,
+              expenditures: result.expenditures || prev.expenditures
+            }));
+          }
+        }
         setIsSyncing(false);
       }
       await fetchEntitlements();
@@ -234,6 +260,47 @@ const App: React.FC = () => {
     }));
   };
 
+  const handleManualLogin = async (credentials: { email: string, pin: string }) => {
+    if (!navigator.onLine) {
+      addToast('Login requires internet connection.', 'error');
+      return;
+    }
+
+    try {
+      const response = await login(credentials.email, credentials.pin);
+      saveAuthToken(response.token);
+
+      // Attempt to restore data from server
+      let restoredData: Partial<InventoryState> = {};
+      try {
+        const remoteData = await fetchRemoteState();
+        if (remoteData) {
+          restoredData = {
+            products: remoteData.products || [],
+            transactions: remoteData.transactions || [],
+            expenditures: remoteData.expenditures || []
+          };
+        }
+      } catch (syncErr) {
+        console.warn('Failed to restore data during login', syncErr);
+        addToast('Logged in, but failed to load data. Please sync manually.', 'info');
+      }
+
+      setState(prev => ({
+        ...prev,
+        isRegistered: true,
+        isLoggedIn: true,
+        role: response.role,
+        business: { ...prev.business, ...response.business },
+        ...restoredData
+      }));
+
+    } catch (err: any) {
+      console.error('Manual login failed', err);
+      addToast(err.message || 'Login failed. Check your credentials.', 'error');
+    }
+  };
+
   const handleLogin = async (pin: string, selectedRole: UserRole) => {
     // Strictly enforce online login as requested
     if (!navigator.onLine) {
@@ -243,7 +310,8 @@ const App: React.FC = () => {
 
     try {
       if (state.business.email) {
-        const response = await login(state.business.email, pin);
+        // Pass selectedRole to login to prevent privilege escalation
+        const response = await login(state.business.email, pin, selectedRole);
         saveAuthToken(response.token);
         setState(prev => ({ ...prev, role: response.role, isLoggedIn: true, business: { ...prev.business, ...response.business } }));
         setActiveTab('sales');
@@ -283,20 +351,38 @@ const App: React.FC = () => {
   };
 
   // POS UX fix: No auto-open on mobile
-  const addToCart = (product: Product) => {
-    if (product.currentStock <= 0) return;
+  const addToCart = (product: Product, unit?: ProductUnit) => {
+    const multiplier = unit ? unit.multiplier : 1;
+    if (product.currentStock < multiplier) return;
+
     setCart(prev => {
-      const existing = prev.find(item => item.productId === product.id);
-      if (existing) {
-        if (existing.quantity >= product.currentStock) return prev;
-        return prev.map(item => item.productId === product.id 
-          ? { ...item, quantity: item.quantity + 1, total: (item.quantity + 1) * item.unitPrice - item.discount }
-          : item
-        );
+      const existingIndex = prev.findIndex(item =>
+        item.productId === product.id &&
+        ((!unit && !item.selectedUnit) || (unit && item.selectedUnit?.name === unit.name))
+      );
+
+      if (existingIndex >= 0) {
+        const item = prev[existingIndex];
+        // Simple stock check (not accounting for mixed units of same product)
+        if (product.currentStock < (item.quantity + 1) * multiplier) return prev;
+
+        const newCart = [...prev];
+        newCart[existingIndex] = {
+          ...item,
+          quantity: item.quantity + 1,
+          total: (item.quantity + 1) * item.unitPrice - item.discount
+        };
+        return newCart;
       }
+
       return [...prev, {
-        productId: product.id, productName: product.name, quantity: 1,
-        unitPrice: product.sellingPrice, discount: 0, total: product.sellingPrice
+        productId: product.id,
+        productName: unit ? `${product.name} (${unit.name})` : product.name,
+        quantity: 1,
+        unitPrice: unit ? unit.sellingPrice : product.sellingPrice,
+        discount: 0,
+        total: unit ? unit.sellingPrice : product.sellingPrice,
+        selectedUnit: unit
       }];
     });
     // Explicit manual toggle only on mobile now
@@ -305,8 +391,15 @@ const App: React.FC = () => {
   const handleCompleteSale = (transaction: Transaction) => {
     setState(prev => {
       const updatedProducts = prev.products.map(p => {
-        const itemInSale = transaction.items.find(i => i.productId === p.id);
-        return itemInSale ? { ...p, currentStock: Math.max(0, p.currentStock - itemInSale.quantity) } : p;
+        const itemsInSale = transaction.items.filter(i => i.productId === p.id);
+        if (itemsInSale.length === 0) return p;
+
+        const totalDeduction = itemsInSale.reduce((sum, item) => {
+            const multiplier = item.selectedUnit ? item.selectedUnit.multiplier : 1;
+            return sum + (item.quantity * multiplier);
+        }, 0);
+
+        return { ...p, currentStock: Math.max(0, p.currentStock - totalDeduction) };
       });
       return { ...prev, products: updatedProducts, transactions: [transaction, ...prev.transactions] };
     });
@@ -332,7 +425,7 @@ const App: React.FC = () => {
     return state.role === 'owner' ? ownerTabs : Array.from(new Set(['sales', 'history', ...state.business.staffPermissions])) as TabId[];
   }, [state.role, state.business.staffPermissions, entitlements, state.business.trialEndsAt, state.business.isSubscribed]);
 
-  if (!state.isRegistered) return <RegistrationScreen onRegister={handleRegister} onManualLogin={() => {}} onForgotPassword={() => setView('forgot-password')} />;
+  if (!state.isRegistered) return <RegistrationScreen onRegister={handleRegister} onManualLogin={handleManualLogin} onForgotPassword={() => setView('forgot-password')} />;
   if (!state.isLoggedIn) return <AuthScreen onLogin={handleLogin} onForgotPassword={() => setView('forgot-password')} onResetBusiness={() => setState(prev => ({...prev, isRegistered: false}))} business={state.business} />;
 
   return (

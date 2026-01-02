@@ -42,8 +42,16 @@ export const syncWithBackend = async (state: InventoryState) => {
       lastSyncedAt: state.lastSyncedAt || null
     };
     const res = await syncState(payload as any);
-    // server returns maybe { lastSyncedAt, products, transactions, expenditures }
-    if (res && res.lastSyncedAt) return res.lastSyncedAt;
+    // server returns { syncedAt, products, transactions, expenditures }
+    // We standardize on 'lastSyncedAt' for the frontend state key, but server sends 'syncedAt'
+    if (res && res.syncedAt) {
+      return {
+        lastSyncedAt: res.syncedAt,
+        products: res.products,
+        transactions: res.transactions,
+        expenditures: res.expenditures
+      };
+    }
     return null;
   } catch (err) {
     console.warn('syncWithBackend failed', err);
