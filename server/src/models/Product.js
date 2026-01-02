@@ -15,6 +15,7 @@ const ProductSchema = new mongoose.Schema({
   category: { type: String },
   baseUnit: { type: String, default: 'Piece' },
   stock: { type: Number, default: 0 },
+  sellingPrice: { type: Number, required: true, default: 0 },
   costPrice: { type: Number, default: 0 },
   units: { type: [UnitDefinitionSchema], default: [] },
   updatedAt: { type: Date, default: Date.now }

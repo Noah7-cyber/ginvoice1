@@ -61,6 +61,11 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const requestUrl = new URL(event.request.url);
 
+  // ADD THIS BLOCK: Ignore API calls so they are never cached
+  if (requestUrl.pathname.startsWith('/api/')) {
+    return;
+  }
+
   if (requestUrl.protocol === 'chrome-extension:') {
     return;
   }

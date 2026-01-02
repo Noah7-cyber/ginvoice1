@@ -11,23 +11,32 @@ const router = express.Router();
 router.get('/', auth, requireActiveSubscription, async (req, res) => {
   try {
     const businessId = new mongoose.Types.ObjectId(req.businessId);
+    const range = req.query.range || '7d'; // '7d', '30d', '1y'
 
-    // Date ranges
     const now = new Date();
+    let startDate = new Date();
+    let dateFormat = '%Y-%m-%d';
+
+    if (range === '30d') {
+        startDate.setDate(now.getDate() - 30);
+    } else if (range === '1y') {
+        startDate.setMonth(now.getMonth() - 11); // Last 12 months
+        startDate.setDate(1);
+        dateFormat = '%Y-%m'; // Group by month
+    } else {
+        startDate.setDate(now.getDate() - 6); // Default 7d
+    }
+    startDate.setHours(0,0,0,0);
+
     const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const previousMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
-
-    // Last 7 Days (inclusive of today)
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(now.getDate() - 6);
-    sevenDaysAgo.setHours(0, 0, 0, 0);
 
     const [
       summaryStats,
       currentMonthStats,
       previousMonthStats,
-      dailySales,
+      chartAgg,
       topProducts
     ] = await Promise.all([
       // 1. Overall Summary (Revenue, Debt, Counts)
@@ -44,10 +53,7 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
             },
             transferSales: {
               $sum: { $cond: [{ $eq: ['$paymentMethod', 'transfer'] }, 1, 0] }
-            },
-            // For total profit, we need to lookup products.
-            // This can be expensive on large datasets, but better than loading all into Node.
-            items: { $push: '$items' }
+            }
           }
         },
         { $project: { _id: 0 } }
@@ -65,12 +71,12 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
         { $group: { _id: null, revenue: { $sum: '$totalAmount' } } }
       ]),
 
-      // 4. Last 7 Days Chart Data
+      // 4. Dynamic Chart Aggregation
       Transaction.aggregate([
-        { $match: { businessId, transactionDate: { $gte: sevenDaysAgo } } },
+        { $match: { businessId, transactionDate: { $gte: startDate } } },
         {
           $group: {
-            _id: { $dateToString: { format: '%Y-%m-%d', date: '$transactionDate' } },
+            _id: { $dateToString: { format: dateFormat, date: '$transactionDate' } },
             amount: { $sum: '$totalAmount' }
           }
         },
@@ -93,34 +99,11 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
       ])
     ]);
 
-    const stats = summaryStats[0] || { totalRevenue: 0, totalDebt: 0, totalSales: 0, cashSales: 0, transferSales: 0, items: [] };
+    const stats = summaryStats[0] || { totalRevenue: 0, totalDebt: 0, totalSales: 0, cashSales: 0, transferSales: 0 };
     const curRev = currentMonthStats[0]?.revenue || 0;
     const prevRev = previousMonthStats[0]?.revenue || 0;
 
     // --- Profit Calculation ---
-    // Optimization: Instead of joining in aggregation (which can hit limits),
-    // we fetch Product Cost Prices once and compute profit based on the 'items'
-    // we already aggregated (if feasible) or run a second tailored aggregation for profit.
-    // However, for strict OOM prevention, we shouldn't carry 'items' in the summaryStats result.
-    // Let's remove 'items' from the summaryStats projection above and do a dedicated "Profit" aggregation
-    // that joins with products. But $lookup on a large Transaction collection is slow.
-    // Alternative: We can't avoid some computation.
-    // The previous implementation loaded EVERYTHING.
-    // Let's calculate profit for *Current Month* and *Total* by streaming or batching if needed,
-    // but for now, let's assume the user wants the Aggregation fix to prevent loading *all documents*.
-
-    // We will calculate profit by fetching Product Costs and running a specialized aggregation
-    // that unwinds items and groups by productId to sum up "Quantity Sold".
-    // Then (Total Revenue - (Sum(Qty * Cost))) = Profit.
-    // This assumes Unit Price was fixed? No, unit price varies.
-    // Correct Profit = Sum( (Item.UnitPrice - Product.CostPrice) * Item.Quantity )
-    // Since Product.CostPrice is in the Product collection, we MUST join or map.
-
-    // Improved Profit Strategy:
-    // 1. Get all products and their costs (small dataset usually).
-    // 2. Aggregate all transactions -> unwind items -> group by productId -> sum (quantity * unitPrice) AND sum (quantity).
-    // 3. Calculate profit in JS: TotalSales(per product) - (TotalQty(per product) * Cost).
-
     const [productSalesAgg] = await Promise.all([
       Transaction.aggregate([
         { $match: { businessId } },
@@ -188,18 +171,29 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
     const previousMonthProfit = calculateProfit(productSalesPrevMonth);
 
     // Format Chart Data
-    // Ensure all 7 days exist
+    // We'll fill gaps based on range
     const chartDataFormatted = [];
-    const last7DaysMap = new Map();
-    dailySales.forEach(d => last7DaysMap.set(d._id, d.amount));
+    const chartMap = new Map();
+    chartAgg.forEach(d => chartMap.set(d._id, d.amount));
 
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(now.getDate() - i);
-      const dateStr = d.toISOString().split('T')[0];
-      const displayDate = d.toLocaleDateString('en-NG', { weekday: 'short' });
-      const amount = last7DaysMap.get(dateStr) || 0;
-      chartDataFormatted.push({ date: displayDate, amount: toNumber(amount) });
+    if (range === '1y') {
+       for (let i = 11; i >= 0; i--) {
+           const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+           const dateKey = d.toISOString().slice(0, 7); // YYYY-MM
+           const displayDate = d.toLocaleDateString('en-NG', { month: 'short', year: '2-digit' });
+           const amount = chartMap.get(dateKey) || 0;
+           chartDataFormatted.push({ date: displayDate, amount: toNumber(amount) });
+       }
+    } else {
+        const days = range === '30d' ? 29 : 6;
+        for (let i = days; i >= 0; i--) {
+          const d = new Date();
+          d.setDate(now.getDate() - i);
+          const dateStr = d.toISOString().split('T')[0];
+          const displayDate = d.toLocaleDateString('en-NG', { weekday: 'short', day: 'numeric' });
+          const amount = chartMap.get(dateStr) || 0;
+          chartDataFormatted.push({ date: displayDate, amount: toNumber(amount) });
+        }
     }
 
     const formatTrendText = (current, previous) => {

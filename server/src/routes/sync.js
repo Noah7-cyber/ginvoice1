@@ -36,10 +36,18 @@ router.get('/check', auth, async (req, res) => {
 router.get('/', auth, async (req, res) => {
   try {
     const businessId = req.businessId;
-    // We don't use .lean() here so that the global decimal128ToNumberPlugin applies during JSON serialization
-    const products = await Product.find({ businessId });
+
+    // 1. Fetch raw data
+    const rawProducts = await Product.find({ businessId }).lean();
     const transactions = await Transaction.find({ businessId });
     const expenditures = await Expenditure.find({ businessId });
+
+    // 2. Map backend 'stock' to frontend 'currentStock'
+    const products = rawProducts.map(p => ({
+      ...p,
+      currentStock: p.stock, // Fix mismatch
+      sellingPrice: parseFloat(p.sellingPrice || 0) // Ensure number
+    }));
 
     return res.json({
       products,
@@ -53,22 +61,14 @@ router.get('/', auth, async (req, res) => {
 
 router.post('/', auth, async (req, res) => {
   try {
-    const { products = [], transactions = [], business } = req.body || {};
+    const { products = [], transactions = [], expenditures = [], business } = req.body || {};
     const businessId = req.businessId;
 
     if (business && typeof business === 'object') {
-      await Business.findByIdAndUpdate(businessId, {
-        $set: {
-          name: business.name,
-          phone: business.phone,
-          address: business.address,
-          logo: business.logo,
-          theme: business.theme,
-          lastActiveAt: new Date()
-        }
-      });
+       await Business.findByIdAndUpdate(businessId, { $set: { ...business, lastActiveAt: new Date() } });
     }
 
+    // FIX: Add 'sellingPrice' to update and map 'currentStock' -> 'stock'
     if (Array.isArray(products) && products.length > 0) {
       const productOps = products.map((p) => ({
         updateOne: {
@@ -80,12 +80,14 @@ router.post('/', auth, async (req, res) => {
               name: p.name,
               category: p.category,
               baseUnit: p.baseUnit || 'Piece',
-              stock: p.currentStock !== undefined ? p.currentStock : p.stock,
+              stock: p.currentStock !== undefined ? p.currentStock : p.stock, // Save to DB 'stock'
+              sellingPrice: toDecimal(p.sellingPrice), // <--- CRITICAL FIX: Save Selling Price
               costPrice: toDecimal(p.costPrice),
               units: Array.isArray(p.units) ? p.units.map(u => ({
                 name: u.name,
                 multiplier: u.multiplier,
-                sellingPrice: toDecimal(u.sellingPrice)
+                sellingPrice: toDecimal(u.sellingPrice),
+                costPrice: toDecimal(u.costPrice)
               })) : [],
               updatedAt: new Date()
             }
@@ -97,7 +99,7 @@ router.post('/', auth, async (req, res) => {
     }
 
     if (Array.isArray(transactions) && transactions.length > 0) {
-      const txOps = transactions.map((t) => ({
+       const txOps = transactions.map((t) => ({
         updateOne: {
           filter: { businessId, id: t.id },
           update: {
@@ -133,9 +135,31 @@ router.post('/', auth, async (req, res) => {
       await Transaction.bulkWrite(txOps, { ordered: false });
     }
 
-    // Fetch the latest state to return to the client (Two-way sync)
-    // We don't use .lean() here so that the global decimal128ToNumberPlugin applies during JSON serialization
-    const fetchedProducts = await Product.find({ businessId });
+    // ... (Keep Expenditure Logic as is, ensuring it is present) ...
+    if (Array.isArray(expenditures) && expenditures.length > 0) {
+      const expOps = expenditures.map((e) => ({
+        updateOne: {
+          filter: { businessId, id: e.id },
+          update: {
+            $set: {
+              businessId,
+              id: e.id,
+              date: e.date ? new Date(e.date) : new Date(),
+              amount: toDecimal(e.amount),
+              category: e.category,
+              note: e.note,
+              createdBy: e.createdBy
+            }
+          },
+          upsert: true
+        }
+      }));
+      await Expenditure.bulkWrite(expOps, { ordered: false });
+    }
+
+    // Return mapped data
+    const fetchedProductsRaw = await Product.find({ businessId }).lean();
+    const fetchedProducts = fetchedProductsRaw.map(p => ({ ...p, currentStock: p.stock })); // Map back
     const fetchedTransactions = await Transaction.find({ businessId });
     const fetchedExpenditures = await Expenditure.find({ businessId });
 
@@ -146,6 +170,7 @@ router.post('/', auth, async (req, res) => {
       expenditures: fetchedExpenditures
     });
   } catch (err) {
+    console.error(err);
     return res.status(500).json({ message: 'Sync failed' });
   }
 });

@@ -102,6 +102,26 @@ export const fetchRemoteState = async () => {
   });
 };
 
+const api = {
+  get: async (url: string) => {
+    const token = loadAuthToken();
+    return request(`/api${url}`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+  },
+  post: async (url: string, body: any) => {
+    const token = loadAuthToken();
+    return request(`/api${url}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body)
+    });
+  }
+};
+
+export default api;
+
 export const checkSyncAccess = async () => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');
@@ -127,11 +147,12 @@ export const changeBusinessPins = async (currentOwnerPin: string, newStaffPin?: 
   });
 };
 
-export const getAnalytics = async () => {
+export const getAnalytics = async (range?: '7d' | '30d' | '1y') => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');
 
-  return request('/api/analytics', {
+  const query = range ? `?range=${range}` : '';
+  return request(`/api/analytics${query}`, {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${token}`

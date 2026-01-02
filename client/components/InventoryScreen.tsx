@@ -327,8 +327,8 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
       {/* Bulk Edit Panel */}
       {isBulkEditOpen && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
-          <div className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-10 max-h-[85vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 max-h-[85vh] overflow-y-auto">
             <div className="p-6 border-b flex justify-between items-center bg-indigo-600 text-white shrink-0 sticky top-0 bg-indigo-600 z-10">
               <h2 className="text-xl font-bold flex items-center gap-2"><Layers size={24} /> Bulk Edit Items</h2>
               <button onClick={() => setIsBulkEditOpen(false)}><X size={24} /></button>
@@ -449,31 +449,46 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                 {newProduct.units?.length === 0 && <p className="text-xs text-gray-400 italic">No extra units added.</p>}
                 <div className="space-y-2">
                   {newProduct.units?.map((u, idx) => (
-                    <div key={idx} className="flex gap-2 items-center">
-                      <input
-                        placeholder="Name (e.g. Box)"
-                        className="flex-1 px-3 py-2 text-sm rounded-lg border"
-                        value={u.name}
-                        onChange={e => handleUpdateUnit(idx, 'name', e.target.value)}
-                      />
-                      <input
-                        type="number"
-                        placeholder="Qty"
-                        title="Items in this unit"
-                        className="w-16 px-3 py-2 text-sm rounded-lg border text-center"
-                        value={u.multiplier}
-                        onChange={e => handleUpdateUnit(idx, 'multiplier', Number(e.target.value))}
-                      />
-                      <input
-                        type="number"
-                        placeholder="Price"
-                        className="w-24 px-3 py-2 text-sm rounded-lg border text-right"
-                        value={u.sellingPrice}
-                        onChange={e => handleUpdateUnit(idx, 'sellingPrice', Number(e.target.value))}
-                      />
-                      <button type="button" onClick={() => handleRemoveUnit(idx)} className="text-red-400 hover:text-red-600">
-                        <Trash2 size={16} />
-                      </button>
+                    <div key={idx} className="flex flex-col gap-2 border-b pb-2 mb-2">
+                      <div className="flex gap-2 items-center">
+                        <input
+                          placeholder="Name (e.g. Carton)"
+                          className="flex-1 px-3 py-2 text-sm rounded-lg border"
+                          value={u.name}
+                          onChange={e => handleUpdateUnit(idx, 'name', e.target.value)}
+                        />
+                        <input
+                          type="number"
+                          placeholder="Qty"
+                          className="w-16 px-3 py-2 text-sm rounded-lg border text-center"
+                          value={u.multiplier}
+                          onChange={e => handleUpdateUnit(idx, 'multiplier', Number(e.target.value))}
+                        />
+                        <button type="button" onClick={() => handleRemoveUnit(idx)} className="text-red-400 hover:text-red-600">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                      <div className="flex gap-2">
+                        {/* NEW INPUT: Cost Price */}
+                        <div className="flex-1">
+                            <label className="text-[10px] uppercase font-bold text-gray-400">Cost Price</label>
+                            <input
+                              type="number"
+                              className="w-full px-3 py-2 text-sm rounded-lg border"
+                              value={u.costPrice || 0}
+                              onChange={e => handleUpdateUnit(idx, 'costPrice', Number(e.target.value))}
+                            />
+                        </div>
+                        <div className="flex-1">
+                            <label className="text-[10px] uppercase font-bold text-gray-400">Selling Price</label>
+                            <input
+                              type="number"
+                              className="w-full px-3 py-2 text-sm rounded-lg border"
+                              value={u.sellingPrice}
+                              onChange={e => handleUpdateUnit(idx, 'sellingPrice', Number(e.target.value))}
+                            />
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
