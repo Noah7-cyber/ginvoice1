@@ -102,6 +102,26 @@ export const fetchRemoteState = async () => {
   });
 };
 
+const api = {
+  get: async (url: string) => {
+    const token = loadAuthToken();
+    return request(`/api${url}`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+  },
+  post: async (url: string, body: any) => {
+    const token = loadAuthToken();
+    return request(`/api${url}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body)
+    });
+  }
+};
+
+export default api;
+
 export const checkSyncAccess = async () => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');
