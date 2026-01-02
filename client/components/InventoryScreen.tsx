@@ -106,7 +106,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
   const handleAddUnit = () => {
     const currentUnits = newProduct.units || [];
-    setNewProduct({ ...newProduct, units: [...currentUnits, { name: '', multiplier: 12, sellingPrice: 0, costPrice: 0 }] });
+    setNewProduct({ ...newProduct, units: [...currentUnits, { name: '', multiplier: 12, sellingPrice: 0 }] });
   };
 
   const handleRemoveUnit = (index: number) => {
@@ -238,7 +238,9 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                       <span className="font-bold text-gray-800">{product.currentStock} {product.baseUnit}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 font-black text-gray-900">{formatCurrency(product.sellingPrice)}</td>
+                 <td className="px-6 py-4 font-black text-gray-900">
+  {CURRENCY}{(product.sellingPrice || 0).toLocaleString()}
+</td>
                   <td className="px-6 py-4">
                     <div className="flex gap-2">
                       <button
@@ -458,21 +460,14 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                         type="number"
                         placeholder="Qty"
                         title="Items in this unit"
-                        className="w-14 px-1 py-2 text-sm rounded-lg border text-center"
+                        className="w-16 px-3 py-2 text-sm rounded-lg border text-center"
                         value={u.multiplier}
                         onChange={e => handleUpdateUnit(idx, 'multiplier', Number(e.target.value))}
                       />
                       <input
                         type="number"
-                        placeholder="Cost"
-                        className="w-20 px-2 py-2 text-sm rounded-lg border text-right"
-                        value={u.costPrice}
-                        onChange={e => handleUpdateUnit(idx, 'costPrice', Number(e.target.value))}
-                      />
-                      <input
-                        type="number"
                         placeholder="Price"
-                        className="w-20 px-2 py-2 text-sm rounded-lg border text-right"
+                        className="w-24 px-3 py-2 text-sm rounded-lg border text-right"
                         value={u.sellingPrice}
                         onChange={e => handleUpdateUnit(idx, 'sellingPrice', Number(e.target.value))}
                       />
@@ -484,7 +479,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Cost Price ({CURRENCY})</label>
                   <input required type="number" className="w-full px-4 py-3 rounded-xl border" value={newProduct.costPrice} onChange={e => setNewProduct({...newProduct, costPrice: Number(e.target.value)})} />
