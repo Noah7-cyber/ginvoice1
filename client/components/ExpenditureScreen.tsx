@@ -39,7 +39,7 @@ const ExpenditureScreen: React.FC = () => {
       setExpenditures(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       console.error('Error fetching expenditures:', error);
-      addToast('Failed to fetch expenditures', 'error');
+      showToast('Failed to fetch expenditures', 'error');
     } finally {
       setLoading(false);
     }
@@ -56,21 +56,35 @@ const ExpenditureScreen: React.FC = () => {
         ...formData,
         amount: parseFloat(formData.amount)
       };
+
       const res = await api.post('/expenditures', payload);
-      setExpenditures([res.data, ...expenditures]);
-      setShowAddModal(false);
-      setFormData({
-        title: '',
-        amount: '',
-        category: '',
-        date: new Date().toISOString().split('T')[0],
-        description: '',
-        paymentMethod: 'Cash'
-      });
-      addToast('Expenditure saved successfully', 'success');
+
+      // FIX: logic to find the new item object regardless of response structure
+      // If 'res' has an _id, it is the item. Otherwise look in 'res.data'.
+      const newItem = (res && res._id) ? res : (res.data || null);
+
+      if (newItem && newItem._id) {
+          // Only add if we have a valid item
+          setExpenditures(prev => [newItem, ...prev]);
+          setShowAddModal(false);
+          setFormData({
+            title: '',
+            amount: '',
+            category: '',
+            date: new Date().toISOString().split('T')[0],
+            description: '',
+            paymentMethod: 'Cash'
+          });
+          showToast('Expenditure saved successfully', 'success');
+      } else {
+          // Fallback: reload list if we can't parse the new item
+          await fetchExpenditures();
+          setShowAddModal(false);
+          showToast('Expenditure saved successfully', 'success');
+      }
     } catch (error) {
       console.error('Error saving expenditure:', error);
-      addToast('Failed to save expenditure', 'error');
+      showToast('Failed to save expenditure', 'error');
     }
   };
 
@@ -105,22 +119,27 @@ const ExpenditureScreen: React.FC = () => {
               ) : (!expenditures || expenditures.length === 0) ? (
                  <tr><td colSpan={5} className="px-6 py-4 text-center text-gray-500">No expenditures recorded.</td></tr>
               ) : (
-                expenditures.map((exp) => (
-                  <tr key={exp._id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                        {/* FIX: Check if date exists before formatting, otherwise show placeholder */}
-                        {exp.date ? new Date(exp.date).toLocaleDateString() : 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{exp.title}</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      <span className="px-2 py-1 rounded-full bg-gray-100 text-xs text-gray-600">{exp.category}</span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{exp.paymentMethod}</td>
-                    <td className="px-6 py-4 text-sm font-bold text-red-600 text-right">
-                      -{new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(exp.amount)}
-                    </td>
-                  </tr>
-                ))
+                expenditures.map((exp) => {
+                  // FIX: If exp is null/undefined, skip it to prevent crash
+                  if (!exp) return null;
+
+                  return (
+                    <tr key={exp._id || Math.random()} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                         {/* FIX: Ensure date exists before formatting */}
+                         {exp.date ? new Date(exp.date).toLocaleDateString() : 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 text-sm font-medium text-gray-900">{exp.title}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        <span className="px-2 py-1 rounded-full bg-gray-100 text-xs text-gray-600">{exp.category}</span>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600">{exp.paymentMethod}</td>
+                      <td className="px-6 py-4 text-sm font-bold text-red-600 text-right">
+                        -{new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(exp.amount || 0)}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
