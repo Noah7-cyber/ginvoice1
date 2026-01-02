@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Plus, Search, Edit3, Trash2, CheckCircle2, X, ListTodo, Layers, Tag, DollarSign, ArrowUp } from 'lucide-react';
 import { Product } from '../types';
 import { CURRENCY, CATEGORIES } from '../constants';
+import { formatCurrency } from '../utils/currency';
 import { deleteProduct } from '../services/api';
 import { useToast } from './ToastProvider';
 
@@ -33,7 +34,8 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     costPrice: 0,
     sellingPrice: 0,
     currentStock: 0,
-    unit: 'Unit'
+    baseUnit: 'Piece',
+    units: []
   });
 
   const filteredProducts = products.filter(p => {
@@ -98,8 +100,24 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
       onUpdateProducts([...products, product]);
     }
     setIsModalOpen(false);
-    setNewProduct({ name: '', category: CATEGORIES[0], costPrice: 0, sellingPrice: 0, currentStock: 0, unit: 'Unit' });
+    setNewProduct({ name: '', category: CATEGORIES[0], costPrice: 0, sellingPrice: 0, currentStock: 0, baseUnit: 'Piece', units: [] });
     setEditingProductId(null);
+  };
+
+  const handleAddUnit = () => {
+    const currentUnits = newProduct.units || [];
+    setNewProduct({ ...newProduct, units: [...currentUnits, { name: '', multiplier: 12, sellingPrice: 0 }] });
+  };
+
+  const handleRemoveUnit = (index: number) => {
+    const currentUnits = newProduct.units || [];
+    setNewProduct({ ...newProduct, units: currentUnits.filter((_, i) => i !== index) });
+  };
+
+  const handleUpdateUnit = (index: number, field: keyof typeof newProduct.units[0], value: any) => {
+    const currentUnits = [...(newProduct.units || [])];
+    currentUnits[index] = { ...currentUnits[index], [field]: value };
+    setNewProduct({ ...newProduct, units: currentUnits });
   };
 
   const handleDeleteProduct = async (id: string) => {
@@ -210,10 +228,10 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
                       <span className={`w-2 h-2 rounded-full ${product.currentStock < 10 ? 'bg-red-500 animate-pulse' : 'bg-green-500'}`}></span>
-                      <span className="font-bold text-gray-800">{product.currentStock} {product.unit}</span>
+                      <span className="font-bold text-gray-800">{product.currentStock} {product.baseUnit}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 font-black text-gray-900">{CURRENCY}{product.sellingPrice.toLocaleString()}</td>
+                  <td className="px-6 py-4 font-black text-gray-900">{formatCurrency(product.sellingPrice)}</td>
                   <td className="px-6 py-4">
                     <div className="flex gap-2">
                       <button
@@ -344,11 +362,53 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Unit Type</label>
-                  <input type="text" className="w-full px-4 py-3 rounded-xl border" value={newProduct.unit} onChange={e => setNewProduct({...newProduct, unit: e.target.value})} placeholder="e.g. Bag, Pack" />
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Base Unit</label>
+                  <input type="text" className="w-full px-4 py-3 rounded-xl border" value={newProduct.baseUnit} onChange={e => setNewProduct({...newProduct, baseUnit: e.target.value})} placeholder="e.g. Bottle" />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+
+              {/* Alternative Units Section */}
+              <div className="bg-gray-50 p-4 rounded-xl space-y-3">
+                <div className="flex justify-between items-center">
+                  <label className="text-xs font-bold text-gray-500 uppercase">Alternative Units (e.g. Carton)</label>
+                  <button type="button" onClick={handleAddUnit} className="text-primary text-xs font-bold flex items-center gap-1 hover:underline">
+                    <Plus size={14} /> Add Unit
+                  </button>
+                </div>
+                {newProduct.units?.length === 0 && <p className="text-xs text-gray-400 italic">No extra units added.</p>}
+                <div className="space-y-2">
+                  {newProduct.units?.map((u, idx) => (
+                    <div key={idx} className="flex gap-2 items-center">
+                      <input
+                        placeholder="Name (e.g. Box)"
+                        className="flex-1 px-3 py-2 text-sm rounded-lg border"
+                        value={u.name}
+                        onChange={e => handleUpdateUnit(idx, 'name', e.target.value)}
+                      />
+                      <input
+                        type="number"
+                        placeholder="Qty"
+                        title="Items in this unit"
+                        className="w-16 px-3 py-2 text-sm rounded-lg border text-center"
+                        value={u.multiplier}
+                        onChange={e => handleUpdateUnit(idx, 'multiplier', Number(e.target.value))}
+                      />
+                      <input
+                        type="number"
+                        placeholder="Price"
+                        className="w-24 px-3 py-2 text-sm rounded-lg border text-right"
+                        value={u.sellingPrice}
+                        onChange={e => handleUpdateUnit(idx, 'sellingPrice', Number(e.target.value))}
+                      />
+                      <button type="button" onClick={() => handleRemoveUnit(idx)} className="text-red-400 hover:text-red-600">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Cost Price ({CURRENCY})</label>
                   <input required type="number" className="w-full px-4 py-3 rounded-xl border" value={newProduct.costPrice} onChange={e => setNewProduct({...newProduct, costPrice: Number(e.target.value)})} />
@@ -356,6 +416,10 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Selling Price ({CURRENCY})</label>
                   <input required type="number" className="w-full px-4 py-3 rounded-xl border" value={newProduct.sellingPrice} onChange={e => setNewProduct({...newProduct, sellingPrice: Number(e.target.value)})} />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Stock Quantity</label>
+                  <input required type="number" className="w-full px-4 py-3 rounded-xl border" value={newProduct.currentStock} onChange={e => setNewProduct({...newProduct, currentStock: Number(e.target.value)})} />
                 </div>
               </div>
               <div className="pt-4 flex gap-3">

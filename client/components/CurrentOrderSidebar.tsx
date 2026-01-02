@@ -3,6 +3,7 @@ import React, { useMemo, useState } from 'react';
 import { ShoppingBag, Minus, Plus, Trash2, Tag, User, Banknote, CreditCard, ReceiptText, X, AlertCircle } from 'lucide-react';
 import { SaleItem, PaymentMethod, Transaction, Product } from '../types';
 import { CURRENCY } from '../constants';
+import { formatCurrency } from '../utils/currency';
 import SignaturePad from './SignaturePad';
 
 interface CurrentOrderSidebarProps {
@@ -157,7 +158,7 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
                 <div className="flex justify-between items-start mb-2">
                   <div className="min-w-0 flex-1">
                     <p className="font-bold text-gray-900 text-sm truncate">{item.productName}</p>
-                    <p className="text-[10px] text-gray-400">{CURRENCY}{item.unitPrice.toLocaleString()} / unit</p>
+                    <p className="text-[10px] text-gray-400">{formatCurrency(item.unitPrice)} / unit</p>
                   </div>
                   <button onClick={() => removeFromCart(item.productId)} className="text-gray-300 hover:text-red-500">
                     <Trash2 size={16} />
@@ -171,12 +172,12 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
                     <button onClick={() => updateQuantity(item.productId, 1)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-50 border text-gray-600 hover:text-primary"><Plus size={14} /></button>
                   </div>
                   <div className="text-right">
-                    <p className="font-black text-gray-900">{CURRENCY}{item.total.toLocaleString()}</p>
+                    <p className="font-black text-gray-900">{formatCurrency(item.total)}</p>
                     <button 
                       onClick={() => setActiveDiscountEdit(activeDiscountEdit === item.productId ? null : item.productId)}
                       className={`text-[9px] font-black uppercase tracking-tighter px-1.5 py-0.5 rounded ${item.discount > 0 ? 'bg-red-100 text-red-600' : 'text-gray-400 hover:text-primary'}`}
                     >
-                      {item.discount > 0 ? `Saved ${CURRENCY}${item.discount}` : 'Add Discount'}
+                      {item.discount > 0 ? `Saved ${formatCurrency(item.discount)}` : 'Add Discount'}
                     </button>
                   </div>
                 </div>
@@ -245,7 +246,7 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
                 <div className="space-y-1">
                   <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Balance</span>
                   <div className={`w-full px-3 py-2 rounded-xl text-sm font-black flex items-center justify-end ${balance > 0 ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                    {CURRENCY}{balance.toLocaleString()}
+                    {formatCurrency(balance)}
                   </div>
                 </div>
               </div>
@@ -266,11 +267,11 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
         <div className="flex justify-between items-center px-2">
           <div className="flex flex-col">
             <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">Subtotal</span>
-            <span className="text-xs font-bold text-gray-500 line-through decoration-red-400">{CURRENCY}{cartSubtotal.toLocaleString()}</span>
+            <span className="text-xs font-bold text-gray-500 line-through decoration-red-400">{formatCurrency(cartSubtotal)}</span>
           </div>
           <div className="flex flex-col items-end">
             <span className="text-[10px] font-black text-primary uppercase tracking-widest leading-none">Net Total</span>
-            <span className="text-2xl font-black text-gray-900">{CURRENCY}{cartTotal.toLocaleString()}</span>
+            <span className="text-2xl font-black text-gray-900">{formatCurrency(cartTotal)}</span>
           </div>
         </div>
 

@@ -256,7 +256,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
         </div>
 
         {/* Action Button */}
-        <div className="flex items-center justify-between bg-white p-6 rounded-3xl shadow-lg border-t-4 border-primary sticky bottom-4 z-[50]">
+        <div className="flex items-center justify-between bg-white p-6 rounded-3xl shadow-lg border-t-4 border-primary mt-8">
           <div>{showSaved && <p className="text-green-600 font-bold animate-bounce">✓ Changes saved!</p>}</div>
           <div className="flex items-center gap-4">
              {onLogout && (
