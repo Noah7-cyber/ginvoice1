@@ -14,6 +14,9 @@ const toDecimal = (value) => {
   return mongoose.Types.Decimal128.fromString(String(value));
 };
 
+// Helper to safely convert Decimal128 to Number
+const parseDecimal = (val) => parseFloat((val || 0).toString());
+
 router.get('/check', auth, async (req, res) => {
   try {
     const business = await Business.findById(req.businessId).lean();
@@ -38,21 +41,45 @@ router.get('/', auth, async (req, res) => {
     const businessId = req.businessId;
 
     // 1. Fetch raw data
+    // FIX: Expenditures must query by 'business' (ObjectId), not 'businessId' (String)
     const rawProducts = await Product.find({ businessId }).lean();
-    const transactions = await Transaction.find({ businessId });
-    const expenditures = await Expenditure.find({ businessId });
+    const rawTransactions = await Transaction.find({ businessId }).lean();
+    const rawExpenditures = await Expenditure.find({ business: businessId }).lean();
 
-    // 2. Map backend 'stock' to frontend 'currentStock'
+    // 2. Map backend data to frontend-friendly formats (Numbers instead of Decimals)
+
     const products = rawProducts.map(p => ({
       ...p,
-      currentStock: p.stock, // Fix mismatch
-      sellingPrice: parseFloat((p.sellingPrice || 0).toString()), // Ensure number
-      costPrice: parseFloat((p.costPrice || 0).toString()),
+      currentStock: p.stock,
+      sellingPrice: parseDecimal(p.sellingPrice),
+      costPrice: parseDecimal(p.costPrice),
       units: (p.units || []).map(u => ({
         ...u,
-        sellingPrice: parseFloat((u.sellingPrice || 0).toString()),
-        costPrice: parseFloat((u.costPrice || 0).toString())
+        sellingPrice: parseDecimal(u.sellingPrice),
+        costPrice: parseDecimal(u.costPrice)
       }))
+    }));
+
+    // FIX FOR INVOICE PREVIEW: Convert Transaction Decimals to Numbers
+    const transactions = rawTransactions.map(t => ({
+      ...t,
+      items: (t.items || []).map(i => ({
+        ...i,
+        unitPrice: parseDecimal(i.unitPrice),
+        discount: parseDecimal(i.discount),
+        total: parseDecimal(i.total)
+      })),
+      subtotal: parseDecimal(t.subtotal),
+      globalDiscount: parseDecimal(t.globalDiscount),
+      totalAmount: parseDecimal(t.totalAmount),
+      amountPaid: parseDecimal(t.amountPaid),
+      balance: parseDecimal(t.balance)
+    }));
+
+    // FIX FOR EXPENDITURES: Convert Decimals to Numbers
+    const expenditures = rawExpenditures.map(e => ({
+      ...e,
+      amount: parseDecimal(e.amount)
     }));
 
     return res.json({
@@ -61,6 +88,7 @@ router.get('/', auth, async (req, res) => {
       expenditures
     });
   } catch (err) {
+    console.error('Fetch State Error:', err);
     return res.status(500).json({ message: 'Fetch state failed' });
   }
 });
@@ -70,12 +98,11 @@ router.post('/', auth, async (req, res) => {
     const { products = [], transactions = [], expenditures = [], business } = req.body || {};
     const businessId = req.businessId;
 
-    // 1. Update Business Activity
     if (business && typeof business === 'object') {
        await Business.findByIdAndUpdate(businessId, { $set: { ...business, lastActiveAt: new Date() } });
     }
 
-    // 2. Process Products
+    // 1. Save Products
     if (Array.isArray(products) && products.length > 0) {
       const productOps = products.map((p) => ({
         updateOne: {
@@ -105,7 +132,7 @@ router.post('/', auth, async (req, res) => {
       await Product.bulkWrite(productOps, { ordered: false });
     }
 
-    // 3. Process Transactions
+    // 2. Save Transactions
     if (Array.isArray(transactions) && transactions.length > 0) {
        const txOps = transactions.map((t) => ({
         updateOne: {
@@ -143,15 +170,15 @@ router.post('/', auth, async (req, res) => {
       await Transaction.bulkWrite(txOps, { ordered: false });
     }
 
-    // 4. Process Expenditures (FIXED DATA INTEGRITY)
+    // 3. Save Expenditures (CRITICAL FIX APPLIED)
     if (Array.isArray(expenditures) && expenditures.length > 0) {
       const expOps = expenditures.map((e) => ({
         updateOne: {
-          // CRITICAL FIX: Filter by 'business' (ObjectId) to match Model & ensure save
+          // FIX: Filter must use 'business', NOT 'businessId'
           filter: { business: businessId, id: e.id },
           update: {
             $set: {
-              business: businessId,
+              business: businessId, // Matches Model (ObjectId)
               id: e.id,
               date: e.date ? new Date(e.date) : new Date(),
               amount: toDecimal(e.amount),
@@ -160,8 +187,7 @@ router.post('/', auth, async (req, res) => {
               description: e.description,
               paymentMethod: e.paymentMethod,
               note: e.note,
-              createdBy: e.createdBy,
-              updatedAt: new Date()
+              createdBy: e.createdBy
             }
           },
           upsert: true
@@ -170,32 +196,42 @@ router.post('/', auth, async (req, res) => {
       await Expenditure.bulkWrite(expOps, { ordered: false });
     }
 
-    // 5. Return Mapped Data (FIXED DECIMAL & QUERY BUGS)
+    // 4. Return Data (Re-using the GET logic for consistency)
+    // We call the same finding logic we used in GET / to ensure formatting is consistent
+    const rawProducts = await Product.find({ businessId }).lean();
+    const rawTransactions = await Transaction.find({ businessId }).lean();
+    const rawExpenditures = await Expenditure.find({ business: businessId }).lean(); // FIX: Query by 'business'
 
-    // Fetch Products
-    const fetchedProductsRaw = await Product.find({ businessId }).lean();
-    const fetchedProducts = fetchedProductsRaw.map(p => ({
+    const fetchedProducts = rawProducts.map(p => ({
       ...p,
       currentStock: p.stock,
-      // CRITICAL FIX: Convert Decimal128 to Number for client-side safety
-      sellingPrice: parseFloat((p.sellingPrice || 0).toString()),
-      costPrice: parseFloat((p.costPrice || 0).toString()),
+      sellingPrice: parseDecimal(p.sellingPrice),
+      costPrice: parseDecimal(p.costPrice),
       units: (p.units || []).map(u => ({
         ...u,
-        sellingPrice: parseFloat((u.sellingPrice || 0).toString()),
-        costPrice: parseFloat((u.costPrice || 0).toString())
+        sellingPrice: parseDecimal(u.sellingPrice),
+        costPrice: parseDecimal(u.costPrice)
       }))
     }));
 
-    // Fetch Transactions
-    const fetchedTransactions = await Transaction.find({ businessId });
+    const fetchedTransactions = rawTransactions.map(t => ({
+      ...t,
+      items: (t.items || []).map(i => ({
+        ...i,
+        unitPrice: parseDecimal(i.unitPrice),
+        discount: parseDecimal(i.discount),
+        total: parseDecimal(i.total)
+      })),
+      subtotal: parseDecimal(t.subtotal),
+      globalDiscount: parseDecimal(t.globalDiscount),
+      totalAmount: parseDecimal(t.totalAmount),
+      amountPaid: parseDecimal(t.amountPaid),
+      balance: parseDecimal(t.balance)
+    }));
 
-    // Fetch Expenditures
-    // CRITICAL FIX: Query by 'business' (ObjectId) to retrieve the actual saved records
-    const fetchedExpendituresRaw = await Expenditure.find({ business: businessId }).lean();
-    const fetchedExpenditures = fetchedExpendituresRaw.map(e => ({
-        ...e,
-        amount: parseFloat((e.amount || 0).toString())
+    const fetchedExpenditures = rawExpenditures.map(e => ({
+      ...e,
+      amount: parseDecimal(e.amount)
     }));
 
     return res.json({
@@ -205,11 +241,12 @@ router.post('/', auth, async (req, res) => {
       expenditures: fetchedExpenditures
     });
   } catch (err) {
-    console.error('Sync Error:', err);
+    console.error(err);
     return res.status(500).json({ message: 'Sync failed' });
   }
 });
 
+// ... Delete routes remain the same ...
 router.delete('/products/:id', auth, async (req, res) => {
   try {
     const businessId = req.businessId;
