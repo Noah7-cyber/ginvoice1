@@ -70,11 +70,12 @@ router.post('/', auth, async (req, res) => {
     const { products = [], transactions = [], expenditures = [], business } = req.body || {};
     const businessId = req.businessId;
 
+    // 1. Update Business Activity
     if (business && typeof business === 'object') {
        await Business.findByIdAndUpdate(businessId, { $set: { ...business, lastActiveAt: new Date() } });
     }
 
-    // FIX: Add 'sellingPrice' to update and map 'currentStock' -> 'stock'
+    // 2. Process Products
     if (Array.isArray(products) && products.length > 0) {
       const productOps = products.map((p) => ({
         updateOne: {
@@ -86,8 +87,8 @@ router.post('/', auth, async (req, res) => {
               name: p.name,
               category: p.category,
               baseUnit: p.baseUnit || 'Piece',
-              stock: p.currentStock !== undefined ? p.currentStock : p.stock, // Save to DB 'stock'
-              sellingPrice: toDecimal(p.sellingPrice), // <--- CRITICAL FIX: Save Selling Price
+              stock: p.currentStock !== undefined ? p.currentStock : p.stock,
+              sellingPrice: toDecimal(p.sellingPrice),
               costPrice: toDecimal(p.costPrice),
               units: Array.isArray(p.units) ? p.units.map(u => ({
                 name: u.name,
@@ -104,8 +105,8 @@ router.post('/', auth, async (req, res) => {
       await Product.bulkWrite(productOps, { ordered: false });
     }
 
+    // 3. Process Transactions
     if (Array.isArray(transactions) && transactions.length > 0) {
-       // TODO: For paymentMethod: 'Online', cross-reference with PaymentEvent to prevent spoofing
        const txOps = transactions.map((t) => ({
         updateOne: {
           filter: { businessId, id: t.id },
@@ -142,14 +143,15 @@ router.post('/', auth, async (req, res) => {
       await Transaction.bulkWrite(txOps, { ordered: false });
     }
 
-    // ... (Keep Expenditure Logic as is, ensuring it is present) ...
+    // 4. Process Expenditures (FIXED DATA INTEGRITY)
     if (Array.isArray(expenditures) && expenditures.length > 0) {
       const expOps = expenditures.map((e) => ({
         updateOne: {
-          filter: { businessId, id: e.id },
+          // CRITICAL FIX: Filter by 'business' (ObjectId) to match Model & ensure save
+          filter: { business: businessId, id: e.id },
           update: {
             $set: {
-              business: businessId, // Correct: Use 'business' as ObjectId ref
+              business: businessId,
               id: e.id,
               date: e.date ? new Date(e.date) : new Date(),
               amount: toDecimal(e.amount),
@@ -158,7 +160,8 @@ router.post('/', auth, async (req, res) => {
               description: e.description,
               paymentMethod: e.paymentMethod,
               note: e.note,
-              createdBy: e.createdBy
+              createdBy: e.createdBy,
+              updatedAt: new Date()
             }
           },
           upsert: true
@@ -167,11 +170,33 @@ router.post('/', auth, async (req, res) => {
       await Expenditure.bulkWrite(expOps, { ordered: false });
     }
 
-    // Return mapped data
+    // 5. Return Mapped Data (FIXED DECIMAL & QUERY BUGS)
+
+    // Fetch Products
     const fetchedProductsRaw = await Product.find({ businessId }).lean();
-    const fetchedProducts = fetchedProductsRaw.map(p => ({ ...p, currentStock: p.stock })); // Map back
+    const fetchedProducts = fetchedProductsRaw.map(p => ({
+      ...p,
+      currentStock: p.stock,
+      // CRITICAL FIX: Convert Decimal128 to Number for client-side safety
+      sellingPrice: parseFloat((p.sellingPrice || 0).toString()),
+      costPrice: parseFloat((p.costPrice || 0).toString()),
+      units: (p.units || []).map(u => ({
+        ...u,
+        sellingPrice: parseFloat((u.sellingPrice || 0).toString()),
+        costPrice: parseFloat((u.costPrice || 0).toString())
+      }))
+    }));
+
+    // Fetch Transactions
     const fetchedTransactions = await Transaction.find({ businessId });
-    const fetchedExpenditures = await Expenditure.find({ businessId });
+
+    // Fetch Expenditures
+    // CRITICAL FIX: Query by 'business' (ObjectId) to retrieve the actual saved records
+    const fetchedExpendituresRaw = await Expenditure.find({ business: businessId }).lean();
+    const fetchedExpenditures = fetchedExpendituresRaw.map(e => ({
+        ...e,
+        amount: parseFloat((e.amount || 0).toString())
+    }));
 
     return res.json({
       syncedAt: new Date().toISOString(),
@@ -180,7 +205,7 @@ router.post('/', auth, async (req, res) => {
       expenditures: fetchedExpenditures
     });
   } catch (err) {
-    console.error(err);
+    console.error('Sync Error:', err);
     return res.status(500).json({ message: 'Sync failed' });
   }
 });
