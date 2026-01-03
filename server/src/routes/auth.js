@@ -39,7 +39,7 @@ router.post('/register', async (req, res) => {
 
     const ownerPin = await bcrypt.hash(ownerPassword, 10);
     const staffPin = await bcrypt.hash(staffPassword, 10);
-    const trialEndsAt = new Date(Date.now() + 40 * 24 * 60 * 60 * 1000);
+    const trialEndsAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
     const business = await Business.create({
       name,

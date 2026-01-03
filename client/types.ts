@@ -73,6 +73,9 @@ export interface Expenditure {
   date: string;        // ISO string
   amount: number;      // in main currency units on client (e.g., Naira) but server expects integer kobo
   category?: string;
+  title?: string;
+  description?: string;
+  paymentMethod?: string;
   note?: string;
   createdBy?: string;  // staff id or 'owner'
 }

@@ -147,6 +147,9 @@ router.post('/', auth, async (req, res) => {
               date: e.date ? new Date(e.date) : new Date(),
               amount: toDecimal(e.amount),
               category: e.category,
+              title: e.title,
+              description: e.description,
+              paymentMethod: e.paymentMethod,
               note: e.note,
               createdBy: e.createdBy
             }
