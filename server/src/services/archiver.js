@@ -26,7 +26,7 @@ const archiveInactiveBusinesses = async () => {
     for (const businessId of businessIds) {
       // Archive expenditures
       const expenditures = await Expenditure.find({
-        businessId,
+        business: businessId, // Updated to use 'business' ObjectId
         date: { $lt: sixtyDaysAgo }
       });
 

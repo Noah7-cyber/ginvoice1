@@ -43,6 +43,7 @@ describe('Expenditures API', () => {
   describe('POST /api/expenditures', () => {
     it('should create a new expenditure and return it', async () => {
       const newExpenditure = {
+        id: 'test-uuid-1',
         date: '2024-01-01T00:00:00.000Z',
         amount: 150.75,
         category: 'Office Supplies',
@@ -64,12 +65,15 @@ describe('Expenditures API', () => {
 
       const savedExpenditure = await Expenditure.findById(response.body._id);
       expect(savedExpenditure).not.toBeNull();
-      expect(savedExpenditure.amount).toBe(newExpenditure.amount);
+      // Handle Decimal128 comparison
+      const amountVal = savedExpenditure.amount.toString();
+      expect(parseFloat(amountVal)).toBe(newExpenditure.amount);
       expect(savedExpenditure.business.toString()).toBe(businessId); // Changed from businessId
     });
 
     it('should return 500 for an invalid amount', async () => {
       const invalidExpenditure = {
+        id: 'test-uuid-2',
         amount: 'not-a-number',
         category: 'Invalid',
         title: 'Test',
@@ -90,6 +94,7 @@ describe('Expenditures API', () => {
   describe('GET /api/expenditures', () => {
     it('should return a list of expenditures for the business', async () => {
       await Expenditure.create({
+        id: 'test-uuid-3',
         business: businessId, // Changed from businessId
         amount: 200,
         category: 'Utilities',
@@ -100,6 +105,7 @@ describe('Expenditures API', () => {
       });
 
        await Expenditure.create({
+        id: 'test-uuid-4',
         business: new mongoose.Types.ObjectId().toString(),
         amount: 1000,
         category: 'Rent',

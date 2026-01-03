@@ -62,12 +62,12 @@ describe('archiveInactiveBusinesses', () => {
         // The archiver likely uses one or the other. Let's provide BOTH to cover bases for this test helper,
         // or check how archiver queries. Archiver likely queries by whatever the model was.
         // The new model requires 'business'.
-        await Expenditure.create({ business: inactiveBusiness._id, businessId: inactiveBusiness._id, amount: 100, date: new Date('2023-01-15') });
+        await Expenditure.create({ id: 'uuid-1', business: inactiveBusiness._id, businessId: inactiveBusiness._id, amount: 100, date: new Date('2023-01-15') });
         await Transaction.create({ businessId: inactiveBusiness._id, id: 'test-tx-1', totalAmount: 200, transactionDate: new Date('2023-01-20') });
-        await Expenditure.create({ business: inactiveBusiness._id, businessId: inactiveBusiness._id, amount: 50, date: new Date('2023-02-10') });
+        await Expenditure.create({ id: 'uuid-2', business: inactiveBusiness._id, businessId: inactiveBusiness._id, amount: 50, date: new Date('2023-02-10') });
 
         // Data for active business (should not be archived)
-        await Expenditure.create({ business: activeBusiness._id, businessId: activeBusiness._id, amount: 1000, date: new Date('2023-01-15') });
+        await Expenditure.create({ id: 'uuid-3', business: activeBusiness._id, businessId: activeBusiness._id, amount: 1000, date: new Date('2023-01-15') });
 
 
         // 2. Execute
@@ -114,7 +114,7 @@ describe('archiveInactiveBusinesses', () => {
             staffPin: '9999',
             trialEndsAt: new Date(),
         });
-        await Expenditure.create({ business: business._id, businessId: business._id, amount: 100 });
+        await Expenditure.create({ id: 'uuid-4', business: business._id, businessId: business._id, amount: 100 });
 
         await archiveInactiveBusinesses();
 

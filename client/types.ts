@@ -78,6 +78,8 @@ export interface Expenditure {
   paymentMethod?: string;
   note?: string;
   createdBy?: string;  // staff id or 'owner'
+  updatedAt?: string;
+  createdAt?: string;
 }
 
 export interface InventoryState {
