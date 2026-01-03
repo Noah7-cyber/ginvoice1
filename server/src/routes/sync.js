@@ -46,7 +46,13 @@ router.get('/', auth, async (req, res) => {
     const products = rawProducts.map(p => ({
       ...p,
       currentStock: p.stock, // Fix mismatch
-      sellingPrice: parseFloat(p.sellingPrice || 0) // Ensure number
+      sellingPrice: parseFloat((p.sellingPrice || 0).toString()), // Ensure number
+      costPrice: parseFloat((p.costPrice || 0).toString()),
+      units: (p.units || []).map(u => ({
+        ...u,
+        sellingPrice: parseFloat((u.sellingPrice || 0).toString()),
+        costPrice: parseFloat((u.costPrice || 0).toString())
+      }))
     }));
 
     return res.json({
@@ -99,6 +105,7 @@ router.post('/', auth, async (req, res) => {
     }
 
     if (Array.isArray(transactions) && transactions.length > 0) {
+       // TODO: For paymentMethod: 'Online', cross-reference with PaymentEvent to prevent spoofing
        const txOps = transactions.map((t) => ({
         updateOne: {
           filter: { businessId, id: t.id },
@@ -142,7 +149,7 @@ router.post('/', auth, async (req, res) => {
           filter: { businessId, id: e.id },
           update: {
             $set: {
-              businessId,
+              business: businessId, // Correct: Use 'business' as ObjectId ref
               id: e.id,
               date: e.date ? new Date(e.date) : new Date(),
               amount: toDecimal(e.amount),

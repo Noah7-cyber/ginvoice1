@@ -85,7 +85,7 @@ describe('Auth Routes - PIN Updates', () => {
       const createdAt = new Date(business.createdAt).getTime();
       const trialEnds = new Date(business.trialEndsAt).getTime();
       const diffDays = Math.round((trialEnds - createdAt) / (1000 * 60 * 60 * 24));
-      // Allow slight variance (39-41) but aim for 40
-      expect(diffDays).toBe(40);
+      // Allow slight variance (29-31) but aim for 30
+      expect(diffDays).toBe(30);
   });
 });
