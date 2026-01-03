@@ -235,19 +235,18 @@ const App: React.FC = () => {
       if (state.isLoggedIn) {
         triggerSync();
       }
-    }, 10 * 60 * 1000); // 10 minutes
+    }, 60 * 1000); // Change to 1 minute
 
     return () => clearInterval(intervalId);
   }, [state.isLoggedIn, triggerSync]);
 
-  const updateExpenditures = (items: Expenditure[]) => {
-    const nextState = { ...state, expenditures: items };
-    setState(nextState);
-
-    // TRIGGER IMMEDIATE SYNC
-    if (navigator.onLine) {
-      syncWithBackend(nextState).catch(err => console.error("Expenditure sync failed", err));
-    }
+  const handleAddExpenditure = (newExpenditure: Expenditure) => {
+    setState(prev => {
+      const updated = [newExpenditure, ...prev.expenditures];
+      // Trigger background sync immediately if online
+      if (navigator.onLine) syncWithBackend({ ...prev, expenditures: updated });
+      return { ...prev, expenditures: updated };
+    });
   };
 
   const handleRegister = async (details: any) => {
@@ -505,7 +504,12 @@ const App: React.FC = () => {
           {activeTab === 'inventory' && <InventoryScreen products={state.products} onUpdateProducts={handleUpdateProducts} isOwner={state.role === 'owner'} />}
           {activeTab === 'history' && <HistoryScreen transactions={state.transactions} business={state.business} onDeleteTransaction={handleDeleteTransaction} onUpdateTransaction={t => setState(prev => ({ ...prev, transactions: prev.transactions.map(tx => tx.id === t.id ? t : tx) }))} />}
           {activeTab === 'dashboard' && state.role === 'owner' && <DashboardScreen transactions={state.transactions} products={state.products} />}
-          {activeTab === 'expenditure' && <ExpenditureScreen />}
+          {activeTab === 'expenditure' && (
+            <ExpenditureScreen
+              expenditures={state.expenditures}
+              onAddExpenditure={handleAddExpenditure}
+            />
+          )}
           {activeTab === 'settings' && state.role === 'owner' && <SettingsScreen business={state.business} onUpdateBusiness={b => setState(prev => ({ ...prev, business: b }))} onManualSync={triggerSync} lastSyncedAt={state.lastSyncedAt} onLogout={handleLogout} />}
         </div>
 
