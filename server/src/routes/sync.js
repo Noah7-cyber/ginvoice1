@@ -10,7 +10,7 @@ const auth = require('../middleware/auth');
 const router = express.Router();
 
 const toDecimal = (value) => {
-  if (value === null || value === undefined || value === '') return mongoose.Types.Decimal128.fromString('0');
+  if (value === null || value === undefined || value === '' || Number.isNaN(Number(value))) return mongoose.Types.Decimal128.fromString('0');
   return mongoose.Types.Decimal128.fromString(String(value));
 };
 
@@ -179,6 +179,7 @@ router.post('/', auth, async (req, res) => {
           update: {
             $set: {
               business: businessId, // Matches Model (ObjectId)
+              user: req.user ? req.user.id : undefined, // Audit trail
               id: e.id,
               date: e.date ? new Date(e.date) : new Date(),
               amount: toDecimal(e.amount),
@@ -266,6 +267,17 @@ router.delete('/transactions/:id', auth, async (req, res) => {
     return res.json({ ok: true });
   } catch (err) {
     return res.status(500).json({ message: 'Delete transaction failed' });
+  }
+});
+
+router.delete('/expenditures/:id', auth, async (req, res) => {
+  try {
+    const businessId = req.businessId;
+    const { id } = req.params;
+    await Expenditure.deleteOne({ business: businessId, id });
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ message: 'Delete expenditure failed' });
   }
 });
 
