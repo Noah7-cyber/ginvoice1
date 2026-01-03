@@ -44,12 +44,27 @@ export const loadState = (): InventoryState | null => {
 */
 export const syncWithBackend = async (state: InventoryState) => {
   try {
+    const lastSyncedAt = state.lastSyncedAt ? new Date(state.lastSyncedAt) : null;
+
+    // Filter payload: Only send items modified after lastSyncedAt
+    const products = lastSyncedAt
+      ? state.products.filter(p => !p.updatedAt || new Date(p.updatedAt) > lastSyncedAt)
+      : state.products;
+
+    const transactions = lastSyncedAt
+      ? state.transactions.filter(t => !t.createdAt || new Date(t.createdAt) > lastSyncedAt)
+      : state.transactions;
+
+    const expenditures = lastSyncedAt
+      ? (state.expenditures || []).filter(e => !e.updatedAt || new Date(e.updatedAt) > lastSyncedAt) // Assuming expenditures have updatedAt locally? If not, send all or check logic
+      : (state.expenditures || []);
+
     // Prepare a minimal sync payload to reduce payload size
     // Corrected to use full keys as expected by the server
     const payload = {
-      products: state.products,
-      transactions: state.transactions,
-      expenditures: state.expenditures || [],
+      products,
+      transactions,
+      expenditures,
       business: state.business,
       lastSyncedAt: state.lastSyncedAt || null
     };
