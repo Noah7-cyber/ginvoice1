@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, X, Save, Calendar, DollarSign, Tag, FileText, CreditCard } from 'lucide-react';
+import { Plus, X, Save, Calendar, DollarSign, Tag, FileText, CreditCard, Pencil, Trash2 } from 'lucide-react';
 import { useToast } from '../components/ToastProvider';
 // Remove 'api' import - we don't need it anymore!
 
@@ -17,10 +17,13 @@ interface Expenditure {
 interface ExpenditureScreenProps {
   expenditures: Expenditure[];
   onAddExpenditure: (item: Expenditure) => void;
+  onDeleteExpenditure: (id: string) => void;
+  onEditExpenditure: (item: Expenditure) => void;
 }
 
-const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onAddExpenditure }) => {
+const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onAddExpenditure, onDeleteExpenditure, onEditExpenditure }) => {
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const { addToast } = useToast();
 
   const [formData, setFormData] = useState({
