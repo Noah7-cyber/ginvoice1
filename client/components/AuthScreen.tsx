@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { UserCircle, ShieldCheck, ShoppingBag, Info, Lock, Eye, EyeOff, ArrowLeft, ArrowRight, RefreshCw } from 'lucide-react';
+import { UserCircle, ShieldCheck, ShoppingBag, Info, Lock, Eye, EyeOff, ArrowLeft, ArrowRight, RefreshCw, Loader2 } from 'lucide-react';
 import { UserRole, BusinessProfile } from '../types';
 
 interface AuthScreenProps {
@@ -15,6 +15,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onForgotPassword, onRe
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleRoleSelect = (role: UserRole) => {
     setSelectedRole(role);
@@ -25,7 +26,9 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onForgotPassword, onRe
   const handleLoginAttempt = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedRole) return;
+    setIsLoading(true);
     const ok = await onLogin(password, selectedRole);
+    setIsLoading(false);
     if (!ok) {
       setError(true);
       setTimeout(() => setError(false), 2000);

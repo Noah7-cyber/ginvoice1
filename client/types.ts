@@ -41,6 +41,7 @@ export interface Product {
 export type PaymentMethod = 'cash' | 'transfer' | 'credit';
 
 export interface SaleItem {
+  cartId: string; // Unique ID for cart management
   productId: string;
   productName: string;
   quantity: number;

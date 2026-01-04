@@ -1,13 +1,13 @@
 
 import React, { useState, useRef } from 'react';
-import { ShoppingBag, MapPin, Phone, Mail, ArrowRight, Store, Sparkles, Upload, Trash2, Image as ImageIcon, Lock, ShieldCheck, UserCircle, Info, KeyRound } from 'lucide-react';
+import { ShoppingBag, MapPin, Phone, Mail, ArrowRight, Store, Sparkles, Upload, Trash2, Image as ImageIcon, Lock, ShieldCheck, UserCircle, Info, KeyRound, Loader2 } from 'lucide-react';
 import PhoneInput from 'react-phone-input-2';
 import 'react-phone-input-2/lib/style.css';
 import { useToast } from './ToastProvider';
 
 interface RegistrationScreenProps {
-  onRegister: (details: { name: string, address: string, phone: string, email: string, logo?: string, ownerPassword?: string, staffPassword?: string }) => void;
-  onManualLogin: (details: { email: string, pin: string }) => void;
+  onRegister: (details: { name: string, address: string, phone: string, email: string, logo?: string, ownerPassword?: string, staffPassword?: string }) => Promise<void>;
+  onManualLogin: (details: { email: string, pin: string }) => Promise<void>;
   onForgotPassword: () => void;
 }
 
@@ -16,6 +16,7 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onM
   const [mode, setMode] = useState<'register' | 'login'>('register');
   const [acceptedPolicy, setAcceptedPolicy] = useState(false);
   const [showPolicy, setShowPolicy] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     address: '',

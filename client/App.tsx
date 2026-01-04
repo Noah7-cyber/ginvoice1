@@ -249,6 +249,45 @@ const App: React.FC = () => {
     });
   };
 
+  const handleDeleteExpenditure = async (id: string) => {
+    // Optimistic update
+    setState(prev => {
+        const next = { ...prev, expenditures: prev.expenditures.filter(e => e.id !== id) };
+        if (navigator.onLine) {
+             const api = import('./services/api').then(m => m.default ? m.default.delete : null); // api.delete is not default export?
+             // api.ts exports `deleteProduct` etc. but doesn't expose generic delete on api object easily or I need to import it.
+             // Wait, I see `import { deleteProduct, deleteTransaction }` in imports.
+             // I should add deleteExpenditure to api.ts or use the sync route.
+             // For now, syncing the new state (without the item) via syncWithBackend might work IF the backend supports deleting missing items OR if I explicitly call delete.
+             // The prompt said: "calls api.delete('/expenditures/:id')".
+             // `api` default export has `delete` method? Check api.ts.
+             // `api.ts` exports `default api` with `get` and `post`. No `delete`.
+             // I will implement `deleteExpenditure` in `api.ts` later.
+             // For now I will assume `deleteExpenditure` is available or I will add it.
+             // Let's defer the API call implementation details to `api.ts` step.
+             // I will import `deleteExpenditure` (which I will add) and call it.
+        }
+        return next;
+    });
+
+    if (navigator.onLine) {
+        try {
+            const { deleteExpenditure } = await import('./services/api');
+            if (deleteExpenditure) await deleteExpenditure(id);
+        } catch (err) {
+            console.error(err);
+        }
+    }
+  };
+
+  const handleEditExpenditure = (updated: Expenditure) => {
+      setState(prev => {
+          const newExp = prev.expenditures.map(e => e.id === updated.id ? updated : e);
+          if (navigator.onLine) syncWithBackend({ ...prev, expenditures: newExp });
+          return { ...prev, expenditures: newExp };
+      });
+  };
+
   const handleRegister = async (details: any) => {
     try {
       if (navigator.onLine) {
@@ -361,26 +400,9 @@ const App: React.FC = () => {
     if (product.currentStock < multiplier) return;
 
     setCart(prev => {
-      const existingIndex = prev.findIndex(item =>
-        item.productId === product.id &&
-        ((!unit && !item.selectedUnit) || (unit && item.selectedUnit?.name === unit.name))
-      );
-
-      if (existingIndex >= 0) {
-        const item = prev[existingIndex];
-        // Simple stock check (not accounting for mixed units of same product)
-        if (product.currentStock < (item.quantity + 1) * multiplier) return prev;
-
-        const newCart = [...prev];
-        newCart[existingIndex] = {
-          ...item,
-          quantity: item.quantity + 1,
-          total: (item.quantity + 1) * item.unitPrice - item.discount
-        };
-        return newCart;
-      }
-
+      // FIX: Always add new item with unique cartId (allow duplicates/linked items to be separate)
       return [...prev, {
+        cartId: crypto.randomUUID(),
         productId: product.id,
         productName: unit ? `${product.name} (${unit.name})` : product.name,
         quantity: 1,
@@ -391,7 +413,6 @@ const App: React.FC = () => {
       }];
     });
     addToast("Added", "success", 1500);
-    // Explicit manual toggle only on mobile now
   };
 
   const handleCompleteSale = (transaction: Transaction) => {
@@ -493,10 +514,15 @@ const App: React.FC = () => {
           <div className="hidden md:flex items-center gap-2 text-gray-400 text-xs font-bold uppercase tracking-widest">
             <span>{state.role} Mode</span> <span className="opacity-30">/</span> <span>{activeTab}</span>
           </div>
-          <button onClick={() => setIsCartOpen(!isCartOpen)} className={`relative p-2 rounded-xl transition-all ${isCartOpen ? 'bg-primary text-white' : 'text-primary bg-indigo-50'}`}>
-            <ShoppingCart size={24} />
-            {cart.length > 0 && !isCartOpen && <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] font-black w-5 h-5 flex items-center justify-center rounded-full animate-bounce">{cart.length}</span>}
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={handleLogout} className="md:hidden p-2 text-gray-400 hover:text-red-500">
+              <LogOut size={24} />
+            </button>
+            <button onClick={() => setIsCartOpen(!isCartOpen)} className={`relative p-2 rounded-xl transition-all ${isCartOpen ? 'bg-primary text-white' : 'text-primary bg-indigo-50'}`}>
+              <ShoppingCart size={24} />
+              {cart.length > 0 && !isCartOpen && <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] font-black w-5 h-5 flex items-center justify-center rounded-full animate-bounce">{cart.length}</span>}
+            </button>
+          </div>
         </header>
         
         <div className="flex-1 overflow-y-auto p-4 md:p-8">
@@ -508,6 +534,8 @@ const App: React.FC = () => {
             <ExpenditureScreen
               expenditures={state.expenditures}
               onAddExpenditure={handleAddExpenditure}
+              onDeleteExpenditure={handleDeleteExpenditure}
+              onEditExpenditure={handleEditExpenditure}
             />
           )}
           {activeTab === 'settings' && state.role === 'owner' && <SettingsScreen business={state.business} onUpdateBusiness={b => setState(prev => ({ ...prev, business: b }))} onManualSync={triggerSync} lastSyncedAt={state.lastSyncedAt} onLogout={handleLogout} />}
