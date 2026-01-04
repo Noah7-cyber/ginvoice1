@@ -102,22 +102,39 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       {isSubscriptionExpired && (
-        <div className="bg-red-50 border border-red-200 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-4 mb-6 shadow-sm">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center text-red-600 shrink-0">
-              <AlertCircle size={24} />
-            </div>
-            <div>
-              <h3 className="text-lg font-black text-gray-900">Subscription Expired</h3>
-              <p className="text-gray-600 text-sm">Your subscription has ended. Renew now to regain full access.</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 duration-300">
+            <div className="p-8 text-center space-y-6">
+              <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertCircle size={40} className="text-red-500" />
+              </div>
+
+              <div className="space-y-2">
+                <h2 className="text-2xl font-black text-gray-900">Subscription Expired</h2>
+                <p className="text-gray-500 font-medium text-sm leading-relaxed">
+                  Your free trial has ended. Please renew your subscription to continue managing your business effectively.
+                </p>
+              </div>
+
+              <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 text-left space-y-3">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-500 font-medium">Plan</span>
+                  <span className="font-bold text-gray-900">Professional Monthly</span>
+                </div>
+                <div className="pt-3 border-t flex justify-between items-center">
+                  <span className="font-black text-gray-900">Amount Due</span>
+                  <span className="font-black text-xl text-primary">{CURRENCY}2,000</span>
+                </div>
+              </div>
+
+              <button
+                onClick={onRenewSubscription}
+                className="w-full py-4 bg-primary text-white rounded-xl font-black text-lg shadow-xl shadow-indigo-200 hover:opacity-90 transition-all active:scale-95 flex items-center justify-center gap-2"
+              >
+                Pay Subscription Now
+              </button>
             </div>
           </div>
-          <button
-            onClick={onRenewSubscription}
-            className="w-full md:w-auto px-6 py-3 bg-red-600 text-white font-bold rounded-xl shadow-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
-          >
-            Pay Subscription ({CURRENCY}2,000)
-          </button>
         </div>
       )}
 

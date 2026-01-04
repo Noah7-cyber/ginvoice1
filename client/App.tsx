@@ -204,6 +204,12 @@ const App: React.FC = () => {
     wasOnlineRef.current = isOnline;
   }, [isOnline]);
 
+  useEffect(() => {
+    if (state.isLoggedIn && navigator.onLine) {
+      fetchEntitlements();
+    }
+  }, [state.isLoggedIn, fetchEntitlements]);
+
   const openPaymentLink = useCallback(async () => {
     if (!navigator.onLine) {
       addToast('Please connect to the internet to subscribe.', 'error');

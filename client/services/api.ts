@@ -219,15 +219,22 @@ export const verifyPayment = async (reference: string) => {
 
 export const initializePayment = async (amount: number, email: string) => {
   const token = loadAuthToken();
-  if (!token) throw new Error('Missing auth token');
+  if (!token) throw new Error('Missing auth token. Please login again.');
 
-  return request('/api/payments/initialize', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`
-    },
-    body: JSON.stringify({ amount, email })
-  });
+  try {
+    return await request('/api/payments/initialize', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ amount, email })
+    });
+  } catch (err: any) {
+    if (err.status === 401) {
+      throw new Error('Session expired. Please login again.');
+    }
+    throw err;
+  }
 };
 
 export const deleteProduct = async (id: string) => {
