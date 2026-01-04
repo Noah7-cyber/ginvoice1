@@ -110,7 +110,7 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
         { $unwind: '$items' },
         {
           $group: {
-            _id: '$items.productId',
+            _id: { id: '$items.productId', unit: '$items.unit' },
             totalSales: { $sum: { $multiply: ['$items.quantity', { $toDouble: '$items.unitPrice' }] } }, // Revenue per product
             totalQty: { $sum: '$items.quantity' }
           }
@@ -124,7 +124,7 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
       { $unwind: '$items' },
       {
         $group: {
-          _id: '$items.productId',
+          _id: { id: '$items.productId', unit: '$items.unit' },
           totalSales: { $sum: { $multiply: ['$items.quantity', { $toDouble: '$items.unitPrice' }] } },
           totalQty: { $sum: '$items.quantity' }
         }
@@ -137,7 +137,7 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
       { $unwind: '$items' },
       {
         $group: {
-          _id: '$items.productId',
+          _id: { id: '$items.productId', unit: '$items.unit' },
           totalSales: { $sum: { $multiply: ['$items.quantity', { $toDouble: '$items.unitPrice' }] } },
           totalQty: { $sum: '$items.quantity' }
         }
@@ -151,17 +151,29 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
       return Number(val);
     };
 
-    const products = await Product.find({ businessId }, { id: 1, costPrice: 1 }).lean();
-    const costMap = new Map();
-    products.forEach(p => costMap.set(p.id, toNumber(p.costPrice)));
+    const products = await Product.find({ businessId }, { id: 1, costPrice: 1, units: 1 }).lean();
+    const productMap = new Map();
+    products.forEach(p => productMap.set(p.id, p));
 
     const calculateProfit = (aggResult) => {
       let profit = 0;
-      aggResult.forEach(item => {
-        const cost = costMap.get(item._id) || 0;
-        const revenue = toNumber(item.totalSales);
-        const qty = item.totalQty;
-        profit += (revenue - (qty * cost));
+      aggResult.forEach(group => {
+        const product = productMap.get(group._id.id);
+        if (!product) return; // Should not happen if data is consistent
+
+        let itemCost = toNumber(product.costPrice);
+
+        // Find specific unit cost if applicable
+        if (group._id.unit && Array.isArray(product.units)) {
+           const unitDef = product.units.find(u => u.name === group._id.unit);
+           if (unitDef && unitDef.costPrice) {
+             itemCost = toNumber(unitDef.costPrice);
+           }
+        }
+
+        const revenue = toNumber(group.totalSales);
+        const qty = group.totalQty;
+        profit += (revenue - (qty * itemCost));
       });
       return profit;
     };
