@@ -28,11 +28,13 @@ interface HistoryScreenProps {
   business: BusinessProfile;
   onDeleteTransaction: (id: string, restockItems: boolean) => void;
   onUpdateTransaction: (transaction: Transaction) => void;
+  isSubscriptionExpired?: boolean;
+  onRenewSubscription?: () => void;
 }
 
 type ViewMode = 'invoices' | 'debtors';
 
-const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, onDeleteTransaction, onUpdateTransaction }) => {
+const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, onDeleteTransaction, onUpdateTransaction, isSubscriptionExpired, onRenewSubscription }) => {
   const { addToast } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>('invoices');
   const [searchTerm, setSearchTerm] = useState('');
@@ -99,6 +101,26 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
+      {isSubscriptionExpired && (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-4 mb-6 shadow-sm">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center text-red-600 shrink-0">
+              <AlertCircle size={24} />
+            </div>
+            <div>
+              <h3 className="text-lg font-black text-gray-900">Subscription Expired</h3>
+              <p className="text-gray-600 text-sm">Your subscription has ended. Renew now to regain full access.</p>
+            </div>
+          </div>
+          <button
+            onClick={onRenewSubscription}
+            className="w-full md:w-auto px-6 py-3 bg-red-600 text-white font-bold rounded-xl shadow-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
+          >
+            Pay Subscription ({CURRENCY}2,000)
+          </button>
+        </div>
+      )}
+
       {/* Header & View Toggle */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
