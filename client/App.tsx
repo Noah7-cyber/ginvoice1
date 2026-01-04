@@ -39,18 +39,7 @@ const App: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const wasOnlineRef = useRef(navigator.onLine);
   
-  const [subscriptionLocked, setSubscriptionLocked] = useState(() => {
-    try {
-      const cached = localStorage.getItem('ginvoice_entitlements_v1');
-      if (!cached) return false;
-      const parsed = JSON.parse(cached);
-      const trialExpired = parsed?.trialEndsAt ? new Date(parsed.trialEndsAt) < new Date() : false;
-      const isFree = parsed?.plan === 'FREE';
-      return Boolean(isFree && trialExpired);
-    } catch {
-      return false;
-    }
-  });
+  const [subscriptionLocked, setSubscriptionLocked] = useState(false);
 
   const [entitlements, setEntitlements] = useState<{
     plan: 'FREE' | 'PRO';
@@ -208,7 +197,7 @@ const App: React.FC = () => {
     if (state.isLoggedIn && navigator.onLine) {
       fetchEntitlements();
     }
-  }, [state.isLoggedIn, fetchEntitlements]);
+  }, [state.isLoggedIn]); // Removed fetchEntitlements dependency to avoid loops if it changes
 
   const openPaymentLink = useCallback(async () => {
     if (!navigator.onLine) {
@@ -477,6 +466,13 @@ const App: React.FC = () => {
     const ownerTabs: TabId[] = ['sales', 'inventory', 'history', 'dashboard', 'expenditure', 'settings'];
     return state.role === 'owner' ? ownerTabs : Array.from(new Set(['sales', 'history', ...state.business.staffPermissions])) as TabId[];
   }, [state.role, state.business.staffPermissions, entitlements, state.business.trialEndsAt, state.business.isSubscribed]);
+
+  // Force redirection to allowed tabs if current tab is forbidden
+  useEffect(() => {
+    if (allowedTabs.length > 0 && !allowedTabs.includes(activeTab)) {
+      setActiveTab(allowedTabs[0]);
+    }
+  }, [allowedTabs, activeTab]);
 
   if (!state.isRegistered) return <RegistrationScreen onRegister={handleRegister} onManualLogin={handleManualLogin} onForgotPassword={() => setView('forgot-password')} />;
   if (!state.isLoggedIn) return <AuthScreen onLogin={handleLogin} onForgotPassword={() => setView('forgot-password')} onResetBusiness={() => setState(prev => ({...prev, isRegistered: false}))} business={state.business} />;
