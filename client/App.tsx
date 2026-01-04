@@ -475,6 +475,54 @@ const App: React.FC = () => {
   if (!state.isRegistered) return <RegistrationScreen onRegister={handleRegister} onManualLogin={handleManualLogin} onForgotPassword={() => setView('forgot-password')} />;
   if (!state.isLoggedIn) return <AuthScreen onLogin={handleLogin} onForgotPassword={() => setView('forgot-password')} onResetBusiness={() => setState(prev => ({...prev, isRegistered: false}))} business={state.business} />;
 
+  if (subscriptionLocked) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center space-y-6 border border-red-100">
+          <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto">
+            <LogOut size={40} className="text-red-500" />
+          </div>
+
+          <div className="space-y-2">
+            <h1 className="text-2xl font-black text-gray-900">Subscription Expired</h1>
+            <p className="text-gray-500 font-medium text-sm">
+              Your free trial has ended. Please renew your subscription to continue managing your business.
+            </p>
+          </div>
+
+          <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 text-left space-y-3">
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-gray-500">Plan</span>
+              <span className="font-bold text-gray-900">Professional</span>
+            </div>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-gray-500">Duration</span>
+              <span className="font-bold text-gray-900">Monthly</span>
+            </div>
+            <div className="pt-3 border-t flex justify-between items-center">
+              <span className="font-black text-gray-900">Total</span>
+              <span className="font-black text-xl text-primary">₦2,000</span>
+            </div>
+          </div>
+
+          <button
+            onClick={openPaymentLink}
+            className="w-full py-4 bg-primary text-white rounded-xl font-black text-lg shadow-lg hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
+          >
+            <Wallet size={20} /> Renew Subscription
+          </button>
+
+          <button
+            onClick={handleLogout}
+            className="text-gray-400 font-bold text-xs hover:text-gray-600 uppercase tracking-widest"
+          >
+            Log Out
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row h-screen overflow-hidden">
       {/* Sidebar */}

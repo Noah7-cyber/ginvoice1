@@ -102,6 +102,18 @@ export const fetchRemoteState = async () => {
   });
 };
 
+export const deleteExpenditure = async (id: string) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request(`/api/sync/expenditures/${id}`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+};
+
 const api = {
   get: async (url: string) => {
     const token = loadAuthToken();
