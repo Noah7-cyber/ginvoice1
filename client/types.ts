@@ -17,7 +17,7 @@ export interface BusinessProfile {
     fontFamily: string;
   };
   // staffPermissions may include tab ids and special permissions like 'stock-management'
-  staffPermissions: (TabId | 'stock-management')[];
+  staffPermissions: (TabId | 'stock-management' | 'history-management')[];
 }
 
 export interface ProductUnit {

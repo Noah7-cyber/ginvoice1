@@ -30,11 +30,12 @@ interface HistoryScreenProps {
   onUpdateTransaction: (transaction: Transaction) => void;
   isSubscriptionExpired?: boolean;
   onRenewSubscription?: () => void;
+  isReadOnly?: boolean;
 }
 
 type ViewMode = 'invoices' | 'debtors';
 
-const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, onDeleteTransaction, onUpdateTransaction, isSubscriptionExpired, onRenewSubscription }) => {
+const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, onDeleteTransaction, onUpdateTransaction, isSubscriptionExpired, onRenewSubscription, isReadOnly }) => {
   const { addToast } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>('invoices');
   const [searchTerm, setSearchTerm] = useState('');
@@ -264,8 +265,12 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
                       ) : (
                         <>
                           <button onClick={() => setSelectedInvoice(t)} className="p-2 text-indigo-600 bg-indigo-50 rounded-lg"><FileText size={18} /></button>
-                          <button onClick={() => handleEditClick(t)} className="p-2 text-gray-400 hover:text-indigo-600 rounded-lg"><Edit3 size={18} /></button>
-                          <button onClick={() => handleDelete(t)} className="p-2 text-gray-400 hover:text-red-600 rounded-lg"><Trash2 size={18} /></button>
+                          {!isReadOnly && (
+                            <>
+                              <button onClick={() => handleEditClick(t)} className="p-2 text-gray-400 hover:text-indigo-600 rounded-lg"><Edit3 size={18} /></button>
+                              <button onClick={() => handleDelete(t)} className="p-2 text-gray-400 hover:text-red-600 rounded-lg"><Trash2 size={18} /></button>
+                            </>
+                          )}
                         </>
                       )}
                     </div>

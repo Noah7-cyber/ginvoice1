@@ -449,6 +449,9 @@ const App: React.FC = () => {
     }
   };
 
+  const canManageStock = state.role === 'owner' || state.business.staffPermissions.includes('stock-management');
+  const canManageHistory = state.role === 'owner' || state.business.staffPermissions.includes('history-management');
+
   const allowedTabs = useMemo(() => {
     // Robust check for subscription status using both entitlements and persisted state
     const hasPro = entitlements?.plan === 'PRO' || state.business.isSubscribed;
@@ -463,8 +466,17 @@ const App: React.FC = () => {
 
     if (!hasPro && !trialActive) return ['history'] as TabId[];
     
-    const ownerTabs: TabId[] = ['sales', 'inventory', 'history', 'dashboard', 'expenditure', 'settings'];
-    return state.role === 'owner' ? ownerTabs : Array.from(new Set(['sales', 'history', ...state.business.staffPermissions])) as TabId[];
+    // Page IDs that actually exist in the UI
+    const PAGE_IDS: TabId[] = ['sales', 'inventory', 'history', 'expenditure', 'dashboard', 'settings'];
+
+    const ownerTabs = PAGE_IDS;
+
+    if (state.role === 'owner') return ownerTabs;
+
+    // Filter staff permissions to only include valid page IDs
+    // 'sales' is always allowed for staff
+    const staffTabs = ['sales', ...state.business.staffPermissions.filter((p: string) => PAGE_IDS.includes(p as TabId))];
+    return Array.from(new Set(staffTabs)) as TabId[];
   }, [state.role, state.business.staffPermissions, entitlements, state.business.trialEndsAt, state.business.isSubscribed]);
 
   // Force redirection to allowed tabs if current tab is forbidden
@@ -529,7 +541,14 @@ const App: React.FC = () => {
         
         <div className="flex-1 overflow-y-auto p-4 md:p-8">
           {activeTab === 'sales' && <SalesScreen products={state.products} onAddToCart={addToCart} />}
-          {activeTab === 'inventory' && <InventoryScreen products={state.products} onUpdateProducts={handleUpdateProducts} isOwner={state.role === 'owner'} />}
+          {activeTab === 'inventory' && (
+            <InventoryScreen
+              products={state.products}
+              onUpdateProducts={handleUpdateProducts}
+              isOwner={state.role === 'owner'}
+              isReadOnly={!canManageStock}
+            />
+          )}
           {activeTab === 'history' && (
             <HistoryScreen
               transactions={state.transactions}
@@ -538,6 +557,7 @@ const App: React.FC = () => {
               onUpdateTransaction={t => setState(prev => ({ ...prev, transactions: prev.transactions.map(tx => tx.id === t.id ? t : tx) }))}
               isSubscriptionExpired={subscriptionLocked}
               onRenewSubscription={openPaymentLink}
+              isReadOnly={!canManageHistory}
             />
           )}
           {activeTab === 'dashboard' && state.role === 'owner' && <DashboardScreen transactions={state.transactions} products={state.products} />}
