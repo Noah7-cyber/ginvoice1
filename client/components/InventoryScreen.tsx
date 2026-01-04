@@ -11,9 +11,10 @@ interface InventoryScreenProps {
   products: Product[];
   onUpdateProducts: (products: Product[]) => void;
   isOwner: boolean;
+  isReadOnly?: boolean;
 }
 
-const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdateProducts, isOwner }) => {
+const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdateProducts, isOwner, isReadOnly }) => {
   const { addToast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
@@ -151,7 +152,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
               <ListTodo size={20} /> Bulk Update ({selectedIds.size})
             </button>
           )}
-          {isOwner && (
+          {isOwner && !isReadOnly && (
             <button 
               onClick={() => setIsModalOpen(true)}
               className="bg-primary text-white px-6 py-3 rounded-xl flex items-center gap-2 font-bold shadow-lg shadow-indigo-100 hover:opacity-90 transition-all active:scale-95"
@@ -242,19 +243,21 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   {CURRENCY}{(product.sellingPrice || 0).toLocaleString()}
 </td>
                   <td className="px-6 py-4">
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => {
-                          setEditingProductId(product.id);
-                          setNewProduct({ ...product });
-                          setIsModalOpen(true);
-                        }}
-                        className="p-2 text-gray-400 hover:text-primary"
-                      >
-                        <Edit3 size={18} />
-                      </button>
-                      {isOwner && <button onClick={() => handleDeleteProduct(product.id)} className="p-2 text-gray-400 hover:text-red-500"><Trash2 size={18} /></button>}
-                    </div>
+                    {!isReadOnly && (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            setEditingProductId(product.id);
+                            setNewProduct({ ...product });
+                            setIsModalOpen(true);
+                          }}
+                          className="p-2 text-gray-400 hover:text-primary"
+                        >
+                          <Edit3 size={18} />
+                        </button>
+                        {isOwner && <button onClick={() => handleDeleteProduct(product.id)} className="p-2 text-gray-400 hover:text-red-500"><Trash2 size={18} /></button>}
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
