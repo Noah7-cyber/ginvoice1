@@ -35,7 +35,36 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
     paymentMethod: 'Cash'
   });
 
-  // Remove fetchExpenditures and useEffect - we use props now!
+  // Calculate Summary Metrics
+  const summaryMetrics = React.useMemo(() => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    const thisMonth = expenditures.filter(e => {
+      const d = new Date(e.date);
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    });
+
+    const thisMonthTotal = thisMonth.reduce((sum, e) => sum + (e.amount || 0), 0);
+    const allTimeTotal = expenditures.reduce((sum, e) => sum + (e.amount || 0), 0);
+
+    // Top Category
+    const catMap: Record<string, number> = {};
+    thisMonth.forEach(e => {
+      catMap[e.category] = (catMap[e.category] || 0) + (e.amount || 0);
+    });
+    let topCat = '-';
+    let max = 0;
+    Object.entries(catMap).forEach(([cat, amt]) => {
+      if (amt > max) {
+        max = amt;
+        topCat = cat;
+      }
+    });
+
+    return { thisMonthTotal, allTimeTotal, topCat };
+  }, [expenditures]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -100,6 +129,26 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
           <Plus className="w-5 h-5 mr-2" />
           Add Expense
         </button>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+          <p className="text-xs font-bold text-blue-500 uppercase tracking-wider mb-1">This Month</p>
+          <p className="text-2xl font-black text-blue-700">
+            {new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(summaryMetrics.thisMonthTotal)}
+          </p>
+        </div>
+        <div className="bg-purple-50 p-4 rounded-xl border border-purple-100">
+          <p className="text-xs font-bold text-purple-500 uppercase tracking-wider mb-1">Total All-Time</p>
+          <p className="text-2xl font-black text-purple-700">
+            {new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(summaryMetrics.allTimeTotal)}
+          </p>
+        </div>
+        <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
+          <p className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-1">Top Category (Month)</p>
+          <p className="text-xl font-black text-orange-700 truncate">{summaryMetrics.topCat}</p>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">

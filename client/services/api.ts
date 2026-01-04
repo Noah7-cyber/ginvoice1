@@ -114,6 +114,26 @@ export const deleteExpenditure = async (id: string) => {
   });
 };
 
+export const updateExpenditure = async (expenditure: any) => {
+  // We can use the sync endpoint or a dedicated PUT if it existed.
+  // Given the backend sync logic handles updates via POST /api/sync with an array, we can use that.
+  // However, the prompt implies "backend has PUT and DELETE endpoints".
+  // Let's assume PUT /api/sync/expenditures/:id or check routes.
+  // Actually, looking at server/src/routes/sync.js, there is NO PUT /expenditures/:id.
+  // There is only POST / which handles bulk updates.
+  // But wait, the user prompt said: "The backend has PUT and DELETE endpoints for expenditures".
+  // Let me check `server/src/routes/expenditures.js`!
+  // I only checked `sync.js` before.
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request(`/api/expenditures/${expenditure.id}`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(expenditure)
+  });
+};
+
 const api = {
   get: async (url: string) => {
     const token = loadAuthToken();

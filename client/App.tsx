@@ -133,6 +133,11 @@ const App: React.FC = () => {
     setIsSyncing(false);
   }, [state]);
 
+  const handleLogout = useCallback(() => {
+    clearAuthToken();
+    setState(prev => ({ ...prev, isLoggedIn: false }));
+  }, []);
+
   const fetchEntitlements = useCallback(async () => {
     if (!navigator.onLine) return;
     try {
@@ -148,10 +153,10 @@ const App: React.FC = () => {
       const trialExpired = data.trialEndsAt ? new Date(data.trialEndsAt) < new Date() : false;
       if (data.plan === 'FREE' && trialExpired) {
         if (!subscriptionLocked) {
+          // Transitioning from Valid -> Expired
           setSubscriptionLocked(true);
-          setActiveTab('history');
-          addToast('Your subscription has expired. Please complete payment to continue.', 'error');
-          openPaymentLink();
+          addToast('Your subscription has expired. Session ended for security.', 'error');
+          handleLogout(); // Auto-logout on new expiry detection
         }
       } else if (subscriptionLocked) {
         setSubscriptionLocked(false);
@@ -159,7 +164,7 @@ const App: React.FC = () => {
     } catch (err) {
       console.error('Entitlements fetch failed', err);
     }
-  }, [subscriptionLocked, addToast]);
+  }, [subscriptionLocked, addToast, handleLogout]);
 
   // Sync optimization: Only sync when transitioning from offline to online
   useEffect(() => {
@@ -358,18 +363,13 @@ const App: React.FC = () => {
         const response = await login(state.business.email, pin, selectedRole);
         saveAuthToken(response.token);
         setState(prev => ({ ...prev, role: response.role, isLoggedIn: true, business: { ...prev.business, ...response.business } }));
-        setActiveTab('sales');
+        setActiveTab('history'); // Default to History for safety
         return true;
       }
     } catch (err) {
       console.error('Login failed', err);
     }
     return false;
-  };
-
-  const handleLogout = () => {
-    clearAuthToken();
-    setState(prev => ({ ...prev, isLoggedIn: false }));
   };
 
   const handleDeleteTransaction = async (id: string, restockItems: boolean) => {
@@ -475,54 +475,6 @@ const App: React.FC = () => {
   if (!state.isRegistered) return <RegistrationScreen onRegister={handleRegister} onManualLogin={handleManualLogin} onForgotPassword={() => setView('forgot-password')} />;
   if (!state.isLoggedIn) return <AuthScreen onLogin={handleLogin} onForgotPassword={() => setView('forgot-password')} onResetBusiness={() => setState(prev => ({...prev, isRegistered: false}))} business={state.business} />;
 
-  if (subscriptionLocked) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center space-y-6 border border-red-100">
-          <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto">
-            <LogOut size={40} className="text-red-500" />
-          </div>
-
-          <div className="space-y-2">
-            <h1 className="text-2xl font-black text-gray-900">Subscription Expired</h1>
-            <p className="text-gray-500 font-medium text-sm">
-              Your free trial has ended. Please renew your subscription to continue managing your business.
-            </p>
-          </div>
-
-          <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 text-left space-y-3">
-            <div className="flex justify-between items-center text-sm">
-              <span className="text-gray-500">Plan</span>
-              <span className="font-bold text-gray-900">Professional</span>
-            </div>
-            <div className="flex justify-between items-center text-sm">
-              <span className="text-gray-500">Duration</span>
-              <span className="font-bold text-gray-900">Monthly</span>
-            </div>
-            <div className="pt-3 border-t flex justify-between items-center">
-              <span className="font-black text-gray-900">Total</span>
-              <span className="font-black text-xl text-primary">₦2,000</span>
-            </div>
-          </div>
-
-          <button
-            onClick={openPaymentLink}
-            className="w-full py-4 bg-primary text-white rounded-xl font-black text-lg shadow-lg hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
-          >
-            <Wallet size={20} /> Renew Subscription
-          </button>
-
-          <button
-            onClick={handleLogout}
-            className="text-gray-400 font-bold text-xs hover:text-gray-600 uppercase tracking-widest"
-          >
-            Log Out
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row h-screen overflow-hidden">
       {/* Sidebar */}
@@ -576,7 +528,16 @@ const App: React.FC = () => {
         <div className="flex-1 overflow-y-auto p-4 md:p-8">
           {activeTab === 'sales' && <SalesScreen products={state.products} onAddToCart={addToCart} />}
           {activeTab === 'inventory' && <InventoryScreen products={state.products} onUpdateProducts={handleUpdateProducts} isOwner={state.role === 'owner'} />}
-          {activeTab === 'history' && <HistoryScreen transactions={state.transactions} business={state.business} onDeleteTransaction={handleDeleteTransaction} onUpdateTransaction={t => setState(prev => ({ ...prev, transactions: prev.transactions.map(tx => tx.id === t.id ? t : tx) }))} />}
+          {activeTab === 'history' && (
+            <HistoryScreen
+              transactions={state.transactions}
+              business={state.business}
+              onDeleteTransaction={handleDeleteTransaction}
+              onUpdateTransaction={t => setState(prev => ({ ...prev, transactions: prev.transactions.map(tx => tx.id === t.id ? t : tx) }))}
+              isSubscriptionExpired={subscriptionLocked}
+              onRenewSubscription={openPaymentLink}
+            />
+          )}
           {activeTab === 'dashboard' && state.role === 'owner' && <DashboardScreen transactions={state.transactions} products={state.products} />}
           {activeTab === 'expenditure' && (
             <ExpenditureScreen

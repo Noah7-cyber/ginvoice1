@@ -45,8 +45,8 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
         {
           $group: {
             _id: null,
-            totalRevenue: { $sum: '$totalAmount' },
-            totalDebt: { $sum: '$balance' },
+            totalRevenue: { $sum: { $toDouble: '$totalAmount' } },
+            totalDebt: { $sum: { $toDouble: '$balance' } },
             totalSales: { $sum: 1 },
             cashSales: {
               $sum: { $cond: [{ $eq: ['$paymentMethod', 'cash'] }, 1, 0] }
@@ -62,13 +62,13 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
       // 2. Current Month Revenue
       Transaction.aggregate([
         { $match: { businessId, transactionDate: { $gte: currentMonthStart } } },
-        { $group: { _id: null, revenue: { $sum: '$totalAmount' } } }
+        { $group: { _id: null, revenue: { $sum: { $toDouble: '$totalAmount' } } } }
       ]),
 
       // 3. Previous Month Revenue
       Transaction.aggregate([
         { $match: { businessId, transactionDate: { $gte: previousMonthStart, $lte: previousMonthEnd } } },
-        { $group: { _id: null, revenue: { $sum: '$totalAmount' } } }
+        { $group: { _id: null, revenue: { $sum: { $toDouble: '$totalAmount' } } } }
       ]),
 
       // 4. Dynamic Chart Aggregation
@@ -77,7 +77,7 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
         {
           $group: {
             _id: { $dateToString: { format: dateFormat, date: '$transactionDate' } },
-            amount: { $sum: '$totalAmount' }
+            amount: { $sum: { $toDouble: '$totalAmount' } }
           }
         },
         { $sort: { _id: 1 } }
@@ -111,7 +111,7 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
         {
           $group: {
             _id: '$items.productId',
-            totalSales: { $sum: { $multiply: ['$items.quantity', '$items.unitPrice'] } }, // Revenue per product
+            totalSales: { $sum: { $multiply: ['$items.quantity', { $toDouble: '$items.unitPrice' }] } }, // Revenue per product
             totalQty: { $sum: '$items.quantity' }
           }
         }
@@ -125,7 +125,7 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
       {
         $group: {
           _id: '$items.productId',
-          totalSales: { $sum: { $multiply: ['$items.quantity', '$items.unitPrice'] } },
+          totalSales: { $sum: { $multiply: ['$items.quantity', { $toDouble: '$items.unitPrice' }] } },
           totalQty: { $sum: '$items.quantity' }
         }
       }
@@ -138,7 +138,7 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
       {
         $group: {
           _id: '$items.productId',
-          totalSales: { $sum: { $multiply: ['$items.quantity', '$items.unitPrice'] } },
+          totalSales: { $sum: { $multiply: ['$items.quantity', { $toDouble: '$items.unitPrice' }] } },
           totalQty: { $sum: '$items.quantity' }
         }
       }
