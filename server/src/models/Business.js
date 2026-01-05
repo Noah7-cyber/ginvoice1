@@ -15,6 +15,8 @@ const BusinessSchema = new mongoose.Schema({
   paystackCustomerCode: { type: String },
   paystackSubscriptionCode: { type: String },
   paystackPlanCode: { type: String },
+  recoveryCode: { type: String },
+  recoveryCodeExpires: { type: Date },
   createdAt: { type: Date, default: Date.now },
   lastActiveAt: { type: Date, default: Date.now }
 });
