@@ -296,14 +296,21 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onM
             )}
             <button 
               type="submit"
-              className="w-full bg-indigo-600 text-white py-5 rounded-3xl font-black text-lg shadow-xl shadow-indigo-100 hover:bg-indigo-700 hover:-translate-y-1 transition-all flex items-center justify-center gap-3 active:scale-95"
+              disabled={isLoading}
+              className="w-full bg-indigo-600 disabled:bg-gray-400 text-white py-5 rounded-3xl font-black text-lg shadow-xl shadow-indigo-100 hover:bg-indigo-700 hover:-translate-y-1 transition-all flex items-center justify-center gap-3 active:scale-95"
             >
-              {mode === 'register' ? (
-                <><Sparkles size={24} /> Create Store Account</>
+              {isLoading ? (
+                <Loader2 className="animate-spin" size={24} />
               ) : (
-                <><ShieldCheck size={24} /> Log In to Store</>
+                <>
+                  {mode === 'register' ? (
+                    <><Sparkles size={24} /> Create Store Account</>
+                  ) : (
+                    <><ShieldCheck size={24} /> Log In to Store</>
+                  )}
+                  <ArrowRight size={24} />
+                </>
               )}
-              <ArrowRight size={24} />
             </button>
 
             <button 

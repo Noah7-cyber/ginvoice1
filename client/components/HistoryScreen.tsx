@@ -28,11 +28,14 @@ interface HistoryScreenProps {
   business: BusinessProfile;
   onDeleteTransaction: (id: string, restockItems: boolean) => void;
   onUpdateTransaction: (transaction: Transaction) => void;
+  isSubscriptionExpired?: boolean;
+  onRenewSubscription?: () => void;
+  isReadOnly?: boolean;
 }
 
 type ViewMode = 'invoices' | 'debtors';
 
-const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, onDeleteTransaction, onUpdateTransaction }) => {
+const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, onDeleteTransaction, onUpdateTransaction, isSubscriptionExpired, onRenewSubscription, isReadOnly }) => {
   const { addToast } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>('invoices');
   const [searchTerm, setSearchTerm] = useState('');
@@ -99,6 +102,43 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
+      {isSubscriptionExpired && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 duration-300">
+            <div className="p-8 text-center space-y-6">
+              <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertCircle size={40} className="text-red-500" />
+              </div>
+
+              <div className="space-y-2">
+                <h2 className="text-2xl font-black text-gray-900">Subscription Expired</h2>
+                <p className="text-gray-500 font-medium text-sm leading-relaxed">
+                  Your free trial has ended. Please renew your subscription to continue managing your business effectively.
+                </p>
+              </div>
+
+              <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 text-left space-y-3">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-500 font-medium">Plan</span>
+                  <span className="font-bold text-gray-900">Professional Monthly</span>
+                </div>
+                <div className="pt-3 border-t flex justify-between items-center">
+                  <span className="font-black text-gray-900">Amount Due</span>
+                  <span className="font-black text-xl text-primary">{CURRENCY}2,000</span>
+                </div>
+              </div>
+
+              <button
+                onClick={onRenewSubscription}
+                className="w-full py-4 bg-primary text-white rounded-xl font-black text-lg shadow-xl shadow-indigo-200 hover:opacity-90 transition-all active:scale-95 flex items-center justify-center gap-2"
+              >
+                Pay Subscription Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header & View Toggle */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
@@ -225,8 +265,12 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
                       ) : (
                         <>
                           <button onClick={() => setSelectedInvoice(t)} className="p-2 text-indigo-600 bg-indigo-50 rounded-lg"><FileText size={18} /></button>
-                          <button onClick={() => handleEditClick(t)} className="p-2 text-gray-400 hover:text-indigo-600 rounded-lg"><Edit3 size={18} /></button>
-                          <button onClick={() => handleDelete(t)} className="p-2 text-gray-400 hover:text-red-600 rounded-lg"><Trash2 size={18} /></button>
+                          {!isReadOnly && (
+                            <>
+                              <button onClick={() => handleEditClick(t)} className="p-2 text-gray-400 hover:text-indigo-600 rounded-lg"><Edit3 size={18} /></button>
+                              <button onClick={() => handleDelete(t)} className="p-2 text-gray-400 hover:text-red-600 rounded-lg"><Trash2 size={18} /></button>
+                            </>
+                          )}
                         </>
                       )}
                     </div>

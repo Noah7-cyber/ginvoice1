@@ -102,6 +102,38 @@ export const fetchRemoteState = async () => {
   });
 };
 
+export const deleteExpenditure = async (id: string) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request(`/api/sync/expenditures/${id}`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+};
+
+export const updateExpenditure = async (expenditure: any) => {
+  // We can use the sync endpoint or a dedicated PUT if it existed.
+  // Given the backend sync logic handles updates via POST /api/sync with an array, we can use that.
+  // However, the prompt implies "backend has PUT and DELETE endpoints".
+  // Let's assume PUT /api/sync/expenditures/:id or check routes.
+  // Actually, looking at server/src/routes/sync.js, there is NO PUT /expenditures/:id.
+  // There is only POST / which handles bulk updates.
+  // But wait, the user prompt said: "The backend has PUT and DELETE endpoints for expenditures".
+  // Let me check `server/src/routes/expenditures.js`!
+  // I only checked `sync.js` before.
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request(`/api/expenditures/${expenditure.id}`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(expenditure)
+  });
+};
+
 const api = {
   get: async (url: string) => {
     const token = loadAuthToken();
@@ -187,15 +219,22 @@ export const verifyPayment = async (reference: string) => {
 
 export const initializePayment = async (amount: number, email: string) => {
   const token = loadAuthToken();
-  if (!token) throw new Error('Missing auth token');
+  if (!token) throw new Error('Missing auth token. Please login again.');
 
-  return request('/api/payments/initialize', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`
-    },
-    body: JSON.stringify({ amount, email })
-  });
+  try {
+    return await request('/api/payments/initialize', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ amount, email })
+    });
+  } catch (err: any) {
+    if (err.status === 401) {
+      throw new Error('Session expired. Please login again.');
+    }
+    throw err;
+  }
 };
 
 export const deleteProduct = async (id: string) => {
