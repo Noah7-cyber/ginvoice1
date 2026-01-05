@@ -148,6 +148,8 @@ router.post('/', auth, async (req, res) => {
                 productId: item.productId,
                 productName: item.productName,
                 quantity: item.quantity,
+                unit: item.selectedUnit ? item.selectedUnit.name : (item.unit || undefined),
+                multiplier: item.selectedUnit ? item.selectedUnit.multiplier : (item.multiplier || 1),
                 unitPrice: toDecimal(item.unitPrice),
                 discount: toDecimal(item.discount),
                 total: toDecimal(item.total)

@@ -1,0 +1,44 @@
+{
+  "short_name": "Ginvoice",
+  "name": "Ginvoice Market OS",
+  "description": "The complete inventory and invoicing operating system for Nigerian traders. Manage sales, track inventory, and issue receipts offline.",
+  "categories": ["business", "productivity", "finance"],
+  "icons": [
+    {
+      "src": "/ginvoice-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/ginvoice-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "id": "/",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#4f46e5",
+  "background_color": "#ffffff",
+  "lang": "en",
+  "dir": "ltr",
+  "screenshots": [
+    {
+      "src": "/screenshot-mobile.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Mobile Dashboard"
+    },
+    {
+      "src": "/screenshot-desktop.png",
+      "sizes": "1920x1080",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Desktop Overview"
+    }
+  ]
+}

@@ -1,4 +1,3 @@
-
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
@@ -19,34 +18,29 @@ root.render(
   </React.StrictMode>
 );
 
-// PWA Service Worker Registration
+// PWA Service Worker Registration - IMPROVED FOR STORE DETECTION
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js')
-      .then((registration) => {
-        console.log('SW registered: ', registration);
-        
-        // Check for updates
-        registration.onupdatefound = () => {
-          const installingWorker = registration.installing;
-          if (installingWorker == null) return;
-          installingWorker.onstatechange = () => {
-            if (installingWorker.state === 'installed') {
-              if (navigator.serviceWorker.controller) {
-                // New content is available; please refresh.
-                // We skip the prompt and auto-reload for a seamless "no-hard-refresh" feel.
-                console.log('New content is available; auto-reloading for updates...');
-                window.location.reload();
-              } else {
-                // Content is cached for offline use.
-                console.log('Content is cached for offline use.');
-              }
+  // We register immediately (no 'load' event wait) to satisfy PWABuilder scanners
+  navigator.serviceWorker.register('/sw.js')
+    .then((registration) => {
+      console.log('SW registered: ', registration);
+
+      registration.onupdatefound = () => {
+        const installingWorker = registration.installing;
+        if (installingWorker == null) return;
+        installingWorker.onstatechange = () => {
+          if (installingWorker.state === 'installed') {
+            if (navigator.serviceWorker.controller) {
+              console.log('New content available; auto-reloading...');
+              window.location.reload();
+            } else {
+              console.log('Content is cached for offline use.');
             }
-          };
+          }
         };
-      })
-      .catch((registrationError) => {
-        console.log('SW registration failed: ', registrationError);
-      });
-  });
+      };
+    })
+    .catch((error) => {
+      console.error('SW registration failed: ', error);
+    });
 }

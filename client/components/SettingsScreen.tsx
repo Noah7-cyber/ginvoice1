@@ -89,13 +89,21 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
     }
   };
 
-  // Added stock-management to the permission list
   const PERMISSION_OPTIONS: { id: string; label: string; desc: string }[] = [
-    { id: 'sales', label: 'Point of Sale', desc: 'Can register new transactions' },
-    { id: 'inventory', label: 'Inventory Access', desc: 'Can view stock levels' },
-    { id: 'stock-management', label: 'Stock Management', desc: 'Allow staff to modify/edit stock levels' },
-    { id: 'history', label: 'Billing Records', desc: 'Can see previous invoices' },
-    { id: 'dashboard', label: 'Analytics (Restricted)', desc: 'Can see sales summaries' },
+    { id: 'sales', label: 'Point of Sale', desc: 'Process new sales' },
+
+    // Split Inventory
+    { id: 'inventory', label: 'Inventory (View)', desc: 'View stock levels and prices' },
+    { id: 'stock-management', label: 'Inventory (Edit)', desc: 'Add, edit, or delete products' },
+
+    // Split History (Billing)
+    { id: 'history', label: 'History (View)', desc: 'View past transactions and receipts' },
+    { id: 'history-management', label: 'History (Edit)', desc: 'Delete or modify past records' },
+
+    // Add Missing Expenditure
+    { id: 'expenditure', label: 'Expenditures', desc: 'Manage business expenses' },
+
+    { id: 'dashboard', label: 'Analytics', desc: 'View sales performance' },
   ];
 
   return (

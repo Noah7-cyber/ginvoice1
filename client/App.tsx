@@ -39,18 +39,7 @@ const App: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const wasOnlineRef = useRef(navigator.onLine);
   
-  const [subscriptionLocked, setSubscriptionLocked] = useState(() => {
-    try {
-      const cached = localStorage.getItem('ginvoice_entitlements_v1');
-      if (!cached) return false;
-      const parsed = JSON.parse(cached);
-      const trialExpired = parsed?.trialEndsAt ? new Date(parsed.trialEndsAt) < new Date() : false;
-      const isFree = parsed?.plan === 'FREE';
-      return Boolean(isFree && trialExpired);
-    } catch {
-      return false;
-    }
-  });
+  const [subscriptionLocked, setSubscriptionLocked] = useState(false);
 
   const [entitlements, setEntitlements] = useState<{
     plan: 'FREE' | 'PRO';
@@ -133,6 +122,11 @@ const App: React.FC = () => {
     setIsSyncing(false);
   }, [state]);
 
+  const handleLogout = useCallback(() => {
+    clearAuthToken();
+    setState(prev => ({ ...prev, isLoggedIn: false }));
+  }, []);
+
   const fetchEntitlements = useCallback(async () => {
     if (!navigator.onLine) return;
     try {
@@ -148,10 +142,10 @@ const App: React.FC = () => {
       const trialExpired = data.trialEndsAt ? new Date(data.trialEndsAt) < new Date() : false;
       if (data.plan === 'FREE' && trialExpired) {
         if (!subscriptionLocked) {
+          // Transitioning from Valid -> Expired
           setSubscriptionLocked(true);
-          setActiveTab('history');
-          addToast('Your subscription has expired. Please complete payment to continue.', 'error');
-          openPaymentLink();
+          addToast('Your subscription has expired. Session ended for security.', 'error');
+          handleLogout(); // Auto-logout on new expiry detection
         }
       } else if (subscriptionLocked) {
         setSubscriptionLocked(false);
@@ -159,7 +153,7 @@ const App: React.FC = () => {
     } catch (err) {
       console.error('Entitlements fetch failed', err);
     }
-  }, [subscriptionLocked, addToast]);
+  }, [subscriptionLocked, addToast, handleLogout]);
 
   // Sync optimization: Only sync when transitioning from offline to online
   useEffect(() => {
@@ -198,6 +192,12 @@ const App: React.FC = () => {
   useEffect(() => {
     wasOnlineRef.current = isOnline;
   }, [isOnline]);
+
+  useEffect(() => {
+    if (state.isLoggedIn && navigator.onLine) {
+      fetchEntitlements();
+    }
+  }, [state.isLoggedIn]); // Removed fetchEntitlements dependency to avoid loops if it changes
 
   const openPaymentLink = useCallback(async () => {
     if (!navigator.onLine) {
@@ -358,18 +358,13 @@ const App: React.FC = () => {
         const response = await login(state.business.email, pin, selectedRole);
         saveAuthToken(response.token);
         setState(prev => ({ ...prev, role: response.role, isLoggedIn: true, business: { ...prev.business, ...response.business } }));
-        setActiveTab('sales');
+        setActiveTab('history'); // Default to History for safety
         return true;
       }
     } catch (err) {
       console.error('Login failed', err);
     }
     return false;
-  };
-
-  const handleLogout = () => {
-    clearAuthToken();
-    setState(prev => ({ ...prev, isLoggedIn: false }));
   };
 
   const handleDeleteTransaction = async (id: string, restockItems: boolean) => {
@@ -454,6 +449,9 @@ const App: React.FC = () => {
     }
   };
 
+  const canManageStock = state.role === 'owner' || state.business.staffPermissions.includes('stock-management');
+  const canManageHistory = state.role === 'owner' || state.business.staffPermissions.includes('history-management');
+
   const allowedTabs = useMemo(() => {
     // Robust check for subscription status using both entitlements and persisted state
     const hasPro = entitlements?.plan === 'PRO' || state.business.isSubscribed;
@@ -468,9 +466,25 @@ const App: React.FC = () => {
 
     if (!hasPro && !trialActive) return ['history'] as TabId[];
     
-    const ownerTabs: TabId[] = ['sales', 'inventory', 'history', 'dashboard', 'expenditure', 'settings'];
-    return state.role === 'owner' ? ownerTabs : Array.from(new Set(['sales', 'history', ...state.business.staffPermissions])) as TabId[];
+    // Page IDs that actually exist in the UI
+    const PAGE_IDS: TabId[] = ['sales', 'inventory', 'history', 'expenditure', 'dashboard', 'settings'];
+
+    const ownerTabs = PAGE_IDS;
+
+    if (state.role === 'owner') return ownerTabs;
+
+    // Filter staff permissions to only include valid page IDs
+    // 'sales' is always allowed for staff
+    const staffTabs = ['sales', ...state.business.staffPermissions.filter((p: string) => PAGE_IDS.includes(p as TabId))];
+    return Array.from(new Set(staffTabs)) as TabId[];
   }, [state.role, state.business.staffPermissions, entitlements, state.business.trialEndsAt, state.business.isSubscribed]);
+
+  // Force redirection to allowed tabs if current tab is forbidden
+  useEffect(() => {
+    if (allowedTabs.length > 0 && !allowedTabs.includes(activeTab)) {
+      setActiveTab(allowedTabs[0]);
+    }
+  }, [allowedTabs, activeTab]);
 
   if (!state.isRegistered) return <RegistrationScreen onRegister={handleRegister} onManualLogin={handleManualLogin} onForgotPassword={() => setView('forgot-password')} />;
   if (!state.isLoggedIn) return <AuthScreen onLogin={handleLogin} onForgotPassword={() => setView('forgot-password')} onResetBusiness={() => setState(prev => ({...prev, isRegistered: false}))} business={state.business} />;
@@ -486,7 +500,7 @@ const App: React.FC = () => {
           </div>
           <div className="mt-4 flex items-center gap-2 text-[10px] font-bold uppercase opacity-60">
             {isOnline ? <Wifi size={12} className="text-emerald-400" /> : <WifiOff size={12} className="text-orange-400" />}
-            {isOnline ? 'Cloud Sync Active' : 'Offline Mode'}
+            {isOnline ? (isSyncing ? <RefreshCw size={12} className="animate-spin text-white" /> : 'Cloud Sync Active') : 'Offline Mode'}
           </div>
         </div>
         <nav className="flex-1 px-4 py-4 space-y-1">
@@ -515,6 +529,7 @@ const App: React.FC = () => {
             <span>{state.role} Mode</span> <span className="opacity-30">/</span> <span>{activeTab}</span>
           </div>
           <div className="flex items-center gap-2">
+            {isSyncing && <RefreshCw className="animate-spin text-gray-400 mr-2" size={20} />}
             <button onClick={handleLogout} className="md:hidden p-2 text-gray-400 hover:text-red-500">
               <LogOut size={24} />
             </button>
@@ -527,8 +542,25 @@ const App: React.FC = () => {
         
         <div className="flex-1 overflow-y-auto p-4 md:p-8">
           {activeTab === 'sales' && <SalesScreen products={state.products} onAddToCart={addToCart} />}
-          {activeTab === 'inventory' && <InventoryScreen products={state.products} onUpdateProducts={handleUpdateProducts} isOwner={state.role === 'owner'} />}
-          {activeTab === 'history' && <HistoryScreen transactions={state.transactions} business={state.business} onDeleteTransaction={handleDeleteTransaction} onUpdateTransaction={t => setState(prev => ({ ...prev, transactions: prev.transactions.map(tx => tx.id === t.id ? t : tx) }))} />}
+          {activeTab === 'inventory' && (
+            <InventoryScreen
+              products={state.products}
+              onUpdateProducts={handleUpdateProducts}
+              isOwner={state.role === 'owner'}
+              isReadOnly={!canManageStock}
+            />
+          )}
+          {activeTab === 'history' && (
+            <HistoryScreen
+              transactions={state.transactions}
+              business={state.business}
+              onDeleteTransaction={handleDeleteTransaction}
+              onUpdateTransaction={t => setState(prev => ({ ...prev, transactions: prev.transactions.map(tx => tx.id === t.id ? t : tx) }))}
+              isSubscriptionExpired={subscriptionLocked}
+              onRenewSubscription={openPaymentLink}
+              isReadOnly={!canManageHistory}
+            />
+          )}
           {activeTab === 'dashboard' && state.role === 'owner' && <DashboardScreen transactions={state.transactions} products={state.products} />}
           {activeTab === 'expenditure' && (
             <ExpenditureScreen
