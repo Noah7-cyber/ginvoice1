@@ -145,10 +145,10 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onForgotPassword, onRe
 
               <button 
                 type="submit"
-                disabled={!navigator.onLine}
+                disabled={!navigator.onLine || isLoading}
                 className="w-full bg-indigo-600 disabled:bg-gray-400 text-white py-4 rounded-2xl font-black shadow-lg hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-2"
               >
-                Access Store <ArrowRight size={18} />
+                {isLoading ? <Loader2 className="animate-spin" size={24} /> : <>Access Store <ArrowRight size={18} /></>}
               </button>
             </div>
 

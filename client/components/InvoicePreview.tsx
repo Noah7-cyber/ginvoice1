@@ -4,6 +4,9 @@ import { Transaction, BusinessProfile } from '../types';
 import { CURRENCY } from '../constants';
 import { ShoppingBag, Printer, Share2, X, Download, Tag } from 'lucide-react';
 import { useToast } from './ToastProvider';
+import { sharePdfBlob } from '../services/pdf';
+// @ts-ignore
+import html2pdf from 'html2pdf.js';
 
 interface InvoicePreviewProps {
   transaction: Transaction;
@@ -18,19 +21,25 @@ const InvoicePreview: React.FC<InvoicePreviewProps> = ({ transaction, business, 
   };
 
   const handleShare = async () => {
-    const shareText = `Invoice from ${business.name}\nCustomer: ${transaction.customerName}\nTotal: ${CURRENCY}${transaction.totalAmount.toLocaleString()}\nID: ${transaction.id}`;
-    
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: `Invoice - ${transaction.id}`,
-          text: shareText,
-          url: window.location.href, 
-        });
-      } catch (err) {
-        console.log('Error sharing:', err);
-      }
-    } else {
+    try {
+      const element = document.getElementById('invoice-content');
+      const opt = {
+        margin: 10,
+        filename: `invoice-${transaction.id}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      // Generate and Share
+      const blob = await html2pdf().set(opt).from(element).output('blob');
+      await sharePdfBlob(blob, opt.filename);
+    } catch (error) {
+      console.error('PDF Share Error:', error);
+      addToast('Failed to generate/share PDF. Trying clipboard...', 'error');
+
+      // Fallback
+      const shareText = `Invoice from ${business.name}\nCustomer: ${transaction.customerName}\nTotal: ${CURRENCY}${transaction.totalAmount.toLocaleString()}\nID: ${transaction.id}`;
       navigator.clipboard.writeText(shareText);
       addToast('Invoice details copied to clipboard!', 'success');
     }

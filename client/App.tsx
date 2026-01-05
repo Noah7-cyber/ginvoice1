@@ -500,7 +500,7 @@ const App: React.FC = () => {
           </div>
           <div className="mt-4 flex items-center gap-2 text-[10px] font-bold uppercase opacity-60">
             {isOnline ? <Wifi size={12} className="text-emerald-400" /> : <WifiOff size={12} className="text-orange-400" />}
-            {isOnline ? 'Cloud Sync Active' : 'Offline Mode'}
+            {isOnline ? (isSyncing ? <RefreshCw size={12} className="animate-spin text-white" /> : 'Cloud Sync Active') : 'Offline Mode'}
           </div>
         </div>
         <nav className="flex-1 px-4 py-4 space-y-1">
@@ -529,6 +529,7 @@ const App: React.FC = () => {
             <span>{state.role} Mode</span> <span className="opacity-30">/</span> <span>{activeTab}</span>
           </div>
           <div className="flex items-center gap-2">
+            {isSyncing && <RefreshCw className="animate-spin text-gray-400 mr-2" size={20} />}
             <button onClick={handleLogout} className="md:hidden p-2 text-gray-400 hover:text-red-500">
               <LogOut size={24} />
             </button>
