@@ -16,7 +16,8 @@ interface InventoryScreenProps {
 
 const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdateProducts, isOwner, isReadOnly }) => {
   // Ensure Owner is NEVER Read-Only. Staff is Read-Only if they lack 'stock-management'.
-  const effectiveReadOnly = isOwner ? false : isReadOnly;
+  // Ensure Owner is NEVER Read-Only to prevent parent prop errors
+  const safeReadOnly = isOwner ? false : isReadOnly;
   const { addToast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
@@ -63,6 +64,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   };
 
   const applyBulkUpdates = () => {
+    if (safeReadOnly) return;
     const updatedProducts = products.map(p => {
       if (selectedIds.has(p.id)) {
         let updated = { ...p };
@@ -95,6 +97,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
   const handleAddProduct = (e: React.FormEvent) => {
     e.preventDefault();
+    if (safeReadOnly) return;
     if (editingProductId) {
       const updatedProducts = products.map(p => p.id === editingProductId ? { ...(newProduct as Product), id: p.id } : p);
       onUpdateProducts(updatedProducts);
@@ -124,6 +127,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   };
 
   const handleDeleteProduct = async (id: string) => {
+    if (safeReadOnly) return;
     if (!navigator.onLine) {
       addToast('Delete requires an internet connection.', 'error');
       return;
@@ -146,7 +150,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
           <p className="text-gray-500">Track and manage your warehouse stock</p>
         </div>
         <div className="flex gap-2">
-          {selectedIds.size > 0 && !effectiveReadOnly && (
+          {selectedIds.size > 0 && !safeReadOnly && (
             <button 
               onClick={() => setIsBulkEditOpen(true)}
               className="bg-indigo-50 text-indigo-700 px-6 py-3 rounded-xl flex items-center gap-2 font-bold border border-indigo-200 hover:bg-indigo-100 transition-all"
@@ -154,7 +158,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
               <ListTodo size={20} /> Bulk Update ({selectedIds.size})
             </button>
           )}
-          {!effectiveReadOnly && (
+          {!safeReadOnly && (
             <button 
               onClick={() => setIsModalOpen(true)}
               className="bg-primary text-white px-6 py-3 rounded-xl flex items-center gap-2 font-bold shadow-lg shadow-indigo-100 hover:opacity-90 transition-all active:scale-95"
@@ -245,7 +249,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   {CURRENCY}{(product.sellingPrice || 0).toLocaleString()}
 </td>
                   <td className="px-6 py-4">
-                    {!effectiveReadOnly && (
+                    {!safeReadOnly && (
                       <div className="flex gap-2">
                         <button
                           onClick={() => {
@@ -305,25 +309,27 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                  </div>
              </div>
 
-             <div className="flex justify-end gap-2 border-t pt-3 mt-1">
-                 <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEditingProductId(product.id);
-                      setNewProduct({ ...product });
-                      setIsModalOpen(true);
-                    }}
-                    className="px-3 py-2 bg-gray-100 text-gray-600 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-gray-200"
-                  >
-                    <Edit3 size={14} /> Edit
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.id); }}
-                    className="px-3 py-2 bg-red-50 text-red-600 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-red-100"
-                  >
-                    <Trash2 size={14} /> Delete
-                  </button>
-             </div>
+             {!safeReadOnly && (
+               <div className="flex justify-end gap-2 border-t pt-3 mt-1">
+                   <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingProductId(product.id);
+                        setNewProduct({ ...product });
+                        setIsModalOpen(true);
+                      }}
+                      className="px-3 py-2 bg-gray-100 text-gray-600 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-gray-200"
+                    >
+                      <Edit3 size={14} /> Edit
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.id); }}
+                      className="px-3 py-2 bg-red-50 text-red-600 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-red-100"
+                    >
+                      <Trash2 size={14} /> Delete
+                    </button>
+               </div>
+             )}
           </div>
         ))}
       </div>
