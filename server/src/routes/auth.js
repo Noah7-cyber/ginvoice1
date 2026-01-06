@@ -11,7 +11,7 @@ const { sendMail } = require('../services/mail');
 const router = express.Router();
 
 const buildToken = (businessId, role) => {
-  return jwt.sign({ businessId, role }, process.env.JWT_SECRET || '', { expiresIn: '30d' });
+  return jwt.sign({ businessId, role }, process.env.JWT_SECRET || '', { expiresIn: '7d' });
 };
 
 const sanitizeBusiness = (business) => ({
