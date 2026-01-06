@@ -100,10 +100,19 @@ const App: React.FC = () => {
   const [signature, setSignature] = useState<string>('');
   const [isLocked, setIsLocked] = useState(false);
 
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
   const triggerSync = useCallback(async () => {
     if (!navigator.onLine) return;
+
+    const currentState = stateRef.current;
+    if (!currentState.isLoggedIn) return;
+
     setIsSyncing(true);
-    const result = await syncWithBackend(state);
+    const result = await syncWithBackend(currentState);
     if (result) {
       if (typeof result === 'string') {
         // Legacy handling if backend only returned string (timestamp)
@@ -120,7 +129,7 @@ const App: React.FC = () => {
       }
     }
     setIsSyncing(false);
-  }, [state]);
+  }, []);
 
   const handleLogout = useCallback(() => {
     clearAuthToken();
@@ -240,16 +249,14 @@ const App: React.FC = () => {
 
   useEffect(() => { saveState(state); }, [state]);
 
-  // Auto-sync every 10 minutes
+  // Auto-sync every 20 seconds
   useEffect(() => {
     const intervalId = setInterval(() => {
-      if (state.isLoggedIn) {
-        triggerSync();
-      }
-    }, 60 * 1000); // Change to 1 minute
+      triggerSync();
+    }, 20 * 1000); // 20 seconds
 
     return () => clearInterval(intervalId);
-  }, [state.isLoggedIn, triggerSync]);
+  }, [triggerSync]);
 
   const handleAddExpenditure = (newExpenditure: Expenditure) => {
     setState(prev => {
