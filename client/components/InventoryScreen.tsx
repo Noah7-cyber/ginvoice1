@@ -15,6 +15,8 @@ interface InventoryScreenProps {
 }
 
 const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdateProducts, isOwner, isReadOnly }) => {
+  // Ensure Owner is NEVER Read-Only. Staff is Read-Only if they lack 'stock-management'.
+  const effectiveReadOnly = isOwner ? false : isReadOnly;
   const { addToast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
@@ -144,7 +146,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
           <p className="text-gray-500">Track and manage your warehouse stock</p>
         </div>
         <div className="flex gap-2">
-          {selectedIds.size > 0 && !isReadOnly && (
+          {selectedIds.size > 0 && !effectiveReadOnly && (
             <button 
               onClick={() => setIsBulkEditOpen(true)}
               className="bg-indigo-50 text-indigo-700 px-6 py-3 rounded-xl flex items-center gap-2 font-bold border border-indigo-200 hover:bg-indigo-100 transition-all"
@@ -152,7 +154,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
               <ListTodo size={20} /> Bulk Update ({selectedIds.size})
             </button>
           )}
-          {!isReadOnly && (
+          {!effectiveReadOnly && (
             <button 
               onClick={() => setIsModalOpen(true)}
               className="bg-primary text-white px-6 py-3 rounded-xl flex items-center gap-2 font-bold shadow-lg shadow-indigo-100 hover:opacity-90 transition-all active:scale-95"
@@ -243,7 +245,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   {CURRENCY}{(product.sellingPrice || 0).toLocaleString()}
 </td>
                   <td className="px-6 py-4">
-                    {!isReadOnly && (
+                    {!effectiveReadOnly && (
                       <div className="flex gap-2">
                         <button
                           onClick={() => {
