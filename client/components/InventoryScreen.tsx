@@ -144,7 +144,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
           <p className="text-gray-500">Track and manage your warehouse stock</p>
         </div>
         <div className="flex gap-2">
-          {selectedIds.size > 0 && isOwner && (
+          {selectedIds.size > 0 && !isReadOnly && (
             <button 
               onClick={() => setIsBulkEditOpen(true)}
               className="bg-indigo-50 text-indigo-700 px-6 py-3 rounded-xl flex items-center gap-2 font-bold border border-indigo-200 hover:bg-indigo-100 transition-all"
@@ -152,7 +152,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
               <ListTodo size={20} /> Bulk Update ({selectedIds.size})
             </button>
           )}
-          {isOwner && !isReadOnly && (
+          {!isReadOnly && (
             <button 
               onClick={() => setIsModalOpen(true)}
               className="bg-primary text-white px-6 py-3 rounded-xl flex items-center gap-2 font-bold shadow-lg shadow-indigo-100 hover:opacity-90 transition-all active:scale-95"
@@ -255,7 +255,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                         >
                           <Edit3 size={18} />
                         </button>
-                        {isOwner && <button onClick={() => handleDeleteProduct(product.id)} className="p-2 text-gray-400 hover:text-red-500"><Trash2 size={18} /></button>}
+                        <button onClick={() => handleDeleteProduct(product.id)} className="p-2 text-gray-400 hover:text-red-500"><Trash2 size={18} /></button>
                       </div>
                     )}
                   </td>
@@ -315,14 +315,12 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                   >
                     <Edit3 size={14} /> Edit
                   </button>
-                  {isOwner && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.id); }}
-                      className="px-3 py-2 bg-red-50 text-red-600 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-red-100"
-                    >
-                      <Trash2 size={14} /> Delete
-                    </button>
-                  )}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.id); }}
+                    className="px-3 py-2 bg-red-50 text-red-600 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-red-100"
+                  >
+                    <Trash2 size={14} /> Delete
+                  </button>
              </div>
           </div>
         ))}

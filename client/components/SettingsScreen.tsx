@@ -1,8 +1,8 @@
 import React, { useState, useRef } from 'react';
-import { Store, Save, LayoutGrid, MapPin, Phone, Palette, Type, ShieldAlert, CheckCircle2, RefreshCw, CloudCheck, Upload, Trash2, Image as ImageIcon, MessageSquare, HeadphonesIcon, HelpCircle, Lock, LogOut } from 'lucide-react';
+import { Store, Save, LayoutGrid, MapPin, Phone, Palette, Type, ShieldAlert, CheckCircle2, RefreshCw, CloudCheck, Upload, Trash2, Image as ImageIcon, MessageSquare, HeadphonesIcon, HelpCircle, Lock, LogOut, AlertTriangle, X } from 'lucide-react';
 import { BusinessProfile, TabId } from '../types';
 import { THEME_COLORS, FONTS } from '../constants';
-import { verifyPayment, changeBusinessPins } from '../services/api';
+import { verifyPayment, changeBusinessPins, deleteAccount } from '../services/api';
 import SupportBot from './SupportBot'; // Integrated SupportBot
 
 interface SettingsScreenProps {
@@ -25,6 +25,12 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
   const [newStaffPin, setNewStaffPin] = useState('');
   const [newOwnerPin, setNewOwnerPin] = useState('');
   const [securityMsg, setSecurityMsg] = useState('');
+
+  // Delete Account State
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [confirmBusinessName, setConfirmBusinessName] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -86,6 +92,24 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
       setTimeout(() => setSecurityMsg(''), 3000);
     } catch (err: any) {
       setSecurityMsg(err.message || 'Failed to update PINs');
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (confirmBusinessName !== business.name) {
+      setDeleteError('Business name does not match');
+      return;
+    }
+
+    setIsDeleting(true);
+    setDeleteError('');
+
+    try {
+      await deleteAccount(confirmBusinessName);
+      if (onLogout) onLogout();
+    } catch (err: any) {
+      setDeleteError(err.message || 'Failed to delete account');
+      setIsDeleting(false);
     }
   };
 
@@ -263,6 +287,23 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
           </div>
         </div>
 
+        {/* Danger Zone */}
+        <div className="bg-red-50 rounded-3xl shadow-sm border border-red-100 p-6 md:p-8 space-y-6">
+           <h2 className="text-lg font-bold flex items-center gap-2 text-red-600"><AlertTriangle className="text-red-600" /> Danger Zone</h2>
+           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+             <p className="text-sm text-red-800">
+               Deleting your business account will permanently remove all data, including products, transactions, and settings. This action cannot be undone.
+             </p>
+             <button
+               type="button"
+               onClick={() => setShowDeleteModal(true)}
+               className="bg-white border-2 border-red-200 text-red-600 px-6 py-3 rounded-xl font-bold hover:bg-red-600 hover:text-white transition-all whitespace-nowrap"
+             >
+               Delete Business
+             </button>
+           </div>
+        </div>
+
         {/* Action Button */}
         <div className="flex items-center justify-between bg-white p-6 rounded-3xl shadow-lg border-t-4 border-primary mt-8">
           <div>{showSaved && <p className="text-green-600 font-bold animate-bounce">✓ Changes saved!</p>}</div>
@@ -278,6 +319,48 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
           </div>
         </div>
       </form>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-6">
+            <div className="flex justify-between items-center">
+              <h3 className="text-xl font-black text-red-600">Delete Account?</h3>
+              <button onClick={() => setShowDeleteModal(false)}><X className="text-gray-400" /></button>
+            </div>
+
+            <p className="text-sm text-gray-600 font-medium">
+              To confirm deletion, please type your business name <span className="font-bold select-all">"{business.name}"</span> below.
+            </p>
+
+            <input
+              type="text"
+              placeholder={business.name}
+              className="w-full px-4 py-3 bg-red-50 border-2 border-red-100 rounded-xl font-bold text-red-900 placeholder-red-200 focus:outline-none focus:border-red-500"
+              value={confirmBusinessName}
+              onChange={(e) => setConfirmBusinessName(e.target.value)}
+            />
+
+            {deleteError && <p className="text-xs font-bold text-red-500">{deleteError}</p>}
+
+            <div className="flex gap-4">
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteAccount}
+                disabled={isDeleting || confirmBusinessName !== business.name}
+                className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isDeleting ? 'Deleting...' : 'Confirm Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

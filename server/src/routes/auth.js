@@ -3,6 +3,9 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
 const Business = require('../models/Business');
+const Product = require('../models/Product');
+const Transaction = require('../models/Transaction');
+const Expenditure = require('../models/Expenditure');
 const { sendMail } = require('../services/mail');
 
 const router = express.Router();
@@ -201,6 +204,38 @@ router.put('/change-pins', require('../middleware/auth'), async (req, res) => {
     return res.json({ message: 'PINs updated successfully' });
   } catch (err) {
     return res.status(500).json({ message: 'Failed to update PINs' });
+  }
+});
+
+router.delete('/delete-account', require('../middleware/auth'), async (req, res) => {
+  try {
+    const { businessName } = req.body;
+
+    // Only owner can delete
+    if (req.userRole !== 'owner') {
+      return res.status(403).json({ message: 'Only the owner can delete the business account' });
+    }
+
+    const business = await Business.findById(req.businessId);
+    if (!business) {
+      return res.status(404).json({ message: 'Business not found' });
+    }
+
+    // Verify name match
+    if (business.name !== businessName) {
+      return res.status(400).json({ message: 'Business name does not match' });
+    }
+
+    // Delete all data
+    await Product.deleteMany({ business: req.businessId });
+    await Transaction.deleteMany({ business: req.businessId });
+    await Expenditure.deleteMany({ business: req.businessId });
+    await Business.findByIdAndDelete(req.businessId);
+
+    return res.json({ message: 'Account and all data deleted successfully' });
+  } catch (err) {
+    console.error('Delete account error:', err);
+    return res.status(500).json({ message: 'Failed to delete account' });
   }
 });
 

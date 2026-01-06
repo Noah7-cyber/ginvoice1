@@ -475,7 +475,22 @@ const App: React.FC = () => {
 
     // Filter staff permissions to only include valid page IDs
     // 'sales' is always allowed for staff
-    const staffTabs = ['sales', ...state.business.staffPermissions.filter((p: string) => PAGE_IDS.includes(p as TabId))];
+    const staffTabs: string[] = ['sales'];
+
+    // Map permissions to tabs
+    if (state.business.staffPermissions.includes('inventory') || state.business.staffPermissions.includes('stock-management')) {
+      staffTabs.push('inventory');
+    }
+    if (state.business.staffPermissions.includes('history') || state.business.staffPermissions.includes('history-management')) {
+      staffTabs.push('history');
+    }
+    if (state.business.staffPermissions.includes('expenditure')) {
+      staffTabs.push('expenditure');
+    }
+    if (state.business.staffPermissions.includes('dashboard')) {
+      staffTabs.push('dashboard');
+    }
+
     return Array.from(new Set(staffTabs)) as TabId[];
   }, [state.role, state.business.staffPermissions, entitlements, state.business.trialEndsAt, state.business.isSubscribed]);
 
@@ -561,7 +576,7 @@ const App: React.FC = () => {
               isReadOnly={!canManageHistory}
             />
           )}
-          {activeTab === 'dashboard' && state.role === 'owner' && <DashboardScreen transactions={state.transactions} products={state.products} />}
+          {activeTab === 'dashboard' && (state.role === 'owner' || state.business.staffPermissions.includes('dashboard')) && <DashboardScreen transactions={state.transactions} products={state.products} />}
           {activeTab === 'expenditure' && (
             <ExpenditureScreen
               expenditures={state.expenditures}
