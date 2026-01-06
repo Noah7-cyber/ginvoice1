@@ -12,9 +12,10 @@ interface SettingsScreenProps {
   lastSynced?: string;
   isSyncing?: boolean;
   onLogout?: () => void;
+  onDeleteAccount?: () => void;
 }
 
-const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusiness, onManualSync, lastSynced, isSyncing, onLogout }) => {
+const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusiness, onManualSync, lastSynced, isSyncing, onLogout, onDeleteAccount }) => {
   const [formData, setFormData] = useState<BusinessProfile>(business);
   const [showSaved, setShowSaved] = useState(false);
   const [paymentRef, setPaymentRef] = useState('');
@@ -106,7 +107,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
 
     try {
       await deleteAccount(confirmBusinessName);
-      if (onLogout) onLogout();
+      if (onDeleteAccount) onDeleteAccount();
     } catch (err: any) {
       setDeleteError(err.message || 'Failed to delete account');
       setIsDeleting(false);

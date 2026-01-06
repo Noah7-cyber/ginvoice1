@@ -45,35 +45,44 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onM
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (mode === 'register') {
-      if (!acceptedPolicy) {
-        addToast('Please accept the Privacy Policy to continue.', 'error');
-        return;
-      }
+    setIsLoading(true);
+    try {
+      if (mode === 'register') {
+        if (!acceptedPolicy) {
+          addToast('Please accept the Privacy Policy to continue.', 'error');
+          setIsLoading(false);
+          return;
+        }
 
-      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-      // Phone validation is handled by the component somewhat, but we can verify length
-      // const phoneRegex = /^\+?[1-9]\d{6,14}$/; // PhoneInput returns clean digits usually
+        const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
-      if (formData.email && !emailRegex.test(formData.email)) {
-        addToast('Invalid email address format', 'error');
-        return;
-      }
+        if (formData.email && !emailRegex.test(formData.email)) {
+          addToast('Invalid email address format', 'error');
+          setIsLoading(false);
+          return;
+        }
 
-      if (!formData.phone || formData.phone.length < 8) {
-         addToast('Invalid phone number format', 'error');
-         return;
-      }
+        if (!formData.phone || formData.phone.length < 8) {
+          addToast('Invalid phone number format', 'error');
+          setIsLoading(false);
+          return;
+        }
 
-      if (formData.name && formData.phone && formData.ownerPassword && formData.staffPassword) {
-        onRegister(formData);
+        if (formData.name && formData.phone && formData.ownerPassword && formData.staffPassword) {
+          await onRegister(formData);
+        } else {
+          addToast('Please fill in all required fields', 'error');
+        }
       } else {
-        addToast('Please fill in all required fields', 'error');
+        await onManualLogin(loginData);
       }
-    } else {
-      onManualLogin(loginData);
+    } catch (err) {
+      console.error(err);
+      addToast('An error occurred. Please try again.', 'error');
+    } finally {
+      setIsLoading(false);
     }
   };
 

@@ -127,6 +127,17 @@ const App: React.FC = () => {
     setState(prev => ({ ...prev, isLoggedIn: false }));
   }, []);
 
+  const handleDeleteAccount = useCallback(() => {
+    localStorage.clear(); // Wipe all data
+    // Reset state to force the Registration Screen to appear
+    setState(prev => ({
+      ...prev,
+      isLoggedIn: false,
+      isRegistered: false,
+      business: { ...prev.business, name: '', email: '' }
+    }));
+  }, []);
+
   const fetchEntitlements = useCallback(async () => {
     if (!navigator.onLine) return;
     try {
@@ -585,7 +596,7 @@ const App: React.FC = () => {
               onEditExpenditure={handleEditExpenditure}
             />
           )}
-          {activeTab === 'settings' && state.role === 'owner' && <SettingsScreen business={state.business} onUpdateBusiness={b => setState(prev => ({ ...prev, business: b }))} onManualSync={triggerSync} lastSyncedAt={state.lastSyncedAt} onLogout={handleLogout} />}
+          {activeTab === 'settings' && state.role === 'owner' && <SettingsScreen business={state.business} onUpdateBusiness={b => setState(prev => ({ ...prev, business: b }))} onManualSync={triggerSync} lastSyncedAt={state.lastSyncedAt} onLogout={handleLogout} onDeleteAccount={handleDeleteAccount} />}
         </div>
 
         {/* Mobile Bottom Nav */}
