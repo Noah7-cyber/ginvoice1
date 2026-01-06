@@ -5,6 +5,7 @@ import { SaleItem, PaymentMethod, Transaction, Product } from '../types';
 import { CURRENCY } from '../constants';
 import { formatCurrency } from '../utils/currency';
 import SignaturePad from './SignaturePad';
+import { uploadFile } from '../services/api';
 
 interface CurrentOrderSidebarProps {
   cart: SaleItem[];
@@ -74,8 +75,26 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
     setCart(prev => prev.filter(item => item.cartId !== cartId));
   };
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
     if (cart.length === 0) return;
+
+    let finalSignature = signature;
+
+    // Try uploading signature if present and is base64
+    if (signature && signature.startsWith('data:image')) {
+      try {
+        if (navigator.onLine) {
+          const res = await fetch(signature);
+          const blob = await res.blob();
+          const file = new File([blob], 'signature.png', { type: 'image/png' });
+          finalSignature = await uploadFile(file);
+        }
+      } catch (err) {
+        console.warn('Signature upload failed, using fallback base64', err);
+        // Fallback: finalSignature remains the base64 string
+      }
+    }
+
     const transaction: Transaction = {
       id: `TX-${Date.now()}`,
       transactionDate: new Date().toISOString(),
@@ -88,7 +107,7 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
       paymentMethod,
       amountPaid: amountPaid,
       balance: balance,
-      signature,
+      signature: finalSignature,
       isSignatureLocked: isLocked,
       staffId: 'STAFF-01'
     };

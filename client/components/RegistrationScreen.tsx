@@ -4,6 +4,7 @@ import { ShoppingBag, MapPin, Phone, Mail, ArrowRight, Store, Sparkles, Upload, 
 import PhoneInput from 'react-phone-input-2';
 import 'react-phone-input-2/lib/style.css';
 import { useToast } from './ToastProvider';
+import { uploadFile, loadAuthToken } from '../services/api';
 
 interface RegistrationScreenProps {
   onRegister: (details: { name: string, address: string, phone: string, email: string, logo?: string, ownerPassword?: string, staffPassword?: string }) => Promise<void>;
@@ -34,14 +35,27 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onM
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Preview immediately
       const reader = new FileReader();
       reader.onloadend = () => {
-        setFormData({ ...formData, logo: reader.result as string });
+        setFormData(prev => ({ ...prev, logo: reader.result as string }));
       };
       reader.readAsDataURL(file);
+
+      // Try uploading if we have a token (rare in registration but good for safety)
+      if (loadAuthToken()) {
+        try {
+          if (navigator.onLine) {
+            const url = await uploadFile(file);
+            setFormData(prev => ({ ...prev, logo: url }));
+          }
+        } catch (err) {
+          console.warn('Logo upload skipped/failed (likely unauthenticated), using base64', err);
+        }
+      }
     }
   };
 
