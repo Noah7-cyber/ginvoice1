@@ -23,32 +23,32 @@ router.post('/', requireAuth, upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'No file provided' });
     }
 
-    // Optimize with Sharp
+    // 1. Optimize image buffer with sharp
     const optimizedBuffer = await sharp(req.file.buffer)
-      .resize({ width: 800, withoutEnlargement: true }) // Max width 800px
-      .jpeg({ quality: 80 }) // 80% quality
+      .resize({ width: 800, withoutEnlargement: true })
+      .jpeg({ quality: 80 })
       .toBuffer();
 
-    // Upload to Cloudinary using upload_stream
-    const uploadStream = cloudinary.uploader.upload_stream(
-      {
-        folder: 'ginvoice_uploads',
-        resource_type: 'auto'
-      },
-      (error, result) => {
-        if (error) {
-          console.error('Cloudinary upload error:', error);
-          return res.status(500).json({ error: 'Upload failed' });
-        }
-        res.json({ url: result.secure_url });
-      }
-    );
+    // 2. Wrap Cloudinary upload in a Promise to prevent 500 errors/hangs
+    const uploadToCloudinary = () => {
+      return new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          { folder: 'ginvoice_uploads' },
+          (error, result) => {
+            if (result) resolve(result.secure_url);
+            else reject(error);
+          }
+        );
+        stream.end(optimizedBuffer);
+      });
+    };
 
-    uploadStream.end(optimizedBuffer);
+    const url = await uploadToCloudinary();
+    res.json({ url });
 
   } catch (err) {
-    console.error('Upload processing error:', err);
-    res.status(500).json({ error: 'Server error during upload' });
+    console.error('Upload Error:', err);
+    res.status(500).json({ error: 'Cloudinary configuration or stream error' });
   }
 });
 
