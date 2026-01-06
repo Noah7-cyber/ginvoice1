@@ -77,6 +77,13 @@ export const requestPasswordReset = async (email: string) => {
   });
 };
 
+export const resetPassword = async (email: string, code: string, newOwnerPin: string) => {
+  return request('/api/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ email, code, newOwnerPin })
+  });
+};
+
 export const syncState = async (state: InventoryState) => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');
@@ -99,6 +106,19 @@ export const fetchRemoteState = async () => {
     headers: {
       Authorization: `Bearer ${token}`
     }
+  });
+};
+
+export const deleteAccount = async (businessName: string) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/auth/delete-account', {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ businessName })
   });
 };
 

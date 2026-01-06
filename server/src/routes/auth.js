@@ -3,6 +3,9 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
 const Business = require('../models/Business');
+const Product = require('../models/Product');
+const Transaction = require('../models/Transaction');
+const Expenditure = require('../models/Expenditure');
 const { sendMail } = require('../services/mail');
 
 const router = express.Router();
@@ -122,20 +125,55 @@ router.post('/forgot-password', async (req, res) => {
     const { email } = req.body || {};
     if (!email) return res.status(400).json({ message: 'Email required' });
 
-    const business = await Business.findOne({ email }).lean();
+    const business = await Business.findOne({ email });
     if (!business) return res.status(200).json({ sent: false });
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expires = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
+
+    business.recoveryCode = code;
+    business.recoveryCodeExpires = expires;
+    await business.save();
 
     // Password recovery email aligned with frontend intent
     const result = await sendMail({
       to: email,
-      subject: 'Ginvoice Password Recovery Request',
-      text: `We received a password recovery request for ${business.name}. If this was you, please contact your market supervisor or system administrator to reset access.`,
-      html: `<p>We received a password recovery request for <strong>${business.name}</strong>.</p><p>If this was you, please contact your market supervisor or system administrator to reset access.</p>`
+      subject: 'Reset Your Ginvoice PIN',
+      text: `Your recovery code is: ${code}\n\nThis code expires in 15 minutes.`,
+      html: `<p>Your recovery code is: <strong>${code}</strong></p><p>This code expires in 15 minutes.</p>`
     });
 
     return res.json({ sent: result.sent });
   } catch (err) {
     return res.status(500).json({ message: 'Recovery request failed' });
+  }
+});
+
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { email, code, newOwnerPin } = req.body;
+
+    const business = await Business.findOne({
+      email,
+      recoveryCode: code,
+      recoveryCodeExpires: { $gt: Date.now() }
+    });
+
+    if (!business) {
+      return res.status(400).json({ error: 'Invalid or expired code' });
+    }
+
+    const hashedOwnerPin = await bcrypt.hash(newOwnerPin, 10);
+
+    business.ownerPin = hashedOwnerPin;
+    business.recoveryCode = undefined;
+    business.recoveryCodeExpires = undefined;
+    await business.save();
+
+    res.json({ message: 'PIN reset successful' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
@@ -166,6 +204,38 @@ router.put('/change-pins', require('../middleware/auth'), async (req, res) => {
     return res.json({ message: 'PINs updated successfully' });
   } catch (err) {
     return res.status(500).json({ message: 'Failed to update PINs' });
+  }
+});
+
+router.delete('/delete-account', require('../middleware/auth'), async (req, res) => {
+  try {
+    const { businessName } = req.body;
+
+    // Only owner can delete
+    if (req.userRole !== 'owner') {
+      return res.status(403).json({ message: 'Only the owner can delete the business account' });
+    }
+
+    const business = await Business.findById(req.businessId);
+    if (!business) {
+      return res.status(404).json({ message: 'Business not found' });
+    }
+
+    // Verify name match
+    if (business.name !== businessName) {
+      return res.status(400).json({ message: 'Business name does not match' });
+    }
+
+    // Delete all data
+    await Product.deleteMany({ business: req.businessId });
+    await Transaction.deleteMany({ business: req.businessId });
+    await Expenditure.deleteMany({ business: req.businessId });
+    await Business.findByIdAndDelete(req.businessId);
+
+    return res.json({ message: 'Account and all data deleted successfully' });
+  } catch (err) {
+    console.error('Delete account error:', err);
+    return res.status(500).json({ message: 'Failed to delete account' });
   }
 });
 
