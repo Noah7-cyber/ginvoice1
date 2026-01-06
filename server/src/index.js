@@ -22,6 +22,7 @@ const syncRoutes = require('./routes/sync');
 const paymentRoutes = require('./routes/payments');
 const analyticsRoutes = require('./routes/analytics');
 const entitlementsRoutes = require('./routes/entitlements');
+const uploadRouter = require('./routes/upload');
 
 const app = express();
 
@@ -56,6 +57,7 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/entitlements', entitlementsRoutes);
 app.use('/api/expenditures', expendituresRouter);
+app.use('/api/upload', uploadRouter);
 
 const port = process.env.PORT || 4000;
 const mongoUri = process.env.MONGODB_URI || '';

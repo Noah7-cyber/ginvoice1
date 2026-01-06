@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Store, Save, LayoutGrid, MapPin, Phone, Palette, Type, ShieldAlert, CheckCircle2, RefreshCw, CloudCheck, Upload, Trash2, Image as ImageIcon, MessageSquare, HeadphonesIcon, HelpCircle, Lock, LogOut, AlertTriangle, X } from 'lucide-react';
 import { BusinessProfile, TabId } from '../types';
 import { THEME_COLORS, FONTS } from '../constants';
-import { verifyPayment, changeBusinessPins, deleteAccount } from '../services/api';
+import { verifyPayment, changeBusinessPins, deleteAccount, uploadFile } from '../services/api';
 import SupportBot from './SupportBot'; // Integrated SupportBot
 
 interface SettingsScreenProps {
@@ -42,14 +42,25 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
     setTimeout(() => setShowSaved(false), 3000);
   };
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Preview immediately
       const reader = new FileReader();
       reader.onloadend = () => {
-        setFormData({ ...formData, logo: reader.result as string });
+        setFormData(prev => ({ ...prev, logo: reader.result as string }));
       };
       reader.readAsDataURL(file);
+
+      // Try uploading
+      try {
+        if (navigator.onLine) {
+          const url = await uploadFile(file);
+          setFormData(prev => ({ ...prev, logo: url }));
+        }
+      } catch (err) {
+        console.error('Logo upload failed, using local base64 fallback', err);
+      }
     }
   };
 

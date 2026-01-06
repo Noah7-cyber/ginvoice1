@@ -109,6 +109,24 @@ export const fetchRemoteState = async () => {
   });
 };
 
+export const uploadFile = async (file: File): Promise<string> => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('No auth token');
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const res = await fetch(buildUrl('/api/upload'), {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` }, // Don't set Content-Type for FormData
+    body: formData
+  });
+
+  if (!res.ok) throw new Error('Upload failed');
+  const data = await res.json();
+  return data.url;
+};
+
 export const deleteAccount = async (businessName: string) => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');
