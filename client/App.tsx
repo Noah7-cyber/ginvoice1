@@ -249,11 +249,11 @@ const App: React.FC = () => {
 
   useEffect(() => { saveState(state); }, [state]);
 
-  // Auto-sync every 20 seconds
+  // Auto-sync every 60 seconds
   useEffect(() => {
     const intervalId = setInterval(() => {
       triggerSync();
-    }, 20 * 1000); // 20 seconds
+    }, 60 * 1000); // 60 seconds
 
     return () => clearInterval(intervalId);
   }, [triggerSync]);
