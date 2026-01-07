@@ -69,14 +69,24 @@ export const syncWithBackend = async (state: InventoryState) => {
       lastSyncedAt: state.lastSyncedAt || null
     };
     const res = await syncState(payload as any);
-    // server returns { syncedAt, products, transactions, expenditures }
+    // server returns { syncedAt, products, transactions, expenditures, business }
     // We standardize on 'lastSyncedAt' for the frontend state key, but server sends 'syncedAt'
     if (res && res.syncedAt) {
+      const nextBusiness = res.business ? {
+        ...state.business,
+        ...res.business, // Only updates Name, Email, Phone, Address
+        // CRITICAL: Preserve local Theme, Logo, and Permissions
+        theme: state.business.theme,
+        logo: state.business.logo,
+        staffPermissions: state.business.staffPermissions
+      } : state.business;
+
       return {
         lastSyncedAt: res.syncedAt,
         products: res.products,
         transactions: res.transactions,
-        expenditures: res.expenditures
+        expenditures: res.expenditures,
+        business: nextBusiness
       };
     }
     return null;

@@ -236,6 +236,22 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
               </button>
             ))}
           </div>
+          <div className="mt-6">
+            <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Typography</label>
+            <div className="grid grid-cols-2 gap-3">
+              {FONTS.map(font => (
+                <button
+                  key={font.value}
+                  type="button"
+                  onClick={() => setFormData({ ...formData, theme: { ...formData.theme, fontFamily: font.value } })}
+                  className={`px-4 py-3 rounded-xl border-2 text-sm transition-all ${formData.theme.fontFamily === font.value ? 'border-primary bg-primary-bg text-primary font-bold' : 'border-gray-100 text-gray-600 hover:border-gray-200'}`}
+                  style={{ fontFamily: font.value }}
+                >
+                  {font.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Staff Permissions */}
@@ -320,11 +336,6 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
         <div className="flex items-center justify-between bg-white p-6 rounded-3xl shadow-lg border-t-4 border-primary mt-8">
           <div>{showSaved && <p className="text-green-600 font-bold animate-bounce">✓ Changes saved!</p>}</div>
           <div className="flex items-center gap-4">
-             {onLogout && (
-               <button type="button" onClick={onLogout} className="bg-red-50 text-red-600 px-6 py-4 rounded-2xl font-black shadow-sm hover:bg-red-100 transition-all flex items-center gap-2 active:scale-95">
-                 <LogOut size={20} /> Logout
-               </button>
-             )}
              <button type="submit" className="bg-primary text-white px-10 py-4 rounded-2xl font-black shadow-xl hover:opacity-90 transition-all flex items-center gap-2 active:scale-95">
                <Save size={20} /> Update Business
              </button>

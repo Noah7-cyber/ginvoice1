@@ -41,6 +41,7 @@ router.get('/', auth, async (req, res) => {
     const businessId = req.businessId;
 
     // 1. Fetch raw data
+    const businessData = await Business.findById(businessId).lean();
     // FIX: Expenditures must query by 'business' (ObjectId), not 'businessId' (String)
     const rawProducts = await Product.find({ businessId }).lean();
     const rawTransactions = await Transaction.find({ businessId }).lean();
@@ -85,7 +86,14 @@ router.get('/', auth, async (req, res) => {
     return res.json({
       products,
       transactions,
-      expenditures
+      expenditures,
+      business: {
+        name: businessData.name,
+        email: businessData.email,
+        phone: businessData.phone,
+        address: businessData.address
+        // Note: Logo and Theme are intentionally excluded from sync
+      }
     });
   } catch (err) {
     console.error('Fetch State Error:', err);
