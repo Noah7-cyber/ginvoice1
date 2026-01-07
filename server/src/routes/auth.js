@@ -212,7 +212,7 @@ router.delete('/delete-account', require('../middleware/auth'), async (req, res)
     const { businessName } = req.body;
 
     // Only owner can delete
-    if (req.userRole !== 'owner') {
+    if (req.user.role !== 'owner') {
       return res.status(403).json({ message: 'Only the owner can delete the business account' });
     }
 
@@ -227,8 +227,8 @@ router.delete('/delete-account', require('../middleware/auth'), async (req, res)
     }
 
     // Delete all data
-    await Product.deleteMany({ business: req.businessId });
-    await Transaction.deleteMany({ business: req.businessId });
+    await Product.deleteMany({ businessId: req.businessId });
+    await Transaction.deleteMany({ businessId: req.businessId });
     await Expenditure.deleteMany({ business: req.businessId });
     await Business.findByIdAndDelete(req.businessId);
 
