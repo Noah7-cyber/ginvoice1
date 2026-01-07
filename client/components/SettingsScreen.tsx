@@ -236,18 +236,21 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
               </button>
             ))}
           </div>
-          <div className="mt-6">
-            <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Typography</label>
-            <div className="grid grid-cols-2 gap-3">
+          <div className="mt-6 border-t border-gray-100 pt-6">
+            <label className="block text-xs font-bold text-gray-400 uppercase mb-1 tracking-widest">Typography</label>
+            <p className="text-sm text-gray-500 mb-4">Choose the font style for your receipts and app interface.</p>
+
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               {FONTS.map(font => (
                 <button
                   key={font.value}
                   type="button"
                   onClick={() => setFormData({ ...formData, theme: { ...formData.theme, fontFamily: font.value } })}
-                  className={`px-4 py-3 rounded-xl border-2 text-sm transition-all ${formData.theme.fontFamily === font.value ? 'border-primary bg-primary-bg text-primary font-bold' : 'border-gray-100 text-gray-600 hover:border-gray-200'}`}
+                  className={`px-4 py-3 rounded-xl border-2 text-sm transition-all ${formData.theme.fontFamily === font.value ? 'border-primary bg-primary-bg text-primary font-bold shadow-sm' : 'border-gray-100 text-gray-600 hover:border-gray-200'}`}
                   style={{ fontFamily: font.value }}
                 >
-                  {font.label}
+                  {/* FIX: Use font.name, not font.label */}
+                  {font.name}
                 </button>
               ))}
             </div>
