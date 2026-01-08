@@ -2,17 +2,16 @@
 import React, { useMemo, useEffect, useState } from 'react';
 import { 
   TrendingUp, 
-  TrendingDown, 
   DollarSign, 
-  Users, 
-  ArrowUpRight, 
   Package,
   Calendar,
   Wallet,
   ShoppingBag,
   Banknote,
   CreditCard,
-  AlertCircle
+  AlertCircle,
+  Coins,
+  Gem
 } from 'lucide-react';
 import { 
   AreaChart, 
@@ -21,10 +20,7 @@ import {
   YAxis, 
   CartesianGrid, 
   Tooltip, 
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  Cell
+  ResponsiveContainer
 } from 'recharts';
 import { Transaction, Product } from '../types';
 import { CURRENCY } from '../constants';
@@ -44,6 +40,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
       totalSales: number;
       cashSales: number;
       transferSales: number;
+      shopCost: number;
+      shopWorth: number;
+      dailyRevenue: number;
       revenueTrendText?: string;
       profitTrendText?: string;
     };
@@ -91,7 +90,17 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
     const cashSales = transactions.filter(t => t.paymentMethod === 'cash').length;
     const transferSales = transactions.filter(t => t.paymentMethod === 'transfer').length;
 
-    return { totalRevenue, totalProfit, totalSales: transactions.length, cashSales, transferSales, totalDebt };
+    // Calculate Shop Cost & Worth locally
+    const shopCost = products.reduce((sum, p) => sum + (p.costPrice * p.currentStock), 0);
+    const shopWorth = products.reduce((sum, p) => sum + (p.sellingPrice * p.currentStock), 0);
+
+    // Calculate Daily Revenue locally
+    const today = new Date().toISOString().split('T')[0];
+    const dailyRevenue = transactions
+        .filter(t => t.transactionDate.startsWith(today))
+        .reduce((sum, t) => sum + t.totalAmount, 0);
+
+    return { totalRevenue, totalProfit, totalSales: transactions.length, cashSales, transferSales, totalDebt, shopCost, shopWorth, dailyRevenue };
   }, [transactions, products]);
 
   const stats = remoteAnalytics?.stats || localStats;
@@ -142,6 +151,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Existing Cards */}
         <StatCard 
           title="Total Revenue" 
           value={`${CURRENCY}${stats.totalRevenue.toLocaleString()}`} 
@@ -168,6 +178,29 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
           value={stats.totalSales.toString()} 
           icon={<ShoppingBag className="text-purple-600" />} 
           trend="Lifetime transactions"
+          color="bg-purple-50"
+        />
+
+        {/* New Cards */}
+        <StatCard
+          title="Daily Revenue"
+          value={`${CURRENCY}${(stats.dailyRevenue || 0).toLocaleString()}`}
+          icon={<DollarSign className="text-blue-600" />}
+          trend="Today's total sales"
+          color="bg-blue-50"
+        />
+        <StatCard
+          title="Shop Cost"
+          value={`${CURRENCY}${(stats.shopCost || 0).toLocaleString()}`}
+          icon={<Coins className="text-orange-600" />}
+          trend="Total inventory cost value"
+          color="bg-orange-50"
+        />
+        <StatCard
+          title="Shop Worth"
+          value={`${CURRENCY}${(stats.shopWorth || 0).toLocaleString()}`}
+          icon={<Gem className="text-purple-600" />}
+          trend="Total inventory sales value"
           color="bg-purple-50"
         />
       </div>
