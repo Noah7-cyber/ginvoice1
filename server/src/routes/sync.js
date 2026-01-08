@@ -170,7 +170,10 @@ router.post('/', auth, async (req, res) => {
 
         const setOnInsertFields = {};
 
-        // CONDITIONAL STOCK UPDATE:
+        // CONDITIONAL STOCK UPDATE (Manual Override Fix):
+        // If 'isManualUpdate' is true, we force the 'stock' field to update.
+        // Otherwise, we only set 'stock' on insert (new product) to avoid overwriting
+        // the server-side calculated stock (which may have been decremented by transactions).
         if (p.isManualUpdate) {
           // Manual override: Force update stock
           setFields.stock = p.currentStock !== undefined ? p.currentStock : p.stock;

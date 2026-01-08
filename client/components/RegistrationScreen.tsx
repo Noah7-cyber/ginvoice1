@@ -1,6 +1,6 @@
 
 import React, { useState, useRef } from 'react';
-import { ShoppingBag, MapPin, Phone, Mail, ArrowRight, Store, Sparkles, Upload, Trash2, Image as ImageIcon, Lock, ShieldCheck, UserCircle, Info, KeyRound, Loader2 } from 'lucide-react';
+import { ShoppingBag, MapPin, Phone, Mail, ArrowRight, Store, Sparkles, Upload, Trash2, Image as ImageIcon, Lock, ShieldCheck, UserCircle, Info, KeyRound, Loader2, Eye, EyeOff } from 'lucide-react';
 import PhoneInput from 'react-phone-input-2';
 import 'react-phone-input-2/lib/style.css';
 import { useToast } from './ToastProvider';
@@ -32,6 +32,10 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onM
     email: '',
     pin: ''
   });
+
+  const [showOwnerPin, setShowOwnerPin] = useState(false);
+  const [showStaffPin, setShowStaffPin] = useState(false);
+  const [showLoginPin, setShowLoginPin] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -216,12 +220,19 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onM
                         <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                         <input 
                           required
-                          type="password" 
+                          type={showOwnerPin ? 'text' : 'password'}
                           placeholder="Admin PIN"
-                          className="w-full pl-12 pr-4 py-4 bg-indigo-50/50 border-none rounded-2xl focus:ring-2 focus:ring-indigo-600 outline-none font-bold text-gray-800 transition-all"
+                          className="w-full pl-12 pr-12 py-4 bg-indigo-50/50 border-none rounded-2xl focus:ring-2 focus:ring-indigo-600 outline-none font-bold text-gray-800 transition-all"
                           value={formData.ownerPassword}
                           onChange={e => setFormData({...formData, ownerPassword: e.target.value})}
                         />
+                         <button
+                            type="button"
+                            onClick={() => setShowOwnerPin(!showOwnerPin)}
+                            className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-indigo-600"
+                          >
+                            {showOwnerPin ? <EyeOff size={18} /> : <Eye size={18} />}
+                          </button>
                       </div>
                     </div>
 
@@ -233,12 +244,19 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onM
                         <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                         <input 
                           required
-                          type="password" 
+                          type={showStaffPin ? 'text' : 'password'}
                           placeholder="Sales PIN"
-                          className="w-full pl-12 pr-4 py-4 bg-emerald-50/50 border-none rounded-2xl focus:ring-2 focus:ring-emerald-600 outline-none font-bold text-gray-800 transition-all"
+                          className="w-full pl-12 pr-12 py-4 bg-emerald-50/50 border-none rounded-2xl focus:ring-2 focus:ring-emerald-600 outline-none font-bold text-gray-800 transition-all"
                           value={formData.staffPassword}
                           onChange={e => setFormData({...formData, staffPassword: e.target.value})}
                         />
+                        <button
+                            type="button"
+                            onClick={() => setShowStaffPin(!showStaffPin)}
+                            className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-emerald-600"
+                          >
+                            {showStaffPin ? <EyeOff size={18} /> : <Eye size={18} />}
+                          </button>
                       </div>
                     </div>
                   </div>
@@ -276,12 +294,19 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onM
                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                     <input 
                       required
-                      type="password" 
+                      type={showLoginPin ? 'text' : 'password'}
                       placeholder="••••"
-                      className="w-full pl-12 pr-4 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-indigo-600 outline-none font-bold text-gray-800 text-center tracking-[1em]"
+                      className="w-full pl-12 pr-12 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-indigo-600 outline-none font-bold text-gray-800 text-center tracking-[1em]"
                       value={loginData.pin}
                       onChange={e => setLoginData({...loginData, pin: e.target.value})}
                     />
+                    <button
+                        type="button"
+                        onClick={() => setShowLoginPin(!showLoginPin)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-indigo-600"
+                    >
+                        {showLoginPin ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
                   </div>
                 </div>
               </div>

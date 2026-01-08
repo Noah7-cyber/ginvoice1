@@ -32,12 +32,18 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
     const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const previousMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
 
+    // Daily Revenue Start (Today 00:00)
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
     const [
       summaryStats,
       currentMonthStats,
       previousMonthStats,
       chartAgg,
-      topProducts
+      topProducts,
+      inventoryValuation,
+      dailyRevenueAgg
     ] = await Promise.all([
       // 1. Overall Summary (Revenue, Debt, Counts)
       Transaction.aggregate([
@@ -96,12 +102,43 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
         },
         { $sort: { qty: -1 } },
         { $limit: 5 }
+      ]),
+
+      // 6. Inventory Valuation (Shop Cost & Shop Worth)
+      Product.aggregate([
+        { $match: { businessId: req.businessId } }, // Product uses String businessId
+        {
+          $group: {
+            _id: null,
+            shopCost: {
+              $sum: {
+                $multiply: [ '$stock', { $toDouble: '$costPrice' } ]
+              }
+            },
+            shopWorth: {
+              $sum: {
+                $multiply: [ '$stock', { $toDouble: '$sellingPrice' } ]
+              }
+            }
+          }
+        }
+      ]),
+
+      // 7. Daily Revenue
+      Transaction.aggregate([
+        { $match: { businessId, transactionDate: { $gte: todayStart } } },
+        { $group: { _id: null, dailyRevenue: { $sum: { $toDouble: '$totalAmount' } } } }
       ])
     ]);
 
     const stats = summaryStats[0] || { totalRevenue: 0, totalDebt: 0, totalSales: 0, cashSales: 0, transferSales: 0 };
     const curRev = currentMonthStats[0]?.revenue || 0;
     const prevRev = previousMonthStats[0]?.revenue || 0;
+
+    // New Metrics
+    const shopCost = inventoryValuation[0]?.shopCost || 0;
+    const shopWorth = inventoryValuation[0]?.shopWorth || 0;
+    const dailyRevenue = dailyRevenueAgg[0]?.dailyRevenue || 0;
 
     // --- Profit Calculation ---
     const [productSalesAgg] = await Promise.all([
@@ -151,7 +188,7 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
       return Number(val);
     };
 
-    const products = await Product.find({ businessId }, { id: 1, costPrice: 1, units: 1 }).lean();
+    const products = await Product.find({ businessId: req.businessId }, { id: 1, costPrice: 1, units: 1 }).lean();
     const productMap = new Map();
     products.forEach(p => productMap.set(p.id, p));
 
@@ -224,6 +261,9 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
         totalSales: stats.totalSales,
         cashSales: stats.cashSales,
         transferSales: stats.transferSales,
+        shopCost: toNumber(shopCost),
+        shopWorth: toNumber(shopWorth),
+        dailyRevenue: toNumber(dailyRevenue),
         revenueTrendText: formatTrendText(toNumber(curRev), toNumber(prevRev)),
         profitTrendText: formatTrendText(currentMonthProfit, previousMonthProfit)
       },

@@ -1,10 +1,10 @@
 
 import React, { useState } from 'react';
-import { Plus, Search, Edit3, Trash2, CheckCircle2, X, ListTodo, Layers, Tag, DollarSign, ArrowUp } from 'lucide-react';
+import { Plus, Search, Edit3, Trash2, CheckCircle2, X, ListTodo, Layers, Tag, DollarSign, ArrowUp, Maximize2, Save } from 'lucide-react';
 import { Product } from '../types';
 import { CURRENCY, CATEGORIES } from '../constants';
 import { formatCurrency } from '../utils/currency';
-import { deleteProduct } from '../services/api';
+import { deleteProduct, createProduct, updateProduct } from '../services/api';
 import { useToast } from './ToastProvider';
 
 interface InventoryScreenProps {
@@ -24,7 +24,11 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [filterLowStock, setFilterLowStock] = useState(false);
   
+  // Inline Editing
+  const [inlineEditingId, setInlineEditingId] = useState<string | null>(null);
+
   // Bulk Edit Panel States
   const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
   const [bulkCategory, setBulkCategory] = useState('');
@@ -47,7 +51,8 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   const filteredProducts = products.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
-    return matchesSearch && matchesCategory;
+    const matchesLowStock = !filterLowStock || p.currentStock < 10;
+    return matchesSearch && matchesCategory && matchesLowStock;
   });
 
   const toggleSelection = (id: string) => {
@@ -67,6 +72,10 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
   const applyBulkUpdates = () => {
     if (safeReadOnly) return;
+    if (!navigator.onLine) {
+        addToast('Internet connection required for bulk updates.', 'error');
+        return;
+    }
     const updatedProducts = products.map(p => {
       if (selectedIds.has(p.id)) {
         let updated = { ...p, isManualUpdate: true };
@@ -97,29 +106,61 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     setBulkStockReduce('');
   };
 
-  const handleAddProduct = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (safeReadOnly) return;
-    if (editingProductId) {
-      const updatedProducts = products.map(p => p.id === editingProductId ? { ...(newProduct as Product), id: p.id, isManualUpdate: true } : p);
-      onUpdateProducts(updatedProducts);
-    } else {
-      const product: Product = { ...(newProduct as Product), id: `PRD-${Date.now()}`, isManualUpdate: true };
-      onUpdateProducts([...products, product]);
-    }
-    setIsModalOpen(false);
-    setNewProduct(initialProductState);
+  const handleAddNew = () => {
     setEditingProductId(null);
+    setNewProduct(initialProductState);
+    setIsModalOpen(true);
   };
 
-  const handleInlineUpdate = (id: string, field: 'currentStock' | 'sellingPrice', value: string) => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (safeReadOnly) return;
+
+    try {
+        if (editingProductId) {
+             const updatedItem = { ...(newProduct as Product), id: editingProductId, isManualUpdate: true };
+             await updateProduct(updatedItem);
+             // Optimistic update
+             const updatedProducts = products.map(p => p.id === editingProductId ? updatedItem : p);
+             onUpdateProducts(updatedProducts);
+        } else {
+             const newItem: Product = { ...(newProduct as Product), id: `PRD-${Date.now()}`, isManualUpdate: true };
+             await createProduct(newItem);
+             // Optimistic update
+             onUpdateProducts([...products, newItem]);
+        }
+        setIsModalOpen(false);
+        setNewProduct(initialProductState);
+        setEditingProductId(null);
+    } catch (err) {
+        console.error(err);
+        addToast('Failed to save product. Please try again.', 'error');
+    }
+  };
+
+  const handleInlineSave = async (id: string) => {
+    const product = products.find(p => p.id === id);
+    if (!product) return;
+
+    // Ensure we send manual update flag
+    const updated = { ...product, isManualUpdate: true };
+    try {
+        await updateProduct(updated);
+        // Ensure local state is also updated if needed (likely already done via inputs)
+        setInlineEditingId(null);
+    } catch(err) {
+        addToast('Failed to save changes', 'error');
+    }
+  };
+
+  const handleInlineUpdateLocal = (id: string, field: 'currentStock' | 'sellingPrice', value: string) => {
     if (safeReadOnly) return;
     const numValue = parseFloat(value);
     if (isNaN(numValue)) return; // Prevent updating with invalid numbers
 
     const updatedProducts = products.map(p => {
       if (p.id === id) {
-        return { ...p, [field]: numValue, isManualUpdate: true };
+        return { ...p, [field]: numValue };
       }
       return p;
     });
@@ -169,18 +210,16 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
           {selectedIds.size > 0 && !safeReadOnly && (
             <button 
               onClick={() => setIsBulkEditOpen(true)}
-              className="bg-indigo-50 text-indigo-700 px-6 py-3 rounded-xl flex items-center gap-2 font-bold border border-indigo-200 hover:bg-indigo-100 transition-all"
+              disabled={!navigator.onLine}
+              className={`bg-indigo-50 text-indigo-700 px-6 py-3 rounded-xl flex items-center gap-2 font-bold border border-indigo-200 hover:bg-indigo-100 transition-all ${!navigator.onLine ? 'opacity-50 cursor-not-allowed' : ''}`}
+              title={!navigator.onLine ? "Internet connection required for bulk updates." : ""}
             >
               <ListTodo size={20} /> Bulk Update ({selectedIds.size})
             </button>
           )}
           {!safeReadOnly && (
             <button 
-              onClick={() => {
-                setEditingProductId(null);
-                setNewProduct(initialProductState);
-                setIsModalOpen(true);
-              }}
+              onClick={handleAddNew}
               className="bg-primary text-white px-6 py-3 rounded-xl flex items-center gap-2 font-bold shadow-lg shadow-indigo-100 hover:opacity-90 transition-all active:scale-95"
             >
               <Plus size={20} /> Add New
@@ -190,8 +229,8 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
       </div>
 
       {/* Filters */}
-      <div className="bg-white p-4 rounded-2xl shadow-sm border mb-6 flex flex-col md:flex-row gap-4">
-        <div className="relative flex-1">
+      <div className="bg-white p-4 rounded-2xl shadow-sm border mb-6 flex flex-col md:flex-row gap-4 items-center">
+        <div className="relative flex-1 w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
           <input 
             type="text"
@@ -209,6 +248,16 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
           <option value="All">All Categories</option>
           {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
         </select>
+        <div className="flex items-center gap-2 px-2 whitespace-nowrap">
+            <input
+                type="checkbox"
+                id="lowStock"
+                className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                checked={filterLowStock}
+                onChange={(e) => setFilterLowStock(e.target.checked)}
+            />
+            <label htmlFor="lowStock" className="text-sm font-bold text-gray-600 cursor-pointer">Low Stock (&lt;10)</label>
+        </div>
         {/* Mobile Select All Toggle */}
         <button
            onClick={selectAll}
@@ -262,50 +311,79 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
                       <span className={`w-2 h-2 rounded-full ${product.currentStock < 10 ? 'bg-red-500 animate-pulse' : 'bg-green-500'}`}></span>
-                      {safeReadOnly ? (
-                        <span className="font-bold text-gray-800">{product.currentStock} {product.baseUnit}</span>
-                      ) : (
+                      {(!safeReadOnly && inlineEditingId === product.id) ? (
                         <div className="flex items-center gap-1">
                           <input
                             type="number"
                             className="w-20 px-2 py-1 border rounded font-bold text-gray-800"
                             value={product.currentStock}
-                            onChange={(e) => handleInlineUpdate(product.id, 'currentStock', e.target.value)}
+                            onChange={(e) => handleInlineUpdateLocal(product.id, 'currentStock', e.target.value)}
                           />
                           <span className="text-xs text-gray-500">{product.baseUnit}</span>
                         </div>
+                      ) : (
+                        <span className="font-bold text-gray-800">{product.currentStock} {product.baseUnit}</span>
                       )}
                     </div>
                   </td>
                   <td className="px-6 py-4 font-black text-gray-900">
-                    {safeReadOnly ? (
-                      <>{CURRENCY}{(product.sellingPrice || 0).toLocaleString()}</>
-                    ) : (
+                    {(!safeReadOnly && inlineEditingId === product.id) ? (
                       <div className="flex items-center gap-1">
                         <span className="text-xs text-gray-500">{CURRENCY}</span>
                         <input
                           type="number"
                           className="w-24 px-2 py-1 border rounded font-black text-gray-900"
                           value={product.sellingPrice}
-                          onChange={(e) => handleInlineUpdate(product.id, 'sellingPrice', e.target.value)}
+                          onChange={(e) => handleInlineUpdateLocal(product.id, 'sellingPrice', e.target.value)}
                         />
                       </div>
+                    ) : (
+                      <>{CURRENCY}{(product.sellingPrice || 0).toLocaleString()}</>
                     )}
                   </td>
                   <td className="px-6 py-4">
                     {!safeReadOnly && (
                       <div className="flex gap-2">
-                        <button
-                          onClick={() => {
-                            setEditingProductId(product.id);
-                            setNewProduct({ ...product });
-                            setIsModalOpen(true);
-                          }}
-                          className="p-2 text-gray-400 hover:text-primary"
-                        >
-                          <Edit3 size={18} />
-                        </button>
-                        <button onClick={() => handleDeleteProduct(product.id)} className="p-2 text-gray-400 hover:text-red-500"><Trash2 size={18} /></button>
+                        {inlineEditingId === product.id ? (
+                            <>
+                                <button
+                                    onClick={() => handleInlineSave(product.id)}
+                                    className="p-2 text-green-500 hover:text-green-700"
+                                    title="Save"
+                                >
+                                    <CheckCircle2 size={18} />
+                                </button>
+                                <button
+                                    onClick={() => setInlineEditingId(null)}
+                                    className="p-2 text-red-500 hover:text-red-700"
+                                    title="Cancel"
+                                >
+                                    <X size={18} />
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                <button
+                                    onClick={() => setInlineEditingId(product.id)}
+                                    className="p-2 text-gray-400 hover:text-primary"
+                                    title="Quick Edit"
+                                >
+                                    <Edit3 size={18} />
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setEditingProductId(product.id);
+                                        setNewProduct({ ...product });
+                                        setIsModalOpen(true);
+                                    }}
+                                    className="p-2 text-gray-400 hover:text-primary"
+                                    title="Full Edit"
+                                >
+                                    <Maximize2 size={18} />
+                                </button>
+                                <button onClick={() => handleDeleteProduct(product.id)} className="p-2 text-gray-400 hover:text-red-500"><Trash2 size={18} /></button>
+                            </>
+                        )}
                       </div>
                     )}
                   </td>
@@ -473,7 +551,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
               <h2 className="text-xl font-bold">Register New Product</h2>
               <button onClick={() => setIsModalOpen(false)}><X size={24} /></button>
             </div>
-            <form onSubmit={handleAddProduct} className="p-6 space-y-4">
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Product Name</label>
                 <input required type="text" className="w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary outline-none" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} placeholder="e.g. OMO Detergent" />
@@ -503,10 +581,10 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                 <div className="space-y-2">
                   {newProduct.units?.map((u, idx) => (
                     <div key={idx} className="flex flex-col gap-2 border-b pb-2 mb-2">
-                      <div className="flex gap-2 items-center">
+                      <div className="flex gap-2 items-center flex-wrap">
                         <input
                           placeholder="Name (e.g. Carton)"
-                          className="flex-1 px-3 py-2 text-sm rounded-lg border"
+                          className="flex-1 px-3 py-2 text-sm rounded-lg border min-w-[120px]"
                           value={u.name}
                           onChange={e => handleUpdateUnit(idx, 'name', e.target.value)}
                         />
