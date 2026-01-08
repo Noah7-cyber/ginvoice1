@@ -32,7 +32,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   const [bulkStockAdd, setBulkStockAdd] = useState<number | ''>('');
   const [bulkStockReduce, setBulkStockReduce] = useState<number | ''>('');
 
-  const [newProduct, setNewProduct] = useState<Partial<Product>>({
+  const initialProductState: Partial<Product> = {
     name: '',
     category: CATEGORIES[0],
     costPrice: 0,
@@ -40,7 +40,9 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     currentStock: 0,
     baseUnit: 'Piece',
     units: []
-  });
+  };
+
+  const [newProduct, setNewProduct] = useState<Partial<Product>>(initialProductState);
 
   const filteredProducts = products.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -106,8 +108,22 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
       onUpdateProducts([...products, product]);
     }
     setIsModalOpen(false);
-    setNewProduct({ name: '', category: CATEGORIES[0], costPrice: 0, sellingPrice: 0, currentStock: 0, baseUnit: 'Piece', units: [] });
+    setNewProduct(initialProductState);
     setEditingProductId(null);
+  };
+
+  const handleInlineUpdate = (id: string, field: 'currentStock' | 'sellingPrice', value: string) => {
+    if (safeReadOnly) return;
+    const numValue = parseFloat(value);
+    if (isNaN(numValue)) return; // Prevent updating with invalid numbers
+
+    const updatedProducts = products.map(p => {
+      if (p.id === id) {
+        return { ...p, [field]: numValue, isManualUpdate: true };
+      }
+      return p;
+    });
+    onUpdateProducts(updatedProducts);
   };
 
   const handleAddUnit = () => {
@@ -160,7 +176,11 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
           )}
           {!safeReadOnly && (
             <button 
-              onClick={() => setIsModalOpen(true)}
+              onClick={() => {
+                setEditingProductId(null);
+                setNewProduct(initialProductState);
+                setIsModalOpen(true);
+              }}
               className="bg-primary text-white px-6 py-3 rounded-xl flex items-center gap-2 font-bold shadow-lg shadow-indigo-100 hover:opacity-90 transition-all active:scale-95"
             >
               <Plus size={20} /> Add New
@@ -242,12 +262,36 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
                       <span className={`w-2 h-2 rounded-full ${product.currentStock < 10 ? 'bg-red-500 animate-pulse' : 'bg-green-500'}`}></span>
-                      <span className="font-bold text-gray-800">{product.currentStock} {product.baseUnit}</span>
+                      {safeReadOnly ? (
+                        <span className="font-bold text-gray-800">{product.currentStock} {product.baseUnit}</span>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            className="w-20 px-2 py-1 border rounded font-bold text-gray-800"
+                            value={product.currentStock}
+                            onChange={(e) => handleInlineUpdate(product.id, 'currentStock', e.target.value)}
+                          />
+                          <span className="text-xs text-gray-500">{product.baseUnit}</span>
+                        </div>
+                      )}
                     </div>
                   </td>
-                 <td className="px-6 py-4 font-black text-gray-900">
-  {CURRENCY}{(product.sellingPrice || 0).toLocaleString()}
-</td>
+                  <td className="px-6 py-4 font-black text-gray-900">
+                    {safeReadOnly ? (
+                      <>{CURRENCY}{(product.sellingPrice || 0).toLocaleString()}</>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-gray-500">{CURRENCY}</span>
+                        <input
+                          type="number"
+                          className="w-24 px-2 py-1 border rounded font-black text-gray-900"
+                          value={product.sellingPrice}
+                          onChange={(e) => handleInlineUpdate(product.id, 'sellingPrice', e.target.value)}
+                        />
+                      </div>
+                    )}
+                  </td>
                   <td className="px-6 py-4">
                     {!safeReadOnly && (
                       <div className="flex gap-2">
