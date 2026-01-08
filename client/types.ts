@@ -36,6 +36,7 @@ export interface Product {
   currentStock: number;
   baseUnit: string;      // Renamed from 'unit'
   units: ProductUnit[];  // Alternative units (e.g., Packs)
+  isManualUpdate?: boolean; // Flag to indicate if stock was manually adjusted
 }
 
 export type PaymentMethod = 'cash' | 'transfer' | 'credit';

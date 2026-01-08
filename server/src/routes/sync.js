@@ -110,37 +110,96 @@ router.post('/', auth, async (req, res) => {
        await Business.findByIdAndUpdate(businessId, { $set: { ...business, lastActiveAt: new Date() } });
     }
 
-    // 1. Save Products
-    if (Array.isArray(products) && products.length > 0) {
-      const productOps = products.map((p) => ({
-        updateOne: {
-          filter: { businessId, id: p.id },
-          update: {
-            $set: {
-              businessId,
-              id: p.id,
-              name: p.name,
-              category: p.category,
-              baseUnit: p.baseUnit || 'Piece',
-              stock: p.currentStock !== undefined ? p.currentStock : p.stock,
-              sellingPrice: toDecimal(p.sellingPrice),
-              costPrice: toDecimal(p.costPrice),
-              units: Array.isArray(p.units) ? p.units.map(u => ({
-                name: u.name,
-                multiplier: u.multiplier,
-                sellingPrice: toDecimal(u.sellingPrice),
-                costPrice: toDecimal(u.costPrice)
-              })) : [],
-              updatedAt: new Date()
-            }
-          },
-          upsert: true
+    // --- PHASE 1: Strict Transaction Processing (Deduct Stock First) ---
+    // Iterate new transactions and deduct stock using $inc to guarantee accuracy.
+    if (Array.isArray(transactions) && transactions.length > 0) {
+      // 1. Identify which transactions are ALREADY in the DB to avoid double counting.
+      const txIds = transactions.map(t => t.id);
+      const existingTxs = await Transaction.find({ businessId, id: { $in: txIds } }).select('id').lean();
+      const existingTxIds = new Set(existingTxs.map(t => t.id));
+
+      const newTransactions = transactions.filter(t => !existingTxIds.has(t.id));
+
+      // 2. For each NEW transaction, decrement stock atomically.
+      const deductionOps = [];
+      for (const tx of newTransactions) {
+        if (tx.items && Array.isArray(tx.items)) {
+          for (const item of tx.items) {
+             // Logic: quantity * multiplier. e.g. 2 Cartons (x12) = 24 units deduction.
+             const multiplier = item.multiplier || (item.selectedUnit ? item.selectedUnit.multiplier : 1);
+             const qtyToDeduct = (item.quantity || 0) * multiplier;
+
+             if (qtyToDeduct > 0) {
+                deductionOps.push(
+                  Product.updateOne(
+                    { businessId, id: item.productId },
+                    { $inc: { stock: -qtyToDeduct } }
+                  )
+                );
+             }
+          }
         }
-      }));
+      }
+
+      if (deductionOps.length > 0) {
+        await Promise.all(deductionOps);
+      }
+    }
+
+    // --- PHASE 2: Product Synchronization (Smart Updates) ---
+    // Apply product updates. Only overwrite 'stock' if it's a manual update.
+    if (Array.isArray(products) && products.length > 0) {
+      const productOps = products.map((p) => {
+        // Base update fields (Always update details like name, price, etc.)
+        const setFields = {
+          businessId,
+          id: p.id,
+          name: p.name,
+          category: p.category,
+          baseUnit: p.baseUnit || 'Piece',
+          sellingPrice: toDecimal(p.sellingPrice),
+          costPrice: toDecimal(p.costPrice),
+          units: Array.isArray(p.units) ? p.units.map(u => ({
+            name: u.name,
+            multiplier: u.multiplier,
+            sellingPrice: toDecimal(u.sellingPrice),
+            costPrice: toDecimal(u.costPrice)
+          })) : [],
+          updatedAt: new Date()
+        };
+
+        const setOnInsertFields = {};
+
+        // CONDITIONAL STOCK UPDATE:
+        if (p.isManualUpdate) {
+          // Manual override: Force update stock
+          setFields.stock = p.currentStock !== undefined ? p.currentStock : p.stock;
+        } else {
+          // Not manual: Only set stock if we are INSERTING a new document
+          setOnInsertFields.stock = p.currentStock !== undefined ? p.currentStock : 0;
+        }
+
+        const updateOp = {
+          $set: setFields
+        };
+
+        if (Object.keys(setOnInsertFields).length > 0) {
+          updateOp.$setOnInsert = setOnInsertFields;
+        }
+
+        return {
+          updateOne: {
+            filter: { businessId, id: p.id },
+            update: updateOp,
+            upsert: true
+          }
+        };
+      });
+
       await Product.bulkWrite(productOps, { ordered: false });
     }
 
-    // 2. Save Transactions
+    // --- PHASE 3: Save Transactions (Persist History) ---
     if (Array.isArray(transactions) && transactions.length > 0) {
        const txOps = transactions.map((t) => ({
         updateOne: {
@@ -180,11 +239,10 @@ router.post('/', auth, async (req, res) => {
       await Transaction.bulkWrite(txOps, { ordered: false });
     }
 
-    // 3. Save Expenditures (CRITICAL FIX APPLIED)
+    // 4. Save Expenditures
     if (Array.isArray(expenditures) && expenditures.length > 0) {
       const expOps = expenditures.map((e) => ({
         updateOne: {
-          // FIX: Filter must use 'business', NOT 'businessId'
           filter: { business: businessId, id: e.id },
           update: {
             $set: {
@@ -207,11 +265,10 @@ router.post('/', auth, async (req, res) => {
       await Expenditure.bulkWrite(expOps, { ordered: false });
     }
 
-    // 4. Return Data (Re-using the GET logic for consistency)
-    // We call the same finding logic we used in GET / to ensure formatting is consistent
+    // 5. Return Data (Re-using the GET logic for consistency)
     const rawProducts = await Product.find({ businessId }).lean();
     const rawTransactions = await Transaction.find({ businessId }).lean();
-    const rawExpenditures = await Expenditure.find({ business: businessId }).lean(); // FIX: Query by 'business'
+    const rawExpenditures = await Expenditure.find({ business: businessId }).lean();
 
     const fetchedProducts = rawProducts.map(p => ({
       ...p,
@@ -257,7 +314,6 @@ router.post('/', auth, async (req, res) => {
   }
 });
 
-// ... Delete routes remain the same ...
 router.delete('/products/:id', auth, async (req, res) => {
   try {
     const businessId = req.businessId;

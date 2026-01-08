@@ -67,7 +67,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     if (safeReadOnly) return;
     const updatedProducts = products.map(p => {
       if (selectedIds.has(p.id)) {
-        let updated = { ...p };
+        let updated = { ...p, isManualUpdate: true };
         if (bulkCategory) updated.category = bulkCategory;
         if (typeof bulkPriceChange === 'number') {
           updated.sellingPrice = Math.max(0, updated.sellingPrice + (updated.sellingPrice * (bulkPriceChange / 100)));
@@ -99,10 +99,10 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     e.preventDefault();
     if (safeReadOnly) return;
     if (editingProductId) {
-      const updatedProducts = products.map(p => p.id === editingProductId ? { ...(newProduct as Product), id: p.id } : p);
+      const updatedProducts = products.map(p => p.id === editingProductId ? { ...(newProduct as Product), id: p.id, isManualUpdate: true } : p);
       onUpdateProducts(updatedProducts);
     } else {
-      const product: Product = { ...(newProduct as Product), id: `PRD-${Date.now()}` };
+      const product: Product = { ...(newProduct as Product), id: `PRD-${Date.now()}`, isManualUpdate: true };
       onUpdateProducts([...products, product]);
     }
     setIsModalOpen(false);
