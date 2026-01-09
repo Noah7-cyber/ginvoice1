@@ -94,10 +94,12 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
       addToast('Delete requires an internet connection.', 'error');
       return;
     }
-    const confirmDelete = confirm('Are you sure you want to delete this invoice?');
-    if (!confirmDelete) return;
     const restock = confirm('Do you want to add the sold items back to inventory stock?');
-    onDeleteTransaction(t.id, restock);
+    const confirmDelete = confirm('Are you sure you want to delete this invoice permanently?');
+
+    if (confirmDelete) {
+      onDeleteTransaction(t.id, restock);
+    }
   };
 
   return (

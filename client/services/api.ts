@@ -306,11 +306,11 @@ export const deleteProduct = async (id: string) => {
   });
 };
 
-export const deleteTransaction = async (id: string) => {
+export const deleteTransaction = async (id: string, restock: boolean) => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');
 
-  return request(`/api/sync/transactions/${id}`, {
+  return request(`/api/sync/transactions/${id}?restock=${restock}`, {
     method: 'DELETE',
     headers: {
       Authorization: `Bearer ${token}`

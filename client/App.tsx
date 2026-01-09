@@ -402,7 +402,7 @@ const App: React.FC = () => {
           return { ...prev, products: updatedProducts };
         });
       }
-      await deleteTransaction(id);
+      await deleteTransaction(id, restockItems);
       setState(prev => ({ ...prev, transactions: prev.transactions.filter(t => t.id !== id) }));
     } catch (err) { addToast('Delete failed.', 'error'); }
   };

@@ -88,6 +88,7 @@ router.get('/', auth, async (req, res) => {
       transactions,
       expenditures,
       business: {
+        id: businessData._id,
         name: businessData.name,
         email: businessData.email,
         phone: businessData.phone,
@@ -332,6 +333,24 @@ router.delete('/transactions/:id', auth, async (req, res) => {
   try {
     const businessId = req.businessId;
     const { id } = req.params;
+    const { restock } = req.query;
+
+    if (restock === 'true') {
+      const transaction = await Transaction.findOne({ businessId, id }).lean();
+      if (transaction && transaction.items) {
+        // Add items back to inventory stock
+        const restockOps = transaction.items.map(item => {
+           const multiplier = item.multiplier || 1;
+           const qtyToAdd = (item.quantity || 0) * multiplier;
+           return Product.updateOne(
+              { businessId, id: item.productId },
+              { $inc: { stock: qtyToAdd } }
+           );
+        });
+        await Promise.all(restockOps);
+      }
+    }
+
     await Transaction.deleteOne({ businessId, id });
     return res.json({ ok: true });
   } catch (err) {
