@@ -103,7 +103,19 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
     return { totalRevenue, totalProfit, totalSales: transactions.length, cashSales, transferSales, totalDebt, shopCost, shopWorth, dailyRevenue };
   }, [transactions, products]);
 
-  const stats = remoteAnalytics?.stats || localStats;
+  // Hybrid Stats Logic: Merge remote and local
+  const stats = useMemo(() => {
+    const remote = remoteAnalytics?.stats;
+    if (!remote) return localStats;
+
+    return {
+      ...remote,
+      // Fallback to local if remote returns 0 (likely due to glitch or sync delay)
+      shopCost: remote.shopCost || localStats.shopCost,
+      shopWorth: remote.shopWorth || localStats.shopWorth,
+      dailyRevenue: remote.dailyRevenue || localStats.dailyRevenue
+    };
+  }, [remoteAnalytics, localStats]);
 
   // Daily sales data for the chart
   const chartData = useMemo(() => {

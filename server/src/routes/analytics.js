@@ -106,7 +106,7 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
 
       // 6. Inventory Valuation (Shop Cost & Shop Worth)
       Product.aggregate([
-        { $match: { businessId: req.businessId } }, // Product uses String businessId
+        { $match: { businessId } }, // Fixed: uses ObjectId `businessId` instead of `req.businessId` string
         {
           $group: {
             _id: null,
