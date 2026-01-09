@@ -25,6 +25,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [filterLowStock, setFilterLowStock] = useState(false);
+  const [lowStockThreshold, setLowStockThreshold] = useState<number>(10);
   
   // Inline Editing
   const [inlineEditingId, setInlineEditingId] = useState<string | null>(null);
@@ -51,7 +52,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   const filteredProducts = products.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
-    const matchesLowStock = !filterLowStock || p.currentStock < 10;
+    const matchesLowStock = !filterLowStock || p.currentStock < lowStockThreshold;
     return matchesSearch && matchesCategory && matchesLowStock;
   });
 
@@ -256,7 +257,15 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                 checked={filterLowStock}
                 onChange={(e) => setFilterLowStock(e.target.checked)}
             />
-            <label htmlFor="lowStock" className="text-sm font-bold text-gray-600 cursor-pointer">Low Stock (&lt;10)</label>
+            <label htmlFor="lowStock" className="text-sm font-bold text-gray-600 cursor-pointer">Low Stock (&lt;</label>
+            <input
+              type="number"
+              className="w-12 px-1 py-0.5 text-sm border rounded bg-gray-50 text-center font-bold"
+              value={lowStockThreshold}
+              onChange={(e) => setLowStockThreshold(Number(e.target.value))}
+              onClick={(e) => e.stopPropagation()}
+            />
+            <span className="text-sm font-bold text-gray-600">)</span>
         </div>
         {/* Mobile Select All Toggle */}
         <button

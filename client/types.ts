@@ -4,6 +4,7 @@ export type UserRole = 'owner' | 'staff';
 export type TabId = 'sales' | 'inventory' | 'history' | 'dashboard' | 'settings' | 'expenditure';
 
 export interface BusinessProfile {
+  id?: string;
   name: string;
   address: string;
   phone: string;

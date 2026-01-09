@@ -192,6 +192,27 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
           <h2 className="text-lg font-bold flex items-center gap-2"><Store className="text-primary" /> Store Identity</h2>
           <div className="flex flex-col md:flex-row gap-8 items-start">
             <div className="flex flex-col items-center gap-3">
+              {business.id && (
+                <div className="w-full mb-2">
+                  <label className="block text-xs font-bold text-gray-400 uppercase mb-1 tracking-widest text-center">Support ID</label>
+                  <div className="flex gap-2">
+                    <input
+                      readOnly
+                      value={business.id}
+                      className="w-full px-2 py-1 bg-gray-100 border rounded text-xs text-center font-mono text-gray-600"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (business.id) navigator.clipboard.writeText(business.id);
+                      }}
+                      className="px-2 py-1 bg-gray-200 rounded text-xs font-bold text-gray-600 hover:bg-gray-300"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </div>
+              )}
               <div className="relative group">
                 <div className="w-32 h-32 rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 flex flex-col items-center justify-center overflow-hidden transition-all group-hover:border-primary">
                   {formData.logo ? (
