@@ -23,6 +23,7 @@ const paymentRoutes = require('./routes/payments');
 const analyticsRoutes = require('./routes/analytics');
 const entitlementsRoutes = require('./routes/entitlements');
 const uploadRouter = require('./routes/upload');
+const categoriesRouter = require('./routes/categories');
 
 const app = express();
 
@@ -58,6 +59,7 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/entitlements', entitlementsRoutes);
 app.use('/api/expenditures', expendituresRouter);
 app.use('/api/upload', uploadRouter);
+app.use('/api/categories', categoriesRouter);
 
 const port = process.env.PORT || 4000;
 const mongoUri = process.env.MONGODB_URI || '';

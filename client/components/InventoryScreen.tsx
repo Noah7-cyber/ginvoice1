@@ -1,11 +1,11 @@
-
-import React, { useState } from 'react';
-import { Plus, Search, Edit3, Trash2, CheckCircle2, X, ListTodo, Layers, Tag, DollarSign, ArrowUp, Maximize2, Save } from 'lucide-react';
-import { Product } from '../types';
-import { CURRENCY, CATEGORIES } from '../constants';
+import React, { useState, useEffect } from 'react';
+import { Plus, Search, Edit3, Trash2, CheckCircle2, X, ListTodo, Layers, Tag, DollarSign, ArrowUp, Maximize2, Save, Loader2, Calculator } from 'lucide-react';
+import { Product, Category } from '../types';
+import { CURRENCY, CATEGORIES as DEFAULT_CATEGORIES } from '../constants';
 import { formatCurrency } from '../utils/currency';
-import { deleteProduct, createProduct, updateProduct } from '../services/api';
+import { deleteProduct, createProduct, updateProduct, getCategories } from '../services/api';
 import { useToast } from './ToastProvider';
+import CategoryManager from './CategoryManager';
 
 interface InventoryScreenProps {
   products: Product[];
@@ -16,9 +16,10 @@ interface InventoryScreenProps {
 
 const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdateProducts, isOwner, isReadOnly }) => {
   // Ensure Owner is NEVER Read-Only. Staff is Read-Only if they lack 'stock-management'.
-  // Ensure Owner is NEVER Read-Only to prevent parent prop errors
   const safeReadOnly = isOwner ? false : isReadOnly;
   const { addToast } = useToast();
+
+  // States
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -27,6 +28,16 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   const [filterLowStock, setFilterLowStock] = useState(false);
   const [lowStockThreshold, setLowStockThreshold] = useState<number>(10);
   
+  // New States for Features
+  const [minPrice, setMinPrice] = useState<number | ''>('');
+  const [maxPrice, setMaxPrice] = useState<number | ''>('');
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Category Management
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
+
   // Inline Editing
   const [inlineEditingId, setInlineEditingId] = useState<string | null>(null);
 
@@ -36,10 +47,27 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   const [bulkPriceChange, setBulkPriceChange] = useState<number | ''>('');
   const [bulkStockAdd, setBulkStockAdd] = useState<number | ''>('');
   const [bulkStockReduce, setBulkStockReduce] = useState<number | ''>('');
+  const [bulkCostPrice, setBulkCostPrice] = useState<number | ''>(''); // New field
+
+  // Fetch Categories on Mount
+  useEffect(() => {
+    const fetchCats = async () => {
+      try {
+        const cats = await getCategories();
+        setCategories(cats);
+      } catch (err) {
+        console.error('Failed to fetch categories');
+      }
+    };
+    if (navigator.onLine) fetchCats();
+  }, []);
+
+  // Merge default categories with custom ones for display
+  const allCategoryNames = Array.from(new Set([...DEFAULT_CATEGORIES, ...categories.map(c => c.name)]));
 
   const initialProductState: Partial<Product> = {
     name: '',
-    category: CATEGORIES[0],
+    category: allCategoryNames[0],
     costPrice: 0,
     sellingPrice: 0,
     currentStock: 0,
@@ -53,7 +81,10 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
     const matchesLowStock = !filterLowStock || p.currentStock < lowStockThreshold;
-    return matchesSearch && matchesCategory && matchesLowStock;
+    const matchesMinPrice = minPrice === '' || p.sellingPrice >= minPrice;
+    const matchesMaxPrice = maxPrice === '' || p.sellingPrice <= maxPrice;
+
+    return matchesSearch && matchesCategory && matchesLowStock && matchesMinPrice && matchesMaxPrice;
   });
 
   const toggleSelection = (id: string) => {
@@ -64,6 +95,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   };
 
   const selectAll = () => {
+    // Smart Select All: Only select visible items
     if (selectedIds.size === filteredProducts.length) {
       setSelectedIds(new Set());
     } else {
@@ -80,16 +112,26 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     const updatedProducts = products.map(p => {
       if (selectedIds.has(p.id)) {
         let updated = { ...p, isManualUpdate: true };
+
+        // Partial Updates: Only update if value is provided
         if (bulkCategory) updated.category = bulkCategory;
-        if (typeof bulkPriceChange === 'number') {
+
+        if (typeof bulkPriceChange === 'number' && bulkPriceChange !== 0) {
           updated.sellingPrice = Math.max(0, updated.sellingPrice + (updated.sellingPrice * (bulkPriceChange / 100)));
         }
+
         if (typeof bulkStockAdd === 'number') {
           updated.currentStock = Math.max(0, updated.currentStock + bulkStockAdd);
         }
+
         if (typeof bulkStockReduce === 'number') {
           updated.currentStock = Math.max(0, updated.currentStock - bulkStockReduce);
         }
+
+        if (typeof bulkCostPrice === 'number') {
+          updated.costPrice = bulkCostPrice;
+        }
+
         return updated;
       }
       return p;
@@ -105,6 +147,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     setBulkPriceChange('');
     setBulkStockAdd('');
     setBulkStockReduce('');
+    setBulkCostPrice('');
   };
 
   const handleAddNew = () => {
@@ -113,21 +156,36 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     setIsModalOpen(true);
   };
 
+  const handleCategoryChange = (catName: string) => {
+    const customCat = categories.find(c => c.name === catName);
+    const updated = { ...newProduct, category: catName };
+
+    // Pre-fill logic: Only if prices are 0 or empty
+    if (customCat) {
+      if (!updated.sellingPrice || updated.sellingPrice === 0) {
+        updated.sellingPrice = customCat.defaultSellingPrice;
+      }
+      if (!updated.costPrice || updated.costPrice === 0) {
+        updated.costPrice = customCat.defaultCostPrice;
+      }
+    }
+    setNewProduct(updated);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (safeReadOnly) return;
+    setIsSaving(true);
 
     try {
         if (editingProductId) {
              const updatedItem = { ...(newProduct as Product), id: editingProductId, isManualUpdate: true };
              await updateProduct(updatedItem);
-             // Optimistic update
              const updatedProducts = products.map(p => p.id === editingProductId ? updatedItem : p);
              onUpdateProducts(updatedProducts);
         } else {
              const newItem: Product = { ...(newProduct as Product), id: `PRD-${Date.now()}`, isManualUpdate: true };
              await createProduct(newItem);
-             // Optimistic update
              onUpdateProducts([...products, newItem]);
         }
         setIsModalOpen(false);
@@ -136,6 +194,8 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     } catch (err) {
         console.error(err);
         addToast('Failed to save product. Please try again.', 'error');
+    } finally {
+        setIsSaving(false);
     }
   };
 
@@ -143,11 +203,9 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     const product = products.find(p => p.id === id);
     if (!product) return;
 
-    // Ensure we send manual update flag
     const updated = { ...product, isManualUpdate: true };
     try {
         await updateProduct(updated);
-        // Ensure local state is also updated if needed (likely already done via inputs)
         setInlineEditingId(null);
     } catch(err) {
         addToast('Failed to save changes', 'error');
@@ -157,7 +215,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   const handleInlineUpdateLocal = (id: string, field: 'currentStock' | 'sellingPrice', value: string) => {
     if (safeReadOnly) return;
     const numValue = parseFloat(value);
-    if (isNaN(numValue)) return; // Prevent updating with invalid numbers
+    if (isNaN(numValue)) return;
 
     const updatedProducts = products.map(p => {
       if (p.id === id) {
@@ -184,6 +242,15 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     setNewProduct({ ...newProduct, units: currentUnits });
   };
 
+  const calculateUnitPrice = (index: number) => {
+    const currentUnits = [...(newProduct.units || [])];
+    const unit = currentUnits[index];
+    if (newProduct.sellingPrice && unit.multiplier) {
+       unit.sellingPrice = newProduct.sellingPrice * unit.multiplier;
+       setNewProduct({ ...newProduct, units: currentUnits });
+    }
+  };
+
   const handleDeleteProduct = async (id: string) => {
     if (safeReadOnly) return;
     if (!navigator.onLine) {
@@ -208,6 +275,13 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
           <p className="text-gray-500">Track and manage your warehouse stock</p>
         </div>
         <div className="flex gap-2">
+           <button
+             onClick={() => setIsCategoryManagerOpen(true)}
+             className="bg-white text-gray-700 px-4 py-3 rounded-xl flex items-center gap-2 font-bold border hover:bg-gray-50 transition-all"
+           >
+             <Tag size={20} /> Manage Categories
+           </button>
+
           {selectedIds.size > 0 && !safeReadOnly && (
             <button 
               onClick={() => setIsBulkEditOpen(true)}
@@ -230,50 +304,83 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
       </div>
 
       {/* Filters */}
-      <div className="bg-white p-4 rounded-2xl shadow-sm border mb-6 flex flex-col md:flex-row gap-4 items-center">
-        <div className="relative flex-1 w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-          <input 
-            type="text"
-            placeholder="Search products..."
-            className="w-full pl-10 pr-4 py-2 bg-gray-50 border-none rounded-lg focus:ring-2 focus:ring-primary outline-none"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-        <select 
-          className="bg-gray-50 border-none rounded-lg px-4 py-2 text-sm font-medium focus:ring-2 focus:ring-primary outline-none"
-          value={selectedCategory}
-          onChange={(e) => setSelectedCategory(e.target.value)}
-        >
-          <option value="All">All Categories</option>
-          {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-        </select>
-        <div className="flex items-center gap-2 px-2 whitespace-nowrap">
+      <div className="bg-white p-4 rounded-2xl shadow-sm border mb-6 flex flex-col gap-4">
+        <div className="flex flex-col md:flex-row gap-4 items-center">
+            <div className="relative flex-1 w-full">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
             <input
-                type="checkbox"
-                id="lowStock"
-                className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
-                checked={filterLowStock}
-                onChange={(e) => setFilterLowStock(e.target.checked)}
+                type="text"
+                placeholder="Search products..."
+                className="w-full pl-10 pr-4 py-2 bg-gray-50 border-none rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
             />
-            <label htmlFor="lowStock" className="text-sm font-bold text-gray-600 cursor-pointer">Low Stock (&lt;</label>
-            <input
-              type="number"
-              className="w-12 px-1 py-0.5 text-sm border rounded bg-gray-50 text-center font-bold"
-              value={lowStockThreshold}
-              onChange={(e) => setLowStockThreshold(Number(e.target.value))}
-              onClick={(e) => e.stopPropagation()}
-            />
-            <span className="text-sm font-bold text-gray-600">)</span>
+            </div>
+            <select
+            className="bg-gray-50 border-none rounded-lg px-4 py-2 text-sm font-medium focus:ring-2 focus:ring-primary outline-none"
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            >
+            <option value="All">All Categories</option>
+            {allCategoryNames.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+            </select>
+
+            {/* Price Range Filters */}
+            <div className="flex items-center gap-2">
+                <input
+                    type="number"
+                    placeholder="Min Price"
+                    className="w-24 px-3 py-2 bg-gray-50 border-none rounded-lg text-sm"
+                    value={minPrice}
+                    onChange={e => setMinPrice(e.target.value ? Number(e.target.value) : '')}
+                />
+                <span className="text-gray-400">-</span>
+                <input
+                    type="number"
+                    placeholder="Max Price"
+                    className="w-24 px-3 py-2 bg-gray-50 border-none rounded-lg text-sm"
+                    value={maxPrice}
+                    onChange={e => setMaxPrice(e.target.value ? Number(e.target.value) : '')}
+                />
+            </div>
+
+            <div className="flex items-center gap-2 px-2 whitespace-nowrap">
+                <input
+                    type="checkbox"
+                    id="lowStock"
+                    className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                    checked={filterLowStock}
+                    onChange={(e) => setFilterLowStock(e.target.checked)}
+                />
+                <label htmlFor="lowStock" className="text-sm font-bold text-gray-600 cursor-pointer">Low Stock (&lt;</label>
+                <input
+                type="number"
+                className="w-12 px-1 py-0.5 text-sm border rounded bg-gray-50 text-center font-bold"
+                value={lowStockThreshold}
+                onChange={(e) => setLowStockThreshold(Number(e.target.value))}
+                onClick={(e) => e.stopPropagation()}
+                />
+                <span className="text-sm font-bold text-gray-600">)</span>
+            </div>
         </div>
-        {/* Mobile Select All Toggle */}
-        <button
-           onClick={selectAll}
-           className="md:hidden px-4 py-2 bg-gray-100 rounded-lg text-sm font-bold text-gray-600"
-        >
-          {selectedIds.size === filteredProducts.length ? 'Deselect All' : 'Select All'}
-        </button>
+
+        {/* Selection Toggle */}
+        <div className="flex justify-between md:hidden">
+             <button
+                onClick={() => setIsSelectionMode(!isSelectionMode)}
+                className={`px-4 py-2 rounded-lg text-sm font-bold ${isSelectionMode ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'}`}
+             >
+                {isSelectionMode ? 'Done' : 'Select Items'}
+             </button>
+             {isSelectionMode && (
+                <button
+                    onClick={selectAll}
+                    className="px-4 py-2 bg-gray-100 rounded-lg text-sm font-bold text-gray-600"
+                >
+                    {selectedIds.size === filteredProducts.length ? 'Deselect All' : 'Select All'}
+                </button>
+             )}
+        </div>
       </div>
 
       {/* Desktop Table View */}
@@ -283,12 +390,21 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
             <thead className="bg-gray-50 border-b">
               <tr>
                 <th className="px-6 py-4 w-12">
-                  <input 
-                    type="checkbox" 
-                    className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
-                    checked={selectedIds.size > 0 && selectedIds.size === filteredProducts.length}
-                    onChange={selectAll}
-                  />
+                   {/* Always show checkbox on desktop, or toggle? User asked for "Default View: Hide checkbox column". But usually desktop has checkboxes.
+                       "Selection Mode: Add state isSelectionMode... Default View: Hide the checkbox column."
+                       This likely applies to both views or primarily mobile. Let's apply to desktop too for consistency with "Selection Mode".
+                       Wait, prompt says "When clicked, show checkboxes...".
+                   */}
+                   {isSelectionMode ? (
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                        checked={selectedIds.size > 0 && selectedIds.size === filteredProducts.length}
+                        onChange={selectAll}
+                      />
+                   ) : (
+                       <button onClick={() => setIsSelectionMode(true)} title="Enable Selection" className="text-gray-400 hover:text-primary"><ListTodo size={16}/></button>
+                   )}
                 </th>
                 <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase">Product</th>
                 <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase hidden sm:table-cell">Category</th>
@@ -301,12 +417,14 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
               {filteredProducts.map(product => (
                 <tr key={product.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(product.id) ? 'bg-indigo-50/50' : ''}`}>
                   <td className="px-6 py-4">
-                    <input 
-                      type="checkbox" 
-                      className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
-                      checked={selectedIds.has(product.id)}
-                      onChange={() => toggleSelection(product.id)}
-                    />
+                    {isSelectionMode && (
+                        <input
+                        type="checkbox"
+                        className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                        checked={selectedIds.has(product.id)}
+                        onChange={() => toggleSelection(product.id)}
+                        />
+                    )}
                   </td>
                   <td className="px-6 py-4">
                     <div className="font-bold text-gray-900">{product.name}</div>
@@ -409,16 +527,18 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
           <div
              key={product.id}
              className={`bg-white p-4 rounded-2xl shadow-sm border flex flex-col gap-3 transition-colors ${selectedIds.has(product.id) ? 'ring-2 ring-primary bg-indigo-50/30' : ''}`}
-             onClick={() => toggleSelection(product.id)}
+             onClick={() => isSelectionMode && toggleSelection(product.id)}
           >
              <div className="flex justify-between items-start">
                 <div className="flex gap-3 items-start">
-                   <input
-                      type="checkbox"
-                      className="mt-1 w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
-                      checked={selectedIds.has(product.id)}
-                      onChange={(e) => { e.stopPropagation(); toggleSelection(product.id); }}
-                    />
+                   {isSelectionMode && (
+                        <input
+                            type="checkbox"
+                            className="mt-1 w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
+                            checked={selectedIds.has(product.id)}
+                            onChange={(e) => { e.stopPropagation(); toggleSelection(product.id); }}
+                        />
+                   )}
                     <div>
                       <h3 className="font-bold text-gray-900">{product.name}</h3>
                       <p className="text-xs text-gray-400">#{product.id.slice(-5)}</p>
@@ -440,7 +560,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                  </div>
              </div>
 
-             {!safeReadOnly && (
+             {!safeReadOnly && !isSelectionMode && (
                <div className="flex justify-end gap-2 border-t pt-3 mt-1">
                    <button
                       onClick={(e) => {
@@ -485,7 +605,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                     onChange={(e) => setBulkCategory(e.target.value)}
                   >
                     <option value="">No Change</option>
-                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    {allCategoryNames.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 
@@ -503,33 +623,48 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                       />
                     </div>
                   </div>
-                  <div>
-                    <label className="text-xs font-black text-gray-400 uppercase mb-2 block">Add Stock (Qty)</label>
+                   <div>
+                    <label className="text-xs font-black text-gray-400 uppercase mb-2 block">Set Cost Price</label>
                     <div className="relative">
-                      <ArrowUp className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                       <input 
                         type="number" 
-                        placeholder="e.g. 50"
+                        placeholder="New Cost"
                         className="w-full pl-10 pr-4 py-3 bg-gray-50 border rounded-xl"
-                        value={bulkStockAdd}
-                        onChange={(e) => setBulkStockAdd(e.target.value ? Number(e.target.value) : '')}
+                        value={bulkCostPrice}
+                        onChange={(e) => setBulkCostPrice(e.target.value ? Number(e.target.value) : '')}
                       />
                     </div>
                   </div>
                 </div>
 
-                <div>
-                  <label className="text-xs font-black text-gray-400 uppercase mb-2 block">Reduce Stock (Qty)</label>
-                  <div className="relative">
-                    <ArrowUp className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 rotate-180" size={16} />
-                    <input 
-                      type="number" 
-                      placeholder="e.g. 10"
-                      className="w-full pl-10 pr-4 py-3 bg-gray-50 border rounded-xl"
-                      value={bulkStockReduce}
-                      onChange={(e) => setBulkStockReduce(e.target.value ? Number(e.target.value) : '')}
-                    />
-                  </div>
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="text-xs font-black text-gray-400 uppercase mb-2 block">Add Stock (Qty)</label>
+                        <div className="relative">
+                        <ArrowUp className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                        <input
+                            type="number"
+                            placeholder="e.g. 50"
+                            className="w-full pl-10 pr-4 py-3 bg-gray-50 border rounded-xl"
+                            value={bulkStockAdd}
+                            onChange={(e) => setBulkStockAdd(e.target.value ? Number(e.target.value) : '')}
+                        />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="text-xs font-black text-gray-400 uppercase mb-2 block">Reduce Stock (Qty)</label>
+                        <div className="relative">
+                            <ArrowUp className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 rotate-180" size={16} />
+                            <input
+                            type="number"
+                            placeholder="e.g. 10"
+                            className="w-full pl-10 pr-4 py-3 bg-gray-50 border rounded-xl"
+                            value={bulkStockReduce}
+                            onChange={(e) => setBulkStockReduce(e.target.value ? Number(e.target.value) : '')}
+                            />
+                        </div>
+                    </div>
                 </div>
               </div>
 
@@ -568,8 +703,8 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Category</label>
-                  <select className="w-full px-4 py-3 rounded-xl border" value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})}>
-                    {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                  <select className="w-full px-4 py-3 rounded-xl border" value={newProduct.category} onChange={e => handleCategoryChange(e.target.value)}>
+                    {allCategoryNames.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                   </select>
                 </div>
                 <div>
@@ -619,14 +754,19 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                               onChange={e => handleUpdateUnit(idx, 'costPrice', Number(e.target.value))}
                             />
                         </div>
-                        <div className="flex-1">
+                        <div className="flex-1 relative">
                             <label className="text-[10px] uppercase font-bold text-gray-400">Selling Price</label>
-                            <input
-                              type="number"
-                              className="w-full px-3 py-2 text-sm rounded-lg border"
-                              value={u.sellingPrice}
-                              onChange={e => handleUpdateUnit(idx, 'sellingPrice', Number(e.target.value))}
-                            />
+                            <div className="flex items-center gap-1">
+                                <input
+                                type="number"
+                                className="w-full px-3 py-2 text-sm rounded-lg border"
+                                value={u.sellingPrice}
+                                onChange={e => handleUpdateUnit(idx, 'sellingPrice', Number(e.target.value))}
+                                />
+                                <button type="button" onClick={() => calculateUnitPrice(idx)} className="text-indigo-500 p-1 hover:bg-indigo-50 rounded" title="Calculate from Base Price">
+                                    <Calculator size={16} />
+                                </button>
+                            </div>
                         </div>
                       </div>
                     </div>
@@ -656,12 +796,26 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                 >
                   Cancel
                 </button>
-                <button type="submit" className="flex-1 py-4 bg-primary text-white rounded-xl font-bold shadow-lg">Save Product</button>
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="flex-1 py-4 bg-primary text-white rounded-xl font-bold shadow-lg flex items-center justify-center gap-2"
+                >
+                   {isSaving ? <Loader2 className="animate-spin" size={20} /> : 'Save Product'}
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* Category Manager Modal */}
+      <CategoryManager
+        isOpen={isCategoryManagerOpen}
+        onClose={() => setIsCategoryManagerOpen(false)}
+        categories={categories}
+        setCategories={setCategories}
+      />
     </div>
   );
 };

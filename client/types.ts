@@ -96,6 +96,13 @@ export interface InventoryState {
   expenditures?: Expenditure[]; // added optional to preserve backwards compatibility
 }
 
+export interface Category {
+  id: string; // MongoDB _id
+  name: string;
+  defaultSellingPrice: number;
+  defaultCostPrice: number;
+}
+
 export interface CartState {
   items: SaleItem[];
   customerName: string;
