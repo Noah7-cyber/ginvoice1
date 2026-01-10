@@ -35,6 +35,10 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
     paymentMethod: 'Cash'
   });
 
+  // Date Filters
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
   // Calculate Summary Metrics
   const summaryMetrics = React.useMemo(() => {
     const now = new Date();
@@ -69,6 +73,15 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
+
+  // Filtered List
+  const filteredExpenditures = React.useMemo(() => {
+    return expenditures.filter(e => {
+      if (startDate && e.date < startDate) return false;
+      if (endDate && e.date > endDate) return false;
+      return true;
+    });
+  }, [expenditures, startDate, endDate]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -120,15 +133,40 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
 
   return (
     <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Expenditures</h1>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          <Plus className="w-5 h-5 mr-2" />
-          Add Expense
-        </button>
+
+        <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
+           {/* Date Filters */}
+           <div className="flex items-center gap-2 bg-white p-2 rounded-lg border">
+              <span className="text-xs font-bold text-gray-500 uppercase">From</span>
+              <input
+                type="date"
+                className="text-sm font-bold text-gray-700 outline-none"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
+              <span className="text-gray-300">|</span>
+              <span className="text-xs font-bold text-gray-500 uppercase">To</span>
+              <input
+                type="date"
+                className="text-sm font-bold text-gray-700 outline-none"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+              {(startDate || endDate) && (
+                <button onClick={() => { setStartDate(''); setEndDate(''); }} className="text-red-400 hover:text-red-600 ml-2"><X size={14}/></button>
+              )}
+           </div>
+
+           <button
+             onClick={() => setShowAddModal(true)}
+             className="flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-bold shadow-lg shadow-blue-100"
+           >
+             <Plus className="w-5 h-5 mr-2" />
+             Add Expense
+           </button>
+        </div>
       </div>
 
       {/* Summary Cards */}
@@ -165,10 +203,10 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {(!expenditures || expenditures.length === 0) ? (
-                 <tr><td colSpan={6} className="px-6 py-4 text-center text-gray-500">No expenditures recorded.</td></tr>
+              {(!filteredExpenditures || filteredExpenditures.length === 0) ? (
+                 <tr><td colSpan={6} className="px-6 py-4 text-center text-gray-500">No expenditures found.</td></tr>
               ) : (
-                expenditures.map((exp) => (
+                filteredExpenditures.map((exp) => (
                   <tr key={exp.id || Math.random()} className="hover:bg-gray-50">
                     <td className="px-6 py-4 text-sm text-gray-600">
                        {exp.date ? new Date(exp.date).toLocaleDateString() : 'N/A'}
