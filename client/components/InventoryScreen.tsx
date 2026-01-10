@@ -396,12 +396,21 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                        Wait, prompt says "When clicked, show checkboxes...".
                    */}
                    {isSelectionMode ? (
-                      <input
-                        type="checkbox"
-                        className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
-                        checked={selectedIds.size > 0 && selectedIds.size === filteredProducts.length}
-                        onChange={selectAll}
-                      />
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                          checked={selectedIds.size > 0 && selectedIds.size === filteredProducts.length}
+                          onChange={selectAll}
+                        />
+                        <button
+                          onClick={() => { setIsSelectionMode(false); setSelectedIds(new Set()); }}
+                          className="text-red-400 hover:text-red-600"
+                          title="Exit Selection Mode"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
                    ) : (
                        <button onClick={() => setIsSelectionMode(true)} title="Enable Selection" className="text-gray-400 hover:text-primary"><ListTodo size={16}/></button>
                    )}
