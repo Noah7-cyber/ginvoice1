@@ -1,4 +1,4 @@
-import { InventoryState, BusinessProfile, Product } from '../types';
+import { InventoryState, BusinessProfile, Product, Category } from '../types';
 
 const API_BASE = (import.meta as any).env?.VITE_API_URL || '';
 const TOKEN_KEY = 'ginvoice_auth_token_v1';
@@ -106,6 +106,37 @@ export const fetchRemoteState = async () => {
     headers: {
       Authorization: `Bearer ${token}`
     }
+  });
+};
+
+export const getCategories = async () => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/categories', {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+};
+
+export const createCategory = async (category: Partial<Category>) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/categories', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(category)
+  });
+};
+
+export const deleteCategory = async (id: string) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request(`/api/categories/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` }
   });
 };
 
