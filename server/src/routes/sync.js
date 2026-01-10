@@ -340,8 +340,9 @@ router.delete('/transactions/:id', auth, async (req, res) => {
       if (transaction && transaction.items) {
         // Add items back to inventory stock
         const restockOps = transaction.items.map(item => {
-           const multiplier = item.multiplier || 1;
-           const qtyToAdd = (item.quantity || 0) * multiplier;
+           const qty = parseFloat(String(item.quantity || 0));
+           const mult = parseFloat(String(item.multiplier || 1));
+           const qtyToAdd = qty * mult;
            return Product.updateOne(
               { businessId, id: item.productId },
               { $inc: { stock: qtyToAdd } }

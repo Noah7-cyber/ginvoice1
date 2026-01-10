@@ -1,35 +1,46 @@
 const nodemailer = require('nodemailer');
 
-let cachedTransport = null;
-
-const hasConfig = () => {
-  return Boolean(process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.SMTP_USER && process.env.SMTP_PASS && process.env.MAIL_FROM);
-};
-
-const getTransport = () => {
-  if (cachedTransport) return cachedTransport;
-  cachedTransport = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT || 587),
-    secure: false,
+// Helper to create transport
+const createTransport = (user, pass) => {
+  if (!user || !pass || !process.env.MAIL_HOST || !process.env.MAIL_PORT) {
+    return null;
+  }
+  return nodemailer.createTransport({
+    host: process.env.MAIL_HOST,
+    port: Number(process.env.MAIL_PORT),
+    secure: Number(process.env.MAIL_PORT) === 465, // Use secure if port is 465, otherwise false
     auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS
+      user,
+      pass
     }
   });
-  return cachedTransport;
 };
 
-const sendMail = async ({ to, subject, text, html }) => {
-  if (!hasConfig()) {
-    console.warn('Email skipped: SMTP env vars not configured');
+let systemTransport = null;
+let supportTransport = null;
+
+const getSystemTransport = () => {
+  if (systemTransport) return systemTransport;
+  systemTransport = createTransport(process.env.SYSTEM_MAIL_USER, process.env.SYSTEM_MAIL_PASS);
+  return systemTransport;
+};
+
+const getSupportTransport = () => {
+  if (supportTransport) return supportTransport;
+  supportTransport = createTransport(process.env.SUPPORT_MAIL_USER, process.env.SUPPORT_MAIL_PASS);
+  return supportTransport;
+};
+
+const sendSystemEmail = async ({ to, subject, html, text }) => {
+  const transport = getSystemTransport();
+  if (!transport) {
+    console.warn('System Email skipped: Config missing');
     return { sent: false, reason: 'missing_config' };
   }
 
   try {
-    const transport = getTransport();
     await transport.sendMail({
-      from: process.env.MAIL_FROM,
+      from: `"Ginvoice System" <${process.env.SYSTEM_MAIL_USER}>`,
       to,
       subject,
       text,
@@ -37,9 +48,31 @@ const sendMail = async ({ to, subject, text, html }) => {
     });
     return { sent: true };
   } catch (err) {
-    console.error('Email send failed', err);
+    console.error('System Email send failed', err);
     return { sent: false, reason: 'send_failed' };
   }
 };
 
-module.exports = { sendMail };
+const sendSupportEmail = async ({ to, subject, html, text }) => {
+  const transport = getSupportTransport();
+  if (!transport) {
+    console.warn('Support Email skipped: Config missing');
+    return { sent: false, reason: 'missing_config' };
+  }
+
+  try {
+    await transport.sendMail({
+      from: `"Ginvoice Support" <${process.env.SUPPORT_MAIL_USER}>`,
+      to,
+      subject,
+      text,
+      html
+    });
+    return { sent: true };
+  } catch (err) {
+    console.error('Support Email send failed', err);
+    return { sent: false, reason: 'send_failed' };
+  }
+};
+
+module.exports = { sendSystemEmail, sendSupportEmail };

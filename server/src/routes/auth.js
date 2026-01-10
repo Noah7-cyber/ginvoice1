@@ -6,7 +6,7 @@ const Business = require('../models/Business');
 const Product = require('../models/Product');
 const Transaction = require('../models/Transaction');
 const Expenditure = require('../models/Expenditure');
-const { sendMail } = require('../services/mail');
+const { sendSystemEmail } = require('../services/mail');
 
 const router = express.Router();
 
@@ -61,7 +61,7 @@ router.post('/register', async (req, res) => {
 
     if (email) {
       // Registration confirmation email
-      sendMail({
+      sendSystemEmail({
         to: email,
         subject: 'Welcome to Ginvoice',
         text: `Hello ${name}, your store has been registered successfully.`,
@@ -136,7 +136,7 @@ router.post('/forgot-password', async (req, res) => {
     await business.save();
 
     // Password recovery email aligned with frontend intent
-    const result = await sendMail({
+    const result = await sendSystemEmail({
       to: email,
       subject: 'Reset Your Ginvoice PIN',
       text: `Your recovery code is: ${code}\n\nThis code expires in 15 minutes.`,
