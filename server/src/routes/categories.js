@@ -1,6 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const Category = require('../models/Category');
+const Business = require('../models/Business');
 const auth = require('../middleware/auth');
 
 const router = express.Router();
@@ -10,12 +11,34 @@ const toDecimal = (value) => {
   return mongoose.Types.Decimal128.fromString(String(value));
 };
 
+const DEFAULT_CATEGORIES = ['Food', 'Building', 'Electronics', 'Clothing', 'Household', 'Others'];
+
 // GET all categories for the business
 router.get('/', auth, async (req, res) => {
   try {
-    const categories = await Category.find({ businessId: req.businessId }).sort({ createdAt: 1 });
+    const businessId = req.businessId;
+    // Check if seeded
+    const business = await Business.findById(businessId);
+
+    if (business && !business.isCategoriesSeeded) {
+      // Seed defaults
+      const seedOps = DEFAULT_CATEGORIES.map(name => ({
+        businessId,
+        name,
+        defaultSellingPrice: toDecimal(0),
+        defaultCostPrice: toDecimal(0)
+      }));
+
+      await Category.insertMany(seedOps);
+
+      business.isCategoriesSeeded = true;
+      await business.save();
+    }
+
+    const categories = await Category.find({ businessId }).sort({ createdAt: 1 });
     res.json(categories);
   } catch (err) {
+    console.error('Fetch Categories Error:', err);
     res.status(500).json({ message: 'Failed to fetch categories' });
   }
 });

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Search, Edit3, Trash2, CheckCircle2, X, ListTodo, Layers, Tag, DollarSign, ArrowUp, Maximize2, Save, Loader2, Calculator } from 'lucide-react';
 import { Product, Category } from '../types';
-import { CURRENCY, CATEGORIES as DEFAULT_CATEGORIES } from '../constants';
+import { CURRENCY } from '../constants';
 import { formatCurrency } from '../utils/currency';
 import { deleteProduct, createProduct, updateProduct, getCategories } from '../services/api';
 import { useToast } from './ToastProvider';
@@ -63,11 +63,11 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   }, []);
 
   // Merge default categories with custom ones for display
-  const allCategoryNames = Array.from(new Set([...DEFAULT_CATEGORIES, ...categories.map(c => c.name)]));
+  const allCategoryNames = categories.map(c => c.name);
 
   const initialProductState: Partial<Product> = {
     name: '',
-    category: allCategoryNames[0],
+    category: allCategoryNames[0] || 'Uncategorized',
     costPrice: 0,
     sellingPrice: 0,
     currentStock: 0,
@@ -245,9 +245,15 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   const calculateUnitPrice = (index: number) => {
     const currentUnits = [...(newProduct.units || [])];
     const unit = currentUnits[index];
-    if (newProduct.sellingPrice && unit.multiplier) {
-       unit.sellingPrice = newProduct.sellingPrice * unit.multiplier;
-       setNewProduct({ ...newProduct, units: currentUnits });
+
+    if (unit.multiplier) {
+      if (newProduct.sellingPrice) {
+        unit.sellingPrice = newProduct.sellingPrice * unit.multiplier;
+      }
+      if (newProduct.costPrice) {
+        unit.costPrice = newProduct.costPrice * unit.multiplier;
+      }
+      setNewProduct({ ...newProduct, units: currentUnits });
     }
   };
 
