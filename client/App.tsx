@@ -82,7 +82,7 @@ const App: React.FC = () => {
       business: {
         name: '', address: '', phone: '', email: '',
         theme: { primaryColor: '#4f46e5', fontFamily: "'Inter', sans-serif" },
-        staffPermissions: ['sales']
+        staffPermissions: { canGiveDiscount: false, canViewInventory: false, canEditInventory: false, canViewHistory: false, canViewDashboard: false }
       },
       expenditures: []
     };
