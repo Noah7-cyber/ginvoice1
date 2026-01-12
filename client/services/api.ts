@@ -1,4 +1,4 @@
-import { InventoryState, BusinessProfile, Product, Category } from '../types';
+import { InventoryState, BusinessProfile, Product, Category, DiscountCode } from '../types';
 
 const API_BASE = (import.meta as any).env?.VITE_API_URL || '';
 const TOKEN_KEY = 'ginvoice_auth_token_v1';
@@ -106,6 +106,39 @@ export const fetchRemoteState = async () => {
     headers: {
       Authorization: `Bearer ${token}`
     }
+  });
+};
+
+export const updateSettings = async (settings: Partial<BusinessProfile['settings']>, staffPermissions?: Partial<BusinessProfile['staffPermissions']>) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/settings', {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ settings, staffPermissions })
+  });
+};
+
+export const generateDiscountCode = async (payload: { type: 'fixed' | 'percent', value: number, scope: 'global' | 'product', productId?: string, expiryDate?: string }) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/discounts/generate', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload)
+  });
+};
+
+export const validateDiscountCode = async (code: string, cartItems: any[]) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/discounts/validate', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ code, cartItems })
   });
 };
 

@@ -22,5 +22,10 @@ const ProductSchema = new mongoose.Schema({
 });
 
 ProductSchema.index({ businessId: 1, id: 1 }, { unique: true });
+// Case-Insensitive Unique Index on Name + Category per Business
+ProductSchema.index(
+  { businessId: 1, category: 1, name: 1 },
+  { unique: true, collation: { locale: 'en', strength: 2 } }
+);
 
 module.exports = mongoose.model('Product', ProductSchema);

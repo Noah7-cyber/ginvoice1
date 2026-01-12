@@ -8,9 +8,10 @@ import { formatCurrency } from '../utils/currency';
 interface SalesScreenProps {
   products: Product[];
   onAddToCart: (product: Product, unit?: ProductUnit) => void;
+  permissions?: any;
 }
 
-const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart }) => {
+const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permissions }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);

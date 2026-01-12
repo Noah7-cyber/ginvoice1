@@ -17,8 +17,36 @@ export interface BusinessProfile {
     primaryColor: string;
     fontFamily: string;
   };
-  // staffPermissions may include tab ids and special permissions like 'stock-management'
-  staffPermissions: (TabId | 'stock-management' | 'history-management')[];
+  // Deprecated: Legacy array-based permissions (kept for backward compatibility if needed temporarily)
+  // staffPermissions: (TabId | 'stock-management' | 'history-management')[];
+
+  // New Permissions Object
+  staffPermissions: {
+    canGiveDiscount: boolean;
+    canManageStock: boolean;
+    canViewHistory: boolean;
+    canViewDashboard: boolean;
+    [key: string]: boolean;
+  };
+
+  settings: {
+    currency: string;
+    taxRate: number;
+    lowStockThreshold: number;
+    enableSound: boolean;
+    printReceipts: boolean;
+    footerText: string;
+  };
+}
+
+export interface DiscountCode {
+  code: string;
+  type: 'fixed' | 'percent';
+  value: number;
+  isUsed: boolean;
+  expiryDate?: string;
+  scope: 'global' | 'product';
+  productId?: string;
 }
 
 export interface ProductUnit {
