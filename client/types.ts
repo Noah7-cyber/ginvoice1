@@ -17,16 +17,15 @@ export interface BusinessProfile {
     primaryColor: string;
     fontFamily: string;
   };
-  // Deprecated: Legacy array-based permissions (kept for backward compatibility if needed temporarily)
-  // staffPermissions: (TabId | 'stock-management' | 'history-management')[];
-
   // New Permissions Object
   staffPermissions: {
     canGiveDiscount: boolean;
-    canManageStock: boolean;
+    canViewInventory: boolean;  // Replaces canManageStock
+    canEditInventory: boolean;
     canViewHistory: boolean;
+    canEditHistory: boolean;
+    canViewExpenditure: boolean;
     canViewDashboard: boolean;
-    [key: string]: boolean;
   };
 
   settings: {

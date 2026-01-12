@@ -82,7 +82,7 @@ const App: React.FC = () => {
       business: {
         name: '', address: '', phone: '', email: '',
         theme: { primaryColor: '#4f46e5', fontFamily: "'Inter', sans-serif" },
-        staffPermissions: ['sales']
+        staffPermissions: { canGiveDiscount: false, canViewInventory: false, canEditInventory: false, canViewHistory: false, canViewDashboard: false, canViewExpenditure: false }
       },
       expenditures: []
     };
@@ -467,8 +467,9 @@ const App: React.FC = () => {
     }
   };
 
-  const canManageStock = state.role === 'owner' || state.business.staffPermissions.includes('stock-management');
-  const canManageHistory = state.role === 'owner' || state.business.staffPermissions.includes('history-management');
+  const perms = (state.business.staffPermissions as any) || {};
+  const canManageStock = state.role === 'owner' || perms.canEditInventory;
+  const canManageHistory = state.role === 'owner' || perms.canEditHistory;
 
   const allowedTabs = useMemo(() => {
     // Robust check for subscription status using both entitlements and persisted state
@@ -496,18 +497,11 @@ const App: React.FC = () => {
     const staffTabs: string[] = ['sales'];
 
     // Map permissions to tabs
-    if (state.business.staffPermissions.includes('inventory') || state.business.staffPermissions.includes('stock-management')) {
-      staffTabs.push('inventory');
-    }
-    if (state.business.staffPermissions.includes('history') || state.business.staffPermissions.includes('history-management')) {
-      staffTabs.push('history');
-    }
-    if (state.business.staffPermissions.includes('expenditure')) {
-      staffTabs.push('expenditure');
-    }
-    if (state.business.staffPermissions.includes('dashboard')) {
-      staffTabs.push('dashboard');
-    }
+    const perms = (state.business.staffPermissions as any) || {}; // Safety fallback
+    if (perms.canViewInventory || perms.canEditInventory) staffTabs.push('inventory');
+    if (perms.canViewHistory || perms.canEditHistory) staffTabs.push('history');
+    if (perms.canViewExpenditure) staffTabs.push('expenditure');
+    if (perms.canViewDashboard) staffTabs.push('dashboard');
 
     return Array.from(new Set(staffTabs)) as TabId[];
   }, [state.role, state.business.staffPermissions, entitlements, state.business.trialEndsAt, state.business.isSubscribed]);
