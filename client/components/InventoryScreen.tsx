@@ -193,8 +193,8 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
         setEditingProductId(null);
     } catch (err: any) {
         console.error(err);
-        if (err.message?.includes('409') || err.response?.status === 409 || err.message?.toLowerCase().includes('duplicate')) {
-            addToast('Product with this name already exists in this category.', 'error');
+        if (err.message && (err.message.includes('409') || err.message.toLowerCase().includes('duplicate'))) {
+            addToast('Product with this name already exists.', 'error');
         } else {
             addToast('Failed to save product. Please try again.', 'error');
         }
