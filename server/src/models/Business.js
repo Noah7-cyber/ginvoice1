@@ -33,8 +33,9 @@ const BusinessSchema = new mongoose.Schema({
   // but for now this sets the *default* permissions for staff role)
   staffPermissions: {
     canGiveDiscount: { type: Boolean, default: false },
-    canManageStock: { type: Boolean, default: false },
-    canViewHistory: { type: Boolean, default: true },
+    canViewInventory: { type: Boolean, default: false },
+    canEditInventory: { type: Boolean, default: false },
+    canViewHistory: { type: Boolean, default: false },
     canEditHistory: { type: Boolean, default: false },
     canViewExpenditure: { type: Boolean, default: false },
     canViewDashboard: { type: Boolean, default: false }

@@ -21,12 +21,15 @@ router.post('/generate', auth, async (req, res) => {
     // Generate random 6-char alphanumeric code
     const codeStr = Math.random().toString(36).substring(2, 8).toUpperCase();
 
+    // Default to 30 minutes if expiryDate is missing or invalid
+    const validExpiry = expiryDate ? new Date(expiryDate) : new Date(Date.now() + 30 * 60 * 1000);
+
     const discount = await DiscountCode.create({
       businessId: req.businessId,
       code: codeStr,
       type,
       value,
-      expiryDate,
+      expiryDate: validExpiry,
       scope,
       productId
     });

@@ -150,7 +150,8 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
 
   const PERMISSION_OPTIONS = [
     { id: 'canGiveDiscount', label: 'Give Discounts', desc: 'Allow staff to apply manual discounts' },
-    { id: 'canManageStock', label: 'Manage Stock', desc: 'Add/Edit/Delete products' },
+    { id: 'canViewInventory', label: 'View Inventory', desc: 'Access inventory screen' },
+    { id: 'canEditInventory', label: 'Manage Stock', desc: 'Add/Edit/Delete products' },
     { id: 'canViewHistory', label: 'View History', desc: 'Access past transactions' },
     { id: 'canEditHistory', label: 'Edit History', desc: 'Delete/Modify past transactions' },
     { id: 'canViewExpenditure', label: 'Expenditures', desc: 'View and manage expenses' },
@@ -367,7 +368,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
               <MessageSquare className="text-emerald-500" />
               <div><p className="font-bold text-gray-900 text-sm">WhatsApp Support</p></div>
             </a>
-            <a href="mailto:noahibr2@gmail.com" className="flex items-center gap-4 p-4 border-2 border-indigo-50 bg-indigo-50/30 rounded-2xl hover:bg-indigo-50 transition-all">
+            <a href="mailto:support@ginvoice.com.ng" className="flex items-center gap-4 p-4 border-2 border-indigo-50 bg-indigo-50/30 rounded-2xl hover:bg-indigo-50 transition-all">
               <HeadphonesIcon className="text-indigo-600" />
               <div><p className="font-bold text-gray-900 text-sm">Email Support</p></div>
             </a>
