@@ -88,9 +88,11 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
       const txProfit = tx.items.reduce((pSum, item) => {
         const product = products.find(p => p.id === item.productId);
         const cost = product ? product.costPrice : 0;
-        return pSum + (item.unitPrice - cost) * item.quantity;
+        // [FIX] Use item.total (net price) instead of unitPrice
+        return pSum + (item.total - (cost * item.quantity));
       }, 0);
-      return sum + txProfit;
+      // Optional: Subtract tx.globalDiscount from profit if needed
+      return sum + txProfit - (tx.globalDiscount || 0);
     }, 0);
 
     const cashSales = transactions.filter(t => t.paymentMethod === 'cash').length;

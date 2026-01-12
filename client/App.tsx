@@ -125,6 +125,7 @@ const App: React.FC = () => {
           products: result.products || prev.products,
           transactions: result.transactions || prev.transactions,
           expenditures: result.expenditures || prev.expenditures,
+          categories: result.categories || prev.categories || [],
           // [FIX] Force update permissions from the server response
           business: result.business ? { ...prev.business, ...result.business } : prev.business
         }));
@@ -345,6 +346,7 @@ const App: React.FC = () => {
             products: remoteData.products || [],
             transactions: remoteData.transactions || [],
             expenditures: remoteData.expenditures || [],
+            categories: remoteData.categories || [],
             business: remoteData.business ? { ...response.business, ...remoteData.business } : response.business
           };
         }

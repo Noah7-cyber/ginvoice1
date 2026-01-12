@@ -357,7 +357,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                onClick={() => setShowDeleteModal(true)}
                className="bg-white border-2 border-red-200 text-red-600 px-6 py-3 rounded-xl font-bold hover:bg-red-600 hover:text-white transition-all whitespace-nowrap"
              >
-               Delete Business
+               Delete Account & Data
              </button>
            </div>
         </div>
