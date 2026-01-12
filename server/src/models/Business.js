@@ -17,6 +17,7 @@ const BusinessSchema = new mongoose.Schema({
   paystackPlanCode: { type: String },
   recoveryCode: { type: String },
   recoveryCodeExpires: { type: Date },
+  isCategoriesSeeded: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now },
   lastActiveAt: { type: Date, default: Date.now }
 });

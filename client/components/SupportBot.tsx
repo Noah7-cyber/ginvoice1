@@ -3,7 +3,7 @@ import { MessageCircle, X, LifeBuoy } from 'lucide-react';
 import { useToast } from './ToastProvider';
 
 const SUPPORT_WHATSAPP = 'https://wa.me/2348051763431';
-const SUPPORT_EMAIL = 'noshibr2@gmail.com';
+const SUPPORT_EMAIL = 'support@ginvoice.com.ng';
 
 const FAQ: { id: string; q: string; a: string }[] = [
   { id: 'login', q: 'I cannot log in', a: 'Check your email and PIN. If you forgot your PIN, use the Forgot PIN option on the login screen.' },
