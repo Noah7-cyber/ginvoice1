@@ -217,6 +217,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (state.isLoggedIn && navigator.onLine) {
+      triggerSync().catch(err => console.warn('Background sync failed:', err));
       fetchEntitlements();
     }
   }, [state.isLoggedIn]); // Removed fetchEntitlements dependency to avoid loops if it changes
@@ -342,7 +343,8 @@ const App: React.FC = () => {
           restoredData = {
             products: remoteData.products || [],
             transactions: remoteData.transactions || [],
-            expenditures: remoteData.expenditures || []
+            expenditures: remoteData.expenditures || [],
+            business: remoteData.business ? { ...response.business, ...remoteData.business } : response.business
           };
         }
       } catch (syncErr) {

@@ -93,8 +93,11 @@ router.get('/', auth, async (req, res) => {
         name: businessData.name,
         email: businessData.email,
         phone: businessData.phone,
-        address: businessData.address
-        // Note: Logo and Theme are intentionally excluded from sync
+        address: businessData.address,
+        staffPermissions: businessData.staffPermissions,
+        settings: businessData.settings,
+        trialEndsAt: businessData.trialEndsAt,
+        isSubscribed: businessData.isSubscribed
       }
     });
   } catch (err) {
