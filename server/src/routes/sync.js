@@ -335,11 +335,25 @@ router.post('/', auth, async (req, res) => {
       amount: parseDecimal(e.amount)
     }));
 
+    // Fetch latest business data for permissions sync
+    const latestBusinessData = await Business.findById(businessId).lean();
+
     return res.json({
       syncedAt: new Date().toISOString(),
       products: fetchedProducts,
       transactions: fetchedTransactions,
-      expenditures: fetchedExpenditures
+      expenditures: fetchedExpenditures,
+      business: latestBusinessData ? {
+        id: latestBusinessData._id,
+        name: latestBusinessData.name,
+        email: latestBusinessData.email,
+        phone: latestBusinessData.phone,
+        address: latestBusinessData.address,
+        staffPermissions: latestBusinessData.staffPermissions,
+        settings: latestBusinessData.settings,
+        trialEndsAt: latestBusinessData.trialEndsAt,
+        isSubscribed: latestBusinessData.isSubscribed
+      } : undefined
     });
   } catch (err) {
     console.error(err);

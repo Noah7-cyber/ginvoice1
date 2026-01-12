@@ -285,12 +285,14 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
           <p className="text-gray-500">Track and manage your warehouse stock</p>
         </div>
         <div className="flex gap-2">
-           <button
-             onClick={() => setIsCategoryManagerOpen(true)}
-             className="bg-white text-gray-700 px-4 py-3 rounded-xl flex items-center gap-2 font-bold border hover:bg-gray-50 transition-all"
-           >
-             <Tag size={20} /> Manage Categories
-           </button>
+           {!safeReadOnly && (
+             <button
+               onClick={() => setIsCategoryManagerOpen(true)}
+               className="bg-white text-gray-700 px-4 py-3 rounded-xl flex items-center gap-2 font-bold border hover:bg-gray-50 transition-all"
+             >
+               <Tag size={20} /> Manage Categories
+             </button>
+           )}
 
           {selectedIds.size > 0 && !safeReadOnly && (
             <button 

@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Store, Save, LayoutGrid, MapPin, Phone, Palette, Type, ShieldAlert, CheckCircle2, RefreshCw, CloudCheck, Upload, Trash2, Image as ImageIcon, MessageSquare, HeadphonesIcon, HelpCircle, Lock, LogOut, AlertTriangle, X, Ticket, ToggleLeft, ToggleRight, Loader2 } from 'lucide-react';
 import { BusinessProfile, TabId, DiscountCode } from '../types';
 import { THEME_COLORS, FONTS } from '../constants';
-import { verifyPayment, changeBusinessPins, deleteAccount, uploadFile, updateSettings, generateDiscountCode } from '../services/api';
+import { changeBusinessPins, deleteAccount, uploadFile, updateSettings, generateDiscountCode } from '../services/api';
 import SupportBot from './SupportBot'; // Integrated SupportBot
 
 interface SettingsScreenProps {
@@ -18,8 +18,6 @@ interface SettingsScreenProps {
 const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusiness, onManualSync, lastSynced, isSyncing, onLogout, onDeleteAccount }) => {
   const [formData, setFormData] = useState<BusinessProfile>(business);
   const [showSaved, setShowSaved] = useState(false);
-  const [paymentRef, setPaymentRef] = useState('');
-  const [verifyStatus, setVerifyStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
 
   // Security State
   const [currentOwnerPin, setCurrentOwnerPin] = useState('');
@@ -84,17 +82,6 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
     }));
   };
 
-  const handleVerifyPayment = async () => {
-    if (!paymentRef.trim()) return;
-    setVerifyStatus('loading');
-    try {
-      await verifyPayment(paymentRef.trim());
-      setVerifyStatus('success');
-      setPaymentRef('');
-    } catch (err) {
-      setVerifyStatus('error');
-    }
-  };
 
   const handleUpdatePins = async () => {
     if (!currentOwnerPin) return setSecurityMsg('Current Owner PIN required');
@@ -182,23 +169,6 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
           >
             {isSyncing ? 'SYNCING...' : 'SYNC NOW'}
           </button>
-          <div className="mt-2 w-full flex flex-col items-end gap-2">
-            <input
-              type="text"
-              placeholder="Payment Reference"
-              value={paymentRef}
-              onChange={(e) => setPaymentRef(e.target.value)}
-              className="w-full px-3 py-2 bg-white border border-indigo-100 rounded-xl text-xs font-bold text-gray-700"
-            />
-            <button
-              type="button"
-              onClick={handleVerifyPayment}
-              disabled={verifyStatus === 'loading'}
-              className="text-[10px] bg-gray-900 text-white px-3 py-1 rounded-full font-black hover:bg-black transition-colors disabled:opacity-50"
-            >
-              {verifyStatus === 'loading' ? 'VERIFYING...' : 'VERIFY PAYMENT'}
-            </button>
-          </div>
         </div>
       </div>
 
