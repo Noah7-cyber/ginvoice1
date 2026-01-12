@@ -43,6 +43,11 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (file.size > 200 * 1024) {
+        alert("Image too large. Max 200KB.");
+        return;
+      }
+
       // Preview immediately
       const reader = new FileReader();
       reader.onloadend = () => {

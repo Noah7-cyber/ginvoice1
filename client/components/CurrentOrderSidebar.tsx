@@ -96,8 +96,8 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
           finalSignature = await uploadFile(file);
         }
       } catch (err) {
-        console.warn('Signature upload failed, using fallback base64', err);
-        // Fallback: finalSignature remains the base64 string
+        console.warn('Signature upload failed, falling back to base64', err);
+        // finalSignature remains the base64 string as fallback
       }
     }
 
