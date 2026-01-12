@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, X, Tag } from 'lucide-react';
+import { Plus, Trash2, X, Tag, Edit3, Save } from 'lucide-react';
 import { Category } from '../types';
-import { getCategories, createCategory, deleteCategory } from '../services/api';
+import { getCategories, createCategory, deleteCategory, updateCategory } from '../services/api';
 import { useToast } from './ToastProvider';
 import { CURRENCY } from '../constants';
 
@@ -18,28 +18,62 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
   const [defaultCost, setDefaultCost] = useState<number | ''>('');
   const [defaultSelling, setDefaultSelling] = useState<number | ''>('');
   const [loading, setLoading] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
-  const handleAdd = async (e: React.FormEvent) => {
+  const handleAddOrUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCategoryName) return;
 
     setLoading(true);
     try {
-      const newCat = await createCategory({
-        name: newCategoryName,
-        defaultSellingPrice: Number(defaultSelling) || 0,
-        defaultCostPrice: Number(defaultCost) || 0
-      });
-      setCategories([...categories, newCat]);
+      if (editingId) {
+        // Update Logic
+        await updateCategory(editingId, {
+          name: newCategoryName,
+          defaultSellingPrice: Number(defaultSelling) || 0,
+          defaultCostPrice: Number(defaultCost) || 0
+        });
+        setCategories(categories.map(c => c.id === editingId ? {
+          ...c,
+          name: newCategoryName,
+          defaultSellingPrice: Number(defaultSelling) || 0,
+          defaultCostPrice: Number(defaultCost) || 0
+        } : c));
+        addToast('Category updated', 'success');
+        setEditingId(null);
+      } else {
+        // Create Logic
+        const newCat = await createCategory({
+          name: newCategoryName,
+          defaultSellingPrice: Number(defaultSelling) || 0,
+          defaultCostPrice: Number(defaultCost) || 0
+        });
+        setCategories([...categories, newCat]);
+        addToast('Category created', 'success');
+      }
+
       setNewCategoryName('');
       setDefaultCost('');
       setDefaultSelling('');
-      addToast('Category created', 'success');
     } catch (err) {
-      addToast('Failed to create category', 'error');
+      addToast(editingId ? 'Failed to update' : 'Failed to create', 'error');
     } finally {
       setLoading(false);
     }
+  };
+
+  const startEdit = (cat: Category) => {
+    setEditingId(cat.id);
+    setNewCategoryName(cat.name);
+    setDefaultCost(cat.defaultCostPrice);
+    setDefaultSelling(cat.defaultSellingPrice);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setNewCategoryName('');
+    setDefaultCost('');
+    setDefaultSelling('');
   };
 
   const handleDelete = async (id: string) => {
@@ -64,10 +98,13 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
         </div>
 
         <div className="p-6 space-y-6">
-          {/* Add Form */}
-          <form onSubmit={handleAdd} className="space-y-3 bg-gray-50 p-4 rounded-xl border">
+          {/* Add/Edit Form */}
+          <form onSubmit={handleAddOrUpdate} className={`space-y-3 p-4 rounded-xl border ${editingId ? 'bg-indigo-50 border-indigo-100' : 'bg-gray-50'}`}>
+            <div className="flex justify-between items-center">
+               <label className="text-[10px] font-bold text-gray-400 uppercase">{editingId ? 'Edit Category' : 'New Category Name'}</label>
+               {editingId && <button type="button" onClick={cancelEdit} className="text-[10px] font-bold text-red-500 uppercase">Cancel</button>}
+            </div>
             <div>
-               <label className="text-[10px] font-bold text-gray-400 uppercase">Category Name</label>
                <input
                  autoFocus
                  type="text"
@@ -102,9 +139,9 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
             </div>
             <button
               disabled={loading}
-              className="w-full py-2 bg-primary text-white rounded-lg font-bold text-sm hover:opacity-90 disabled:opacity-50"
+              className={`w-full py-2 text-white rounded-lg font-bold text-sm hover:opacity-90 disabled:opacity-50 ${editingId ? 'bg-indigo-600' : 'bg-primary'}`}
             >
-              {loading ? 'Adding...' : 'Add Category'}
+              {loading ? 'Saving...' : (editingId ? 'Update Category' : 'Add Category')}
             </button>
           </form>
 
@@ -114,16 +151,21 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
                <p className="text-center text-gray-400 text-sm py-4">No custom categories yet.</p>
             ) : (
                categories.map(cat => (
-                 <div key={cat.id} className="flex justify-between items-center p-3 border rounded-xl hover:bg-gray-50">
+                 <div key={cat.id} className={`flex justify-between items-center p-3 border rounded-xl hover:bg-gray-50 ${editingId === cat.id ? 'ring-2 ring-indigo-500 bg-indigo-50' : ''}`}>
                     <div>
                       <h4 className="font-bold text-gray-800">{cat.name}</h4>
                       <p className="text-[10px] text-gray-500">
                         Def: {CURRENCY}{cat.defaultSellingPrice} / {CURRENCY}{cat.defaultCostPrice} (Cost)
                       </p>
                     </div>
-                    <button onClick={() => handleDelete(cat.id)} className="text-red-400 hover:text-red-600 p-2">
-                       <Trash2 size={16} />
-                    </button>
+                    <div className="flex gap-1">
+                      <button onClick={() => startEdit(cat)} className="text-gray-400 hover:text-indigo-600 p-2">
+                         <Edit3 size={16} />
+                      </button>
+                      <button onClick={() => handleDelete(cat.id)} className="text-gray-400 hover:text-red-600 p-2">
+                         <Trash2 size={16} />
+                      </button>
+                    </div>
                  </div>
                ))
             )}

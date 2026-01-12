@@ -152,6 +152,8 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
     { id: 'canGiveDiscount', label: 'Give Discounts', desc: 'Allow staff to apply manual discounts' },
     { id: 'canManageStock', label: 'Manage Stock', desc: 'Add/Edit/Delete products' },
     { id: 'canViewHistory', label: 'View History', desc: 'Access past transactions' },
+    { id: 'canEditHistory', label: 'Edit History', desc: 'Delete/Modify past transactions' },
+    { id: 'canViewExpenditure', label: 'Expenditures', desc: 'View and manage expenses' },
     { id: 'canViewDashboard', label: 'View Dashboard', desc: 'Access analytics and revenue data' },
   ];
 

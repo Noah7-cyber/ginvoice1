@@ -51,7 +51,11 @@ router.post('/validate', auth, async (req, res) => {
     });
 
     if (!discount) {
-      return res.status(404).json({ valid: false, message: 'Invalid or used code' });
+      return res.status(404).json({ valid: false, message: 'Invalid code' });
+    }
+
+    if (discount.isUsed) {
+      return res.status(400).json({ valid: false, message: 'Code already used' });
     }
 
     if (discount.expiryDate && new Date(discount.expiryDate) < new Date()) {
