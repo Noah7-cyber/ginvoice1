@@ -2,13 +2,31 @@ const nodemailer = require('nodemailer');
 
 // Helper to create transport
 const createTransport = (user, pass) => {
-  if (!user || !pass || !process.env.MAIL_HOST || !process.env.MAIL_PORT) {
+  if (!user || !pass) {
     return null;
   }
+
+  // Specific fix for Zoho
+  if (process.env.MAIL_HOST && process.env.MAIL_HOST.includes('zoho')) {
+      const transporter = nodemailer.createTransport({
+        host: "smtp.zoho.com",
+        port: 465,
+        secure: true, // MUST be true for port 465
+        auth: {
+            user,
+            pass
+        }
+      });
+      // Verify connection
+      transporter.verify().then(() => console.log(`Zoho Mail Connected for ${user}`)).catch(err => console.error(`Zoho Mail Error for ${user}:`, err));
+      return transporter;
+  }
+
+  // Default behavior
   return nodemailer.createTransport({
     host: process.env.MAIL_HOST,
     port: Number(process.env.MAIL_PORT),
-    secure: Number(process.env.MAIL_PORT) === 465, // Use secure if port is 465, otherwise false
+    secure: Number(process.env.MAIL_PORT) === 465,
     auth: {
       user,
       pass

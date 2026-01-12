@@ -11,7 +11,9 @@ import {
   CreditCard,
   AlertCircle,
   Coins,
-  Gem
+  Gem,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { 
   AreaChart, 
@@ -199,6 +201,24 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
 
         {/* Revenue Carousel */}
         <div className="bg-white p-5 rounded-2xl shadow-sm border group hover:shadow-md transition-all relative overflow-hidden">
+           {/* Navigation Controls */}
+           <div className="absolute inset-y-0 left-0 flex items-center pl-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button
+                onClick={() => setTimeRange(prev => prev === '7d' ? '1y' : prev === '30d' ? '7d' : '30d')}
+                className="p-1 bg-white/80 rounded-full shadow-md hover:bg-white"
+              >
+                <ChevronLeft size={16} className="text-gray-600" />
+              </button>
+           </div>
+           <div className="absolute inset-y-0 right-0 flex items-center pr-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button
+                onClick={() => setTimeRange(prev => prev === '7d' ? '30d' : prev === '30d' ? '1y' : '7d')}
+                className="p-1 bg-white/80 rounded-full shadow-md hover:bg-white"
+              >
+                <ChevronRight size={16} className="text-gray-600" />
+              </button>
+           </div>
+
            <div className="absolute top-2 right-2 flex gap-1">
               <div className={`w-2 h-2 rounded-full ${timeRange === '7d' ? 'bg-blue-600' : 'bg-gray-200'}`} />
               <div className={`w-2 h-2 rounded-full ${timeRange === '30d' ? 'bg-blue-600' : 'bg-gray-200'}`} />

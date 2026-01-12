@@ -163,6 +163,17 @@ export const createCategory = async (category: Partial<Category>) => {
   });
 };
 
+export const updateCategory = async (id: string, category: Partial<Category>) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request(`/api/categories/${id}`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(category)
+  });
+};
+
 export const deleteCategory = async (id: string) => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');

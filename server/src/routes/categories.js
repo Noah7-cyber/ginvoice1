@@ -62,6 +62,31 @@ router.post('/', auth, async (req, res) => {
   }
 });
 
+// PUT update a category
+router.put('/:id', auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, defaultSellingPrice, defaultCostPrice } = req.body;
+
+    if (!name) return res.status(400).json({ message: 'Name required' });
+
+    const category = await Category.findOneAndUpdate(
+      { _id: id, businessId: req.businessId },
+      {
+        name,
+        defaultSellingPrice: toDecimal(defaultSellingPrice),
+        defaultCostPrice: toDecimal(defaultCostPrice)
+      },
+      { new: true }
+    );
+
+    if (!category) return res.status(404).json({ message: 'Category not found' });
+    res.json(category);
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to update category' });
+  }
+});
+
 // DELETE a category
 router.delete('/:id', auth, async (req, res) => {
   try {

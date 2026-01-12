@@ -35,6 +35,8 @@ const BusinessSchema = new mongoose.Schema({
     canGiveDiscount: { type: Boolean, default: false },
     canManageStock: { type: Boolean, default: false },
     canViewHistory: { type: Boolean, default: true },
+    canEditHistory: { type: Boolean, default: false },
+    canViewExpenditure: { type: Boolean, default: false },
     canViewDashboard: { type: Boolean, default: false }
   },
 

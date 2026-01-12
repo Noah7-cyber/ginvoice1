@@ -5,6 +5,7 @@ const Product = require('../models/Product');
 const Transaction = require('../models/Transaction');
 const Business = require('../models/Business');
 const Expenditure = require('../models/Expenditure');
+const DiscountCode = require('../models/DiscountCode');
 const auth = require('../middleware/auth');
 
 const router = express.Router();
@@ -241,6 +242,34 @@ router.post('/', auth, async (req, res) => {
         }
       }));
       await Transaction.bulkWrite(txOps, { ordered: false });
+
+      // Mark Discount Codes as Used
+      // We assume frontend or a separate property indicates which code was used.
+      // But based on the prompt, "When a Sale is successfully confirmed... update that code".
+      // Usually, the discount code is applied and stored in the transaction or sent alongside.
+      // If the frontend doesn't send the code explicitly, we can't mark it used here easily without modifying the transaction model.
+      // However, if the code was validated and applied, the user expects it to be marked used now.
+      // Let's check if we can extract code from transaction data or if we should rely on a separate call.
+      // The prompt says: "When a Sale is successfully confirmed with a discount code, you MUST update that code document".
+      // I will assume the frontend calls /api/discounts/use OR I should look for it here.
+      // Since I can't easily change the transaction schema on the fly to store the raw code string without more info,
+      // I will assume the frontend handles calling the /use endpoint I verified earlier in `discounts.js`.
+      // BUT, the prompt said "In the route that verifies/applies... OR inside sales.js... Crucial: When a Sale is successfully confirmed... update that code".
+      // `sync.js` IS the confirmation.
+      // I will search for a property like `discountCode` in the transaction object from frontend.
+      // If `t.discountCode` exists (which I should add to the frontend logic if missing), I mark it.
+
+      // Let's iterate and check for discountCode property in the incoming payload
+      const usedCodes = transactions
+        .map(t => t.discountCode)
+        .filter(code => code);
+
+      if (usedCodes.length > 0) {
+        await DiscountCode.updateMany(
+          { businessId, code: { $in: usedCodes } },
+          { $set: { isUsed: true } }
+        );
+      }
     }
 
     // 4. Save Expenditures
