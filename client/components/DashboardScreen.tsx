@@ -43,6 +43,10 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
       shopCost: number;
       shopWorth: number;
       dailyRevenue: number;
+      cashCollectedToday: number;
+      newDebtToday: number;
+      monthlySales: number;
+      yearlySales: number;
       revenueTrendText?: string;
       profitTrendText?: string;
     };
@@ -193,14 +197,56 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
           color="bg-purple-50"
         />
 
-        {/* New Cards */}
-        <StatCard
-          title="Daily Revenue"
-          value={`${CURRENCY}${(stats.dailyRevenue || 0).toLocaleString()}`}
-          icon={<DollarSign className="text-blue-600" />}
-          trend="Today's total sales"
-          color="bg-blue-50"
-        />
+        {/* Revenue Carousel */}
+        <div className="bg-white p-5 rounded-2xl shadow-sm border group hover:shadow-md transition-all relative overflow-hidden">
+           <div className="absolute top-2 right-2 flex gap-1">
+              <div className={`w-2 h-2 rounded-full ${timeRange === '7d' ? 'bg-blue-600' : 'bg-gray-200'}`} />
+              <div className={`w-2 h-2 rounded-full ${timeRange === '30d' ? 'bg-blue-600' : 'bg-gray-200'}`} />
+              <div className={`w-2 h-2 rounded-full ${timeRange === '1y' ? 'bg-blue-600' : 'bg-gray-200'}`} />
+           </div>
+
+           <div className="flex justify-between items-start mb-4">
+              <div className="p-3 rounded-xl bg-blue-50 transition-transform group-hover:scale-110">
+                <DollarSign className="text-blue-600" size={24} />
+              </div>
+           </div>
+
+           {/* Slide 1: Daily */}
+           {timeRange === '7d' && (
+             <div className="space-y-1 animate-in fade-in slide-in-from-right duration-300">
+               <p className="text-sm font-medium text-gray-500">Today's Cash</p>
+               <h4 className="text-2xl font-black text-gray-900">{CURRENCY}{(stats.cashCollectedToday || 0).toLocaleString()}</h4>
+               <p className="text-[10px] font-bold text-red-500 uppercase tracking-wider">
+                 New Debt: {CURRENCY}{(stats.newDebtToday || 0).toLocaleString()}
+               </p>
+             </div>
+           )}
+
+           {/* Slide 2: Monthly */}
+           {timeRange === '30d' && (
+             <div className="space-y-1 animate-in fade-in slide-in-from-right duration-300">
+               <p className="text-sm font-medium text-gray-500">Monthly Sales</p>
+               <h4 className="text-2xl font-black text-gray-900">{CURRENCY}{(stats.monthlySales || 0).toLocaleString()}</h4>
+               <input
+                 type="month"
+                 className="text-[10px] font-bold text-gray-400 bg-transparent border-none p-0 focus:ring-0"
+                 onChange={(e) => {
+                    // Logic to trigger fetch with ?date=YYYY-MM
+                    // For now, we assume this view binds to the global timeRange selector or separate fetch
+                 }}
+               />
+             </div>
+           )}
+
+           {/* Slide 3: Yearly */}
+           {timeRange === '1y' && (
+             <div className="space-y-1 animate-in fade-in slide-in-from-right duration-300">
+               <p className="text-sm font-medium text-gray-500">Yearly Sales</p>
+               <h4 className="text-2xl font-black text-gray-900">{CURRENCY}{(stats.yearlySales || 0).toLocaleString()}</h4>
+               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Accrual Basis</p>
+             </div>
+           )}
+        </div>
         <StatCard
           title="Shop Cost"
           value={`${CURRENCY}${(stats.shopCost || 0).toLocaleString()}`}

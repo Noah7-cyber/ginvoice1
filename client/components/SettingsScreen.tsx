@@ -1,8 +1,8 @@
-import React, { useState, useRef } from 'react';
-import { Store, Save, LayoutGrid, MapPin, Phone, Palette, Type, ShieldAlert, CheckCircle2, RefreshCw, CloudCheck, Upload, Trash2, Image as ImageIcon, MessageSquare, HeadphonesIcon, HelpCircle, Lock, LogOut, AlertTriangle, X } from 'lucide-react';
-import { BusinessProfile, TabId } from '../types';
+import React, { useState, useRef, useEffect } from 'react';
+import { Store, Save, LayoutGrid, MapPin, Phone, Palette, Type, ShieldAlert, CheckCircle2, RefreshCw, CloudCheck, Upload, Trash2, Image as ImageIcon, MessageSquare, HeadphonesIcon, HelpCircle, Lock, LogOut, AlertTriangle, X, Ticket, ToggleLeft, ToggleRight, Loader2 } from 'lucide-react';
+import { BusinessProfile, TabId, DiscountCode } from '../types';
 import { THEME_COLORS, FONTS } from '../constants';
-import { verifyPayment, changeBusinessPins, deleteAccount, uploadFile } from '../services/api';
+import { verifyPayment, changeBusinessPins, deleteAccount, uploadFile, updateSettings, generateDiscountCode } from '../services/api';
 import SupportBot from './SupportBot'; // Integrated SupportBot
 
 interface SettingsScreenProps {
@@ -69,14 +69,19 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const togglePermission = (tab: string) => {
-    const perms = new Set(formData.staffPermissions || []);
-    if (perms.has(tab)) {
-      perms.delete(tab);
-    } else {
-      perms.add(tab);
-    }
-    setFormData({ ...formData, staffPermissions: Array.from(perms) as any });
+  const togglePermission = (key: string) => {
+    // Handle both new object-based and old array-based perms logic if mixing (for now assume object structure is dominant based on new types)
+    const currentPerms = formData.staffPermissions as any || {};
+    // If it's the old array, we might need a migration strategy, but let's assume we are using the new object
+    const newVal = !currentPerms[key];
+
+    setFormData(prev => ({
+      ...prev,
+      staffPermissions: {
+        ...prev.staffPermissions,
+        [key]: newVal
+      }
+    }));
   };
 
   const handleVerifyPayment = async () => {
@@ -125,21 +130,29 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
     }
   };
 
-  const PERMISSION_OPTIONS: { id: string; label: string; desc: string }[] = [
-    { id: 'sales', label: 'Point of Sale', desc: 'Process new sales' },
+  // Discount Code Modal State
+  const [showDiscountModal, setShowDiscountModal] = useState(false);
+  const [discountForm, setDiscountForm] = useState({ type: 'fixed' as 'fixed' | 'percent', value: 0, scope: 'global' as 'global'|'product' });
+  const [generatedCode, setGeneratedCode] = useState<DiscountCode | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
 
-    // Split Inventory
-    { id: 'inventory', label: 'Inventory (View)', desc: 'View stock levels and prices' },
-    { id: 'stock-management', label: 'Inventory (Edit)', desc: 'Add, edit, or delete products' },
+  const handleGenerateDiscount = async () => {
+    setIsGenerating(true);
+    try {
+      const code = await generateDiscountCode(discountForm);
+      setGeneratedCode(code);
+    } catch (err) {
+      alert('Failed to generate code');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
-    // Split History (Billing)
-    { id: 'history', label: 'History (View)', desc: 'View past transactions and receipts' },
-    { id: 'history-management', label: 'History (Edit)', desc: 'Delete or modify past records' },
-
-    // Add Missing Expenditure
-    { id: 'expenditure', label: 'Expenditures', desc: 'Manage business expenses' },
-
-    { id: 'dashboard', label: 'Analytics', desc: 'View sales performance' },
+  const PERMISSION_OPTIONS = [
+    { id: 'canGiveDiscount', label: 'Give Discounts', desc: 'Allow staff to apply manual discounts' },
+    { id: 'canManageStock', label: 'Manage Stock', desc: 'Add/Edit/Delete products' },
+    { id: 'canViewHistory', label: 'View History', desc: 'Access past transactions' },
+    { id: 'canViewDashboard', label: 'View Dashboard', desc: 'Access analytics and revenue data' },
   ];
 
   return (
@@ -282,16 +295,36 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
         <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
           <h2 className="text-lg font-bold flex items-center gap-2"><ShieldAlert className="text-primary" /> Staff Permissions</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {PERMISSION_OPTIONS.map(opt => (
-              <label key={opt.id} className={`flex items-start gap-4 p-5 rounded-2xl border-2 cursor-pointer transition-all ${formData.staffPermissions?.includes(opt.id as any) ? 'border-primary bg-primary-bg' : 'border-gray-50'}`}>
-                <input type="checkbox" className="w-5 h-5 rounded border-gray-300 text-primary mt-1" checked={formData.staffPermissions?.includes(opt.id as any)} onChange={() => togglePermission(opt.id)} disabled={opt.id === 'sales'} />
-                <div>
-                  <p className="font-bold text-gray-900">{opt.label}</p>
-                  <p className="text-xs text-gray-500 mt-1">{opt.desc}</p>
+            {PERMISSION_OPTIONS.map(opt => {
+              const isActive = (formData.staffPermissions as any)?.[opt.id];
+              return (
+                <div key={opt.id} className="flex items-center justify-between p-5 rounded-2xl border bg-gray-50">
+                  <div>
+                    <p className="font-bold text-gray-900">{opt.label}</p>
+                    <p className="text-xs text-gray-500 mt-1">{opt.desc}</p>
+                  </div>
+                  <button type="button" onClick={() => togglePermission(opt.id)} className={`transition-colors ${isActive ? 'text-primary' : 'text-gray-300'}`}>
+                    {isActive ? <ToggleRight size={40} /> : <ToggleLeft size={40} />}
+                  </button>
                 </div>
-              </label>
-            ))}
+              );
+            })}
           </div>
+        </div>
+
+        {/* Discount Codes */}
+        <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
+           <div className="flex justify-between items-center">
+              <h2 className="text-lg font-bold flex items-center gap-2"><Ticket className="text-pink-500" /> Discount Codes</h2>
+              <button
+                type="button"
+                onClick={() => setShowDiscountModal(true)}
+                className="text-xs font-black uppercase bg-pink-50 text-pink-600 px-4 py-2 rounded-lg hover:bg-pink-100 transition-all"
+              >
+                + Generate Code
+              </button>
+           </div>
+           <p className="text-sm text-gray-500">Create unique codes for marketing campaigns or loyal customers.</p>
         </div>
 
         {/* Security / PINs */}
@@ -366,6 +399,64 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
           </div>
         </div>
       </form>
+
+      {/* Discount Code Modal */}
+      {showDiscountModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+           <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden animate-in zoom-in-95">
+              <div className="p-4 border-b flex justify-between items-center bg-pink-50">
+                 <h3 className="font-bold text-pink-600">Generate Discount</h3>
+                 <button onClick={() => { setShowDiscountModal(false); setGeneratedCode(null); }}><X size={20} className="text-gray-400" /></button>
+              </div>
+              <div className="p-6 space-y-4">
+                 {generatedCode ? (
+                   <div className="text-center space-y-4">
+                      <div className="p-4 bg-gray-900 text-white rounded-xl font-mono text-2xl font-black tracking-widest dashed border-2 border-gray-600">
+                        {generatedCode.code}
+                      </div>
+                      <p className="text-xs text-gray-500">Share this code with customers.</p>
+                      <button onClick={() => setGeneratedCode(null)} className="text-xs font-bold text-pink-500 underline">Generate Another</button>
+                   </div>
+                 ) : (
+                   <>
+                     <div className="grid grid-cols-2 gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setDiscountForm({...discountForm, type: 'fixed'})}
+                          className={`p-3 rounded-xl border-2 font-bold text-xs ${discountForm.type === 'fixed' ? 'border-pink-500 bg-pink-50 text-pink-700' : 'border-gray-100'}`}
+                        >
+                          Fixed Amount (₦)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDiscountForm({...discountForm, type: 'percent'})}
+                          className={`p-3 rounded-xl border-2 font-bold text-xs ${discountForm.type === 'percent' ? 'border-pink-500 bg-pink-50 text-pink-700' : 'border-gray-100'}`}
+                        >
+                          Percentage (%)
+                        </button>
+                     </div>
+                     <div>
+                       <label className="text-xs font-bold text-gray-400 uppercase">Value</label>
+                       <input
+                         type="number"
+                         className="w-full px-4 py-2 border rounded-xl font-bold"
+                         value={discountForm.value}
+                         onChange={e => setDiscountForm({...discountForm, value: Number(e.target.value)})}
+                       />
+                     </div>
+                     <button
+                       onClick={handleGenerateDiscount}
+                       disabled={isGenerating}
+                       className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold flex items-center justify-center gap-2"
+                     >
+                       {isGenerating ? <Loader2 className="animate-spin" /> : 'Create Code'}
+                     </button>
+                   </>
+                 )}
+              </div>
+           </div>
+        </div>
+      )}
 
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (

@@ -36,6 +36,13 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
+    // Carousel Filter Logic
+    const filterDate = req.query.date ? new Date(req.query.date) : new Date();
+    const filterMonthStart = new Date(filterDate.getFullYear(), filterDate.getMonth(), 1);
+    const filterMonthEnd = new Date(filterDate.getFullYear(), filterDate.getMonth() + 1, 0, 23, 59, 59, 999);
+    const filterYearStart = new Date(filterDate.getFullYear(), 0, 1);
+    const filterYearEnd = new Date(filterDate.getFullYear(), 11, 31, 23, 59, 59, 999);
+
     const [
       summaryStats,
       currentMonthStats,
@@ -43,7 +50,9 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
       chartAgg,
       topProducts,
       inventoryValuation,
-      dailyRevenueAgg
+      dailyRevenueAgg,
+      monthlyRevenueAgg,
+      yearlyRevenueAgg
     ] = await Promise.all([
       // 1. Overall Summary (Revenue, Debt, Counts)
       Transaction.aggregate([
@@ -65,13 +74,13 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
         { $project: { _id: 0 } }
       ]),
 
-      // 2. Current Month Revenue
+      // 2. Current Month Revenue (For Trend)
       Transaction.aggregate([
         { $match: { businessId, transactionDate: { $gte: currentMonthStart } } },
         { $group: { _id: null, revenue: { $sum: { $toDouble: '$totalAmount' } } } }
       ]),
 
-      // 3. Previous Month Revenue
+      // 3. Previous Month Revenue (For Trend)
       Transaction.aggregate([
         { $match: { businessId, transactionDate: { $gte: previousMonthStart, $lte: previousMonthEnd } } },
         { $group: { _id: null, revenue: { $sum: { $toDouble: '$totalAmount' } } } }
@@ -124,10 +133,28 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
         }
       ]),
 
-      // 7. Daily Revenue
+      // 7. Daily Stats (Cash Collected + New Debt)
       Transaction.aggregate([
         { $match: { businessId, transactionDate: { $gte: todayStart } } },
-        { $group: { _id: null, dailyRevenue: { $sum: { $toDouble: '$totalAmount' } } } }
+        {
+          $group: {
+            _id: null,
+            cashCollected: { $sum: { $toDouble: '$amountPaid' } },
+            newDebt: { $sum: { $toDouble: '$balance' } }
+          }
+        }
+      ]),
+
+      // 8. Monthly Revenue (Filtered)
+      Transaction.aggregate([
+        { $match: { businessId, transactionDate: { $gte: filterMonthStart, $lte: filterMonthEnd } } },
+        { $group: { _id: null, totalSales: { $sum: { $toDouble: '$totalAmount' } } } }
+      ]),
+
+      // 9. Yearly Revenue (Filtered)
+      Transaction.aggregate([
+        { $match: { businessId, transactionDate: { $gte: filterYearStart, $lte: filterYearEnd } } },
+        { $group: { _id: null, totalSales: { $sum: { $toDouble: '$totalAmount' } } } }
       ])
     ]);
 
@@ -138,7 +165,11 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
     // New Metrics
     const shopCost = inventoryValuation[0]?.shopCost || 0;
     const shopWorth = inventoryValuation[0]?.shopWorth || 0;
-    const dailyRevenue = dailyRevenueAgg[0]?.dailyRevenue || 0;
+
+    // Carousel Metrics
+    const dailyStats = dailyRevenueAgg[0] || { cashCollected: 0, newDebt: 0 };
+    const monthlySales = monthlyRevenueAgg[0]?.totalSales || 0;
+    const yearlySales = yearlyRevenueAgg[0]?.totalSales || 0;
 
     // --- Profit Calculation ---
     const [productSalesAgg] = await Promise.all([
@@ -263,7 +294,12 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
         transferSales: stats.transferSales,
         shopCost: toNumber(shopCost),
         shopWorth: toNumber(shopWorth),
-        dailyRevenue: toNumber(dailyRevenue),
+        // Carousel Data
+        cashCollectedToday: toNumber(dailyStats.cashCollected),
+        newDebtToday: toNumber(dailyStats.newDebt),
+        monthlySales: toNumber(monthlySales),
+        yearlySales: toNumber(yearlySales),
+
         revenueTrendText: formatTrendText(toNumber(curRev), toNumber(prevRev)),
         profitTrendText: formatTrendText(currentMonthProfit, previousMonthProfit)
       },

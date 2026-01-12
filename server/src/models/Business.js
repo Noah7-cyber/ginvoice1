@@ -18,6 +18,26 @@ const BusinessSchema = new mongoose.Schema({
   recoveryCode: { type: String },
   recoveryCodeExpires: { type: Date },
   isCategoriesSeeded: { type: Boolean, default: false },
+
+  // New Centralized Settings
+  settings: {
+    currency: { type: String, default: '₦' },
+    taxRate: { type: Number, default: 0 },
+    lowStockThreshold: { type: Number, default: 10 },
+    enableSound: { type: Boolean, default: true },
+    printReceipts: { type: Boolean, default: true },
+    footerText: { type: String, default: 'Thank you for your patronage!' }
+  },
+
+  // Permissions (Can be expanded per staff if we move to User model later,
+  // but for now this sets the *default* permissions for staff role)
+  staffPermissions: {
+    canGiveDiscount: { type: Boolean, default: false },
+    canManageStock: { type: Boolean, default: false },
+    canViewHistory: { type: Boolean, default: true },
+    canViewDashboard: { type: Boolean, default: false }
+  },
+
   createdAt: { type: Date, default: Date.now },
   lastActiveAt: { type: Date, default: Date.now }
 });

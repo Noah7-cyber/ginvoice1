@@ -1,11 +1,11 @@
 
 import React, { useMemo, useState } from 'react';
-import { ShoppingBag, Minus, Plus, Trash2, Tag, User, Banknote, CreditCard, ReceiptText, X, AlertCircle } from 'lucide-react';
+import { ShoppingBag, Minus, Plus, Trash2, Tag, User, Banknote, CreditCard, ReceiptText, X, AlertCircle, Loader2, Ticket } from 'lucide-react';
 import { SaleItem, PaymentMethod, Transaction, Product } from '../types';
 import { CURRENCY } from '../constants';
 import { formatCurrency } from '../utils/currency';
 import SignaturePad from './SignaturePad';
-import { uploadFile } from '../services/api';
+import { uploadFile, validateDiscountCode } from '../services/api';
 
 interface CurrentOrderSidebarProps {
   cart: SaleItem[];
@@ -29,15 +29,18 @@ interface CurrentOrderSidebarProps {
   onCompleteSale: (transaction: Transaction) => void;
   onClose: () => void;
   products: Product[];
+  permissions: any;
 }
 
 const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
   cart, setCart, customerName, setCustomerName, paymentMethod, setPaymentMethod,
   customerPhone, setCustomerPhone, amountPaid, setAmountPaid, globalDiscount, setGlobalDiscount, isGlobalDiscountPercent,
   setIsGlobalDiscountPercent, signature, setSignature, isLocked, setIsLocked,
-  onCompleteSale, onClose, products
+  onCompleteSale, onClose, products, permissions
 }) => {
   const [activeDiscountEdit, setActiveDiscountEdit] = useState<string | null>(null);
+  const [discountCode, setDiscountCode] = useState('');
+  const [isValidatingCode, setIsValidatingCode] = useState(false);
 
   const cartSubtotal = useMemo(() => cart.reduce((sum, item) => sum + item.total, 0), [cart]);
   
@@ -219,7 +222,7 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
 
         {cart.length > 0 && (
           <div className="space-y-6 animate-in slide-in-from-bottom-2">
-            {/* Global Discount */}
+            {/* Global Discount & Codes */}
             <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-[10px] font-black text-indigo-700 uppercase tracking-widest">Global Cut</span>
@@ -228,13 +231,52 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
                   <button onClick={() => setIsGlobalDiscountPercent(true)} className={`px-2 py-1 rounded ${isGlobalDiscountPercent ? 'bg-primary text-white' : 'text-gray-400'}`}>%</button>
                 </div>
               </div>
-              <input 
-                type="number"
-                value={globalDiscount}
-                onChange={(e) => setGlobalDiscount(Number(e.target.value))}
-                className="w-full px-3 py-2 bg-white border-none rounded-xl text-sm font-bold focus:ring-2 focus:ring-primary outline-none"
-                placeholder="0"
-              />
+
+              {permissions?.canGiveDiscount ? (
+                <input
+                  type="number"
+                  value={globalDiscount}
+                  onChange={(e) => setGlobalDiscount(Number(e.target.value))}
+                  className="w-full px-3 py-2 bg-white border-none rounded-xl text-sm font-bold focus:ring-2 focus:ring-primary outline-none"
+                  placeholder="0"
+                />
+              ) : (
+                <div className="flex gap-2">
+                   <input
+                     type="text"
+                     placeholder="Enter Code"
+                     className="w-full px-3 py-2 bg-white border rounded-xl text-sm font-bold uppercase"
+                     value={discountCode}
+                     onChange={e => setDiscountCode(e.target.value)}
+                   />
+                   <button
+                     disabled={isValidatingCode}
+                     onClick={async () => {
+                        setIsValidatingCode(true);
+                        try {
+                           const res = await validateDiscountCode(discountCode, cart);
+                           if (res.valid && res.discount) {
+                              if (res.discount.type === 'percent') {
+                                 setIsGlobalDiscountPercent(true);
+                                 setGlobalDiscount(res.discount.value);
+                              } else {
+                                 setIsGlobalDiscountPercent(false);
+                                 setGlobalDiscount(res.discount.value);
+                              }
+                              // alert('Discount Applied');
+                           }
+                        } catch(err) {
+                           alert('Invalid Code');
+                        } finally {
+                           setIsValidatingCode(false);
+                        }
+                     }}
+                     className="px-3 bg-indigo-600 text-white rounded-xl font-bold text-xs flex items-center justify-center min-w-[60px]"
+                   >
+                     {isValidatingCode ? <Loader2 className="animate-spin" size={16} /> : 'Apply'}
+                   </button>
+                </div>
+              )}
             </div>
 
             {/* Payment Section */}
