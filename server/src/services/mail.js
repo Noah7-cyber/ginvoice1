@@ -15,7 +15,9 @@ const createTransport = (user, pass) => {
         auth: {
             user,
             pass
-        }
+        },
+        logger: true,
+        debug: true
       });
       // Verify connection
       transporter.verify().then(() => console.log(`Zoho Mail Connected for ${user}`)).catch(err => console.error(`Zoho Mail Error for ${user}:`, err));

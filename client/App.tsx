@@ -125,6 +125,7 @@ const App: React.FC = () => {
           products: result.products || prev.products,
           transactions: result.transactions || prev.transactions,
           expenditures: result.expenditures || prev.expenditures,
+          // [FIX] Force update permissions from the server response
           business: result.business ? { ...prev.business, ...result.business } : prev.business
         }));
       }
