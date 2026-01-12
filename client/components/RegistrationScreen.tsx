@@ -88,6 +88,17 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onM
           return;
         }
 
+        if (formData.ownerPassword.length < 4) {
+          addToast('Owner PIN must be at least 4 digits.', 'error');
+          setIsLoading(false);
+          return;
+        }
+        if (formData.staffPassword.length < 4) {
+          addToast('Staff PIN must be at least 4 digits.', 'error');
+          setIsLoading(false);
+          return;
+        }
+
         if (formData.name && formData.phone && formData.ownerPassword && formData.staffPassword) {
           await onRegister(formData);
         } else {

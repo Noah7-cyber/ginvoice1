@@ -30,17 +30,20 @@ interface CurrentOrderSidebarProps {
   onClose: () => void;
   products: Product[];
   permissions: any;
+  isOwner?: boolean; // Added isOwner prop
 }
 
 const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
   cart, setCart, customerName, setCustomerName, paymentMethod, setPaymentMethod,
   customerPhone, setCustomerPhone, amountPaid, setAmountPaid, globalDiscount, setGlobalDiscount, isGlobalDiscountPercent,
   setIsGlobalDiscountPercent, signature, setSignature, isLocked, setIsLocked,
-  onCompleteSale, onClose, products, permissions
+  onCompleteSale, onClose, products, permissions, isOwner = false
 }) => {
   const [activeDiscountEdit, setActiveDiscountEdit] = useState<string | null>(null);
   const [discountCode, setDiscountCode] = useState('');
   const [isValidatingCode, setIsValidatingCode] = useState(false);
+
+  const canGiveDiscount = isOwner || permissions?.canGiveDiscount;
 
   const cartSubtotal = useMemo(() => cart.reduce((sum, item) => sum + item.total, 0), [cart]);
   
@@ -112,7 +115,8 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
       balance: balance,
       signature: finalSignature,
       isSignatureLocked: isLocked,
-      staffId: 'STAFF-01'
+      staffId: 'STAFF-01',
+      discountCode: discountCode || undefined
     };
     onCompleteSale(transaction);
   };
@@ -195,12 +199,14 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
                   </div>
                   <div className="text-right">
                     <p className="font-black text-gray-900">{formatCurrency(item.total)}</p>
-                    <button 
-                      onClick={() => setActiveDiscountEdit(activeDiscountEdit === item.cartId ? null : item.cartId)}
-                      className={`text-[9px] font-black uppercase tracking-tighter px-1.5 py-0.5 rounded ${item.discount > 0 ? 'bg-red-100 text-red-600' : 'text-gray-400 hover:text-primary'}`}
-                    >
-                      {item.discount > 0 ? `Saved ${formatCurrency(item.discount)}` : 'Add Discount'}
-                    </button>
+                    {canGiveDiscount && (
+                      <button
+                        onClick={() => setActiveDiscountEdit(activeDiscountEdit === item.cartId ? null : item.cartId)}
+                        className={`text-[9px] font-black uppercase tracking-tighter px-1.5 py-0.5 rounded ${item.discount > 0 ? 'bg-red-100 text-red-600' : 'text-gray-400 hover:text-primary'}`}
+                      >
+                        {item.discount > 0 ? `Saved ${formatCurrency(item.discount)}` : 'Add Discount'}
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -232,7 +238,7 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
                 </div>
               </div>
 
-              {permissions?.canGiveDiscount ? (
+              {canGiveDiscount ? (
                 <input
                   type="number"
                   value={globalDiscount}

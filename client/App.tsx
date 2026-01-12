@@ -82,7 +82,7 @@ const App: React.FC = () => {
       business: {
         name: '', address: '', phone: '', email: '',
         theme: { primaryColor: '#4f46e5', fontFamily: "'Inter', sans-serif" },
-        staffPermissions: ['sales']
+        staffPermissions: { canGiveDiscount: false, canViewInventory: false, canEditInventory: false, canViewHistory: false, canViewDashboard: false, canViewExpenditure: false }
       },
       expenditures: []
     };
@@ -124,7 +124,8 @@ const App: React.FC = () => {
           lastSyncedAt: result.lastSyncedAt,
           products: result.products || prev.products,
           transactions: result.transactions || prev.transactions,
-          expenditures: result.expenditures || prev.expenditures
+          expenditures: result.expenditures || prev.expenditures,
+          business: result.business ? { ...prev.business, ...result.business } : prev.business
         }));
       }
     }
@@ -191,7 +192,8 @@ const App: React.FC = () => {
               lastSyncedAt: result.lastSyncedAt,
               products: result.products || prev.products,
               transactions: result.transactions || prev.transactions,
-              expenditures: result.expenditures || prev.expenditures
+              expenditures: result.expenditures || prev.expenditures,
+              business: result.business ? { ...prev.business, ...result.business } : prev.business
             }));
           }
         }
@@ -467,8 +469,9 @@ const App: React.FC = () => {
     }
   };
 
-  const canManageStock = state.role === 'owner' || state.business.staffPermissions.includes('stock-management');
-  const canManageHistory = state.role === 'owner' || state.business.staffPermissions.includes('history-management');
+  const perms = (state.business.staffPermissions as any) || {};
+  const canManageStock = state.role === 'owner' || perms.canEditInventory;
+  const canManageHistory = state.role === 'owner' || perms.canEditHistory;
 
   const allowedTabs = useMemo(() => {
     // Robust check for subscription status using both entitlements and persisted state
@@ -496,18 +499,11 @@ const App: React.FC = () => {
     const staffTabs: string[] = ['sales'];
 
     // Map permissions to tabs
-    if (state.business.staffPermissions.includes('inventory') || state.business.staffPermissions.includes('stock-management')) {
-      staffTabs.push('inventory');
-    }
-    if (state.business.staffPermissions.includes('history') || state.business.staffPermissions.includes('history-management')) {
-      staffTabs.push('history');
-    }
-    if (state.business.staffPermissions.includes('expenditure')) {
-      staffTabs.push('expenditure');
-    }
-    if (state.business.staffPermissions.includes('dashboard')) {
-      staffTabs.push('dashboard');
-    }
+    const perms = (state.business.staffPermissions as any) || {}; // Safety fallback
+    if (perms.canViewInventory || perms.canEditInventory) staffTabs.push('inventory');
+    if (perms.canViewHistory || perms.canEditHistory) staffTabs.push('history');
+    if (perms.canViewExpenditure) staffTabs.push('expenditure');
+    if (perms.canViewDashboard) staffTabs.push('dashboard');
 
     return Array.from(new Set(staffTabs)) as TabId[];
   }, [state.role, state.business.staffPermissions, entitlements, state.business.trialEndsAt, state.business.isSubscribed]);
@@ -621,7 +617,7 @@ const App: React.FC = () => {
       <div className={`fixed inset-y-0 right-0 z-[60] transition-all duration-300 ease-in-out md:relative md:inset-auto md:z-auto ${isCartOpen ? 'translate-x-0 w-full max-w-sm md:w-80 lg:w-96 border-l shadow-2xl md:shadow-none' : 'translate-x-full w-0 overflow-hidden'}`}>
         {isCartOpen && window.innerWidth < 768 && <div className="fixed inset-0 bg-black/40 backdrop-blur-sm -z-10" onClick={() => setIsCartOpen(false)} />}
         <div className="h-full bg-white flex flex-col">
-          <CurrentOrderSidebar cart={cart} setCart={setCart} customerName={customerName} setCustomerName={setCustomerName} customerPhone={customerPhone} setCustomerPhone={setCustomerPhone} paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod} amountPaid={amountPaid} setAmountPaid={setAmountPaid} globalDiscount={globalDiscount} setGlobalDiscount={setGlobalDiscount} isGlobalDiscountPercent={isGlobalDiscountPercent} setIsGlobalDiscountPercent={setIsGlobalDiscountPercent} signature={signature} setSignature={setSignature} isLocked={isLocked} setIsLocked={setIsLocked} onCompleteSale={handleCompleteSale} onClose={() => setIsCartOpen(false)} products={state.products} />
+          <CurrentOrderSidebar cart={cart} setCart={setCart} customerName={customerName} setCustomerName={setCustomerName} customerPhone={customerPhone} setCustomerPhone={setCustomerPhone} paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod} amountPaid={amountPaid} setAmountPaid={setAmountPaid} globalDiscount={globalDiscount} setGlobalDiscount={setGlobalDiscount} isGlobalDiscountPercent={isGlobalDiscountPercent} setIsGlobalDiscountPercent={setIsGlobalDiscountPercent} signature={signature} setSignature={setSignature} isLocked={isLocked} setIsLocked={setIsLocked} onCompleteSale={handleCompleteSale} onClose={() => setIsCartOpen(false)} products={state.products} permissions={state.business.staffPermissions} isOwner={state.role === 'owner'} />
         </div>
       </div>
 
