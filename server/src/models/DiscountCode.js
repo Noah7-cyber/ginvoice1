@@ -6,7 +6,10 @@ const DiscountCodeSchema = new mongoose.Schema({
   type: { type: String, enum: ['fixed', 'percent'], required: true },
   value: { type: Number, required: true },
   isUsed: { type: Boolean, default: false },
-  expiryDate: { type: Date },
+  expiryDate: {
+    type: Date,
+    index: { expires: '0s' } // Auto-delete when this date is passed
+  },
   scope: { type: String, enum: ['global', 'product'], required: true },
   productId: { type: String }, // Optional, linking to product 'id' (String) not ObjectId if using string IDs
   createdAt: { type: Date, default: Date.now }

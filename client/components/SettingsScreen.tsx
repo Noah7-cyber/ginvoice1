@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Store, Save, LayoutGrid, MapPin, Phone, Palette, Type, ShieldAlert, CheckCircle2, RefreshCw, CloudCheck, Upload, Trash2, Image as ImageIcon, MessageSquare, HeadphonesIcon, HelpCircle, Lock, LogOut, AlertTriangle, X, Ticket, ToggleLeft, ToggleRight, Loader2 } from 'lucide-react';
 import { BusinessProfile, TabId, DiscountCode } from '../types';
 import { THEME_COLORS, FONTS } from '../constants';
-import { changeBusinessPins, deleteAccount, uploadFile, updateSettings, generateDiscountCode } from '../services/api';
+import { changeBusinessPins, deleteAccount, uploadFile, updateSettings, updateBusinessProfile, generateDiscountCode } from '../services/api';
 import SupportBot from './SupportBot'; // Integrated SupportBot
 
 interface SettingsScreenProps {
@@ -45,9 +45,17 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
       return;
     }
 
-    onUpdateBusiness(dataToSubmit);
-    setShowSaved(true);
-    setTimeout(() => setShowSaved(false), 3000);
+    try {
+      if (navigator.onLine) {
+        await updateBusinessProfile(dataToSubmit);
+      }
+      onUpdateBusiness(dataToSubmit);
+      setShowSaved(true);
+      setTimeout(() => setShowSaved(false), 3000);
+    } catch (err) {
+      console.error('Failed to update business profile', err);
+      alert('Failed to update business settings. Please try again.');
+    }
   };
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {

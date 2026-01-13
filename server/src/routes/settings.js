@@ -22,18 +22,33 @@ router.put('/', auth, async (req, res) => {
       return res.status(403).json({ message: 'Only owner can update settings' });
     }
 
-    const { settings, staffPermissions } = req.body;
+    const { settings, staffPermissions, name, phone, address, email, logo, theme } = req.body;
     const update = {};
     if (settings) update.settings = settings;
     if (staffPermissions) update.staffPermissions = staffPermissions;
+    if (name) update.name = name;
+    if (phone) update.phone = phone;
+    if (address) update.address = address;
+    if (email) update.email = email;
+    if (logo) update.logo = logo;
+    if (theme) update.theme = theme;
 
     const business = await Business.findByIdAndUpdate(
       req.businessId,
       { $set: update },
       { new: true, runValidators: true }
-    ).select('settings staffPermissions');
+    ).select('settings staffPermissions name phone address email logo theme');
 
-    res.json({ settings: business.settings, staffPermissions: business.staffPermissions });
+    res.json({
+      settings: business.settings,
+      staffPermissions: business.staffPermissions,
+      name: business.name,
+      phone: business.phone,
+      address: business.address,
+      email: business.email,
+      logo: business.logo,
+      theme: business.theme
+    });
   } catch (err) {
     res.status(500).json({ message: 'Update settings failed' });
   }
