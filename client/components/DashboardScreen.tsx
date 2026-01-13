@@ -27,6 +27,7 @@ import {
 import { Transaction, Product } from '../types';
 import { CURRENCY } from '../constants';
 import { getAnalytics } from '../services/api';
+import { safeCalculate, safeSum } from '../utils/math';
 
 interface DashboardScreenProps {
   transactions: Transaction[];
@@ -80,18 +81,24 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
   }, [transactions.length, timeRange]);
 
   const localStats = useMemo(() => {
-    const totalRevenue = transactions.reduce((sum, tx) => sum + tx.totalAmount, 0);
-    const totalDebt = transactions.reduce((sum, tx) => sum + tx.balance, 0);
+    // SAFE MATH IMPLEMENTATION
+    const totalRevenue = safeSum(transactions, 'totalAmount');
+    const totalDebt = safeSum(transactions, 'balance');
     
     // Calculate total profit
     const totalProfit = transactions.reduce((sum, tx) => {
       const txProfit = tx.items.reduce((pSum, item) => {
         const product = products.find(p => p.id === item.productId);
         const cost = product ? product.costPrice : 0;
-        // [FIX] Use item.total (net price) instead of unitPrice
-        return pSum + (item.total - (cost * item.quantity));
+        // [FIX] Use item.total (net price) - (cost * quantity)
+        // Profit per item = total_selling - total_cost
+        const itemTotalCost = safeCalculate(cost, item.quantity);
+        return pSum + (item.total - itemTotalCost);
       }, 0);
-      // Optional: Subtract tx.globalDiscount from profit if needed
+      // Subtract tx.globalDiscount from profit
+      // Note: We need to handle this carefully.
+      // Profit calculated above is Gross Profit from items.
+      // Net Profit = Gross Profit - Global Discount.
       return sum + txProfit - (tx.globalDiscount || 0);
     }, 0);
 
@@ -99,14 +106,15 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
     const transferSales = transactions.filter(t => t.paymentMethod === 'transfer').length;
 
     // Calculate Shop Cost & Worth locally
-    const shopCost = products.reduce((sum, p) => sum + (p.costPrice * p.currentStock), 0);
-    const shopWorth = products.reduce((sum, p) => sum + (p.sellingPrice * p.currentStock), 0);
+    const shopCost = products.reduce((sum, p) => sum + safeCalculate(p.costPrice, p.currentStock), 0);
+    const shopWorth = products.reduce((sum, p) => sum + safeCalculate(p.sellingPrice, p.currentStock), 0);
 
     // Calculate Daily Revenue locally
     const today = new Date().toISOString().split('T')[0];
-    const dailyRevenue = transactions
-        .filter(t => t.transactionDate.startsWith(today))
-        .reduce((sum, t) => sum + t.totalAmount, 0);
+    const dailyRevenue = safeSum(
+        transactions.filter(t => t.transactionDate.startsWith(today)),
+        'totalAmount'
+    );
 
     return { totalRevenue, totalProfit, totalSales: transactions.length, cashSales, transferSales, totalDebt, shopCost, shopWorth, dailyRevenue };
   }, [transactions, products]);
