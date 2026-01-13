@@ -84,7 +84,8 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
       ...t,
       customerName: editCustomerName,
       amountPaid: editAmountPaid,
-      balance: Math.max(0, t.totalAmount - editAmountPaid)
+      balance: Math.max(0, t.totalAmount - editAmountPaid),
+      updatedAt: new Date().toISOString()
     });
     setEditingId(null);
   };
