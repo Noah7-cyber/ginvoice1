@@ -319,6 +319,13 @@ const api = {
       headers: { Authorization: `Bearer ${token}` },
       body: JSON.stringify(body)
     });
+  },
+  delete: async (url: string) => {
+    const token = loadAuthToken();
+    return request(`/api${url}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    });
   }
 };
 

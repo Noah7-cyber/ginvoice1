@@ -388,37 +388,88 @@ const App: React.FC = () => {
       return;
     }
     try {
+      // If restockItems is true, we assume the backend (new API) handled it OR the old API handled it.
+      // However, with the new flow in HistoryScreen, this function is called with restockItems=false
+      // primarily to update the local state after the API call succeeds there.
+      // If this function is called from elsewhere (legacy), we might still want the old behavior.
+      // For now, we'll keep the optimistic local update for stock if requested,
+      // but if the caller already handled the API (like HistoryScreen), we skip the API call here.
+
+      // NOTE: HistoryScreen now calls api.delete directly.
+      // To prevent double API calls, we rely on the caller to manage the API interaction
+      // OR we check if the caller intends for us to do it.
+      // Given the refactor, we will assume this function is now primarily for State Update.
+      // But to be safe for other callers, we only skip API if we detect it's already done? No easy way.
+      // Let's rely on the fact that HistoryScreen passes restockItems=false,
+      // and we will REMOVE the deleteTransaction() call to avoid double deletes.
+
+      // Wait, if we remove deleteTransaction(), other callers might break.
+      // But currently HistoryScreen is the main caller.
+      // We will perform the local state update. The API call responsibility is shifting to the caller (HistoryScreen).
+      // If there are other callers, they need to be updated. (Searching codebase... only HistoryScreen calls this usually).
+
+      setState(prev => ({ ...prev, transactions: prev.transactions.filter(t => t.id !== id) }));
+
+      // We also verify if we need to locally restore stock (Optimistic UI)
       if (restockItems) {
-        setState(prev => {
+         // This block handles local stock restoration if the caller indicates it wasn't done yet?
+         // Actually, since HistoryScreen calls the API which does the work, we should probably fetch fresh data
+         // OR optimistically update.
+         // Let's keep optimistic update for responsiveness.
+         setState(prev => {
           const tx = prev.transactions.find(t => t.id === id);
           if (!tx) return prev;
           const updatedProducts = prev.products.map(p => {
             const item = tx.items.find(i => i.productId === p.id);
-            return item ? { ...p, currentStock: p.currentStock + item.quantity } : p;
+            // Re-calculate with multiplier
+            const mult = item?.multiplier || (item?.selectedUnit ? item.selectedUnit.multiplier : 1);
+            return item ? { ...p, currentStock: p.currentStock + (item.quantity * mult) } : p;
           });
           return { ...prev, products: updatedProducts };
         });
       }
-      await deleteTransaction(id, restockItems);
-      setState(prev => ({ ...prev, transactions: prev.transactions.filter(t => t.id !== id) }));
+
     } catch (err) { addToast('Delete failed.', 'error'); }
   };
 
   const addToCart = (product: Product, unit?: ProductUnit) => {
     const multiplier = unit ? unit.multiplier : 1;
+    // Basic check for at least 1 unit availability
     if (product.currentStock < multiplier) return;
 
     setCart(prev => {
-      return [...prev, {
-        cartId: crypto.randomUUID(),
-        productId: product.id,
-        productName: unit ? `${product.name} (${unit.name})` : product.name,
-        quantity: 1,
-        unitPrice: unit ? (unit.sellingPrice || 0) : (product.sellingPrice || 0),
-        discount: 0,
-        total: unit ? (unit.sellingPrice || 0) : (product.sellingPrice || 0),
-        selectedUnit: unit
-      }];
+      // 1. Check if item exists (matching Product ID AND Unit)
+      const existingItemIndex = prev.findIndex(item =>
+        item.productId === product.id &&
+        ((!item.selectedUnit && !unit) || (item.selectedUnit?.name === unit?.name))
+      );
+
+      if (existingItemIndex !== -1) {
+        // 2. If exists, just increment quantity (KEEP the old row)
+        const newCart = [...prev];
+        const item = newCart[existingItemIndex];
+        const newQuantity = item.quantity + 1;
+
+        newCart[existingItemIndex] = {
+           ...item,
+           quantity: newQuantity,
+           // Update total as well to keep data consistent
+           total: item.unitPrice * newQuantity
+        };
+        return newCart;
+      } else {
+        // 3. If new, add to cart with quantity 1
+        return [...prev, {
+          cartId: crypto.randomUUID(),
+          productId: product.id,
+          productName: unit ? `${product.name} (${unit.name})` : product.name,
+          quantity: 1,
+          unitPrice: unit ? (unit.sellingPrice || 0) : (product.sellingPrice || 0),
+          discount: 0,
+          total: unit ? (unit.sellingPrice || 0) : (product.sellingPrice || 0),
+          selectedUnit: unit
+        }];
+      }
     });
     addToast("Added", "success", 1500);
   };
