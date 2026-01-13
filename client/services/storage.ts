@@ -27,8 +27,12 @@ export const getLastSync = (): Date | null => {
   return t ? new Date(t) : null;
 };
 
-export const saveLastSync = (time: Date) => {
-  localStorage.setItem('ginvoice_last_sync_time', time.toISOString());
+export const saveLastSync = (time: Date | null) => {
+  if (time) {
+    localStorage.setItem('ginvoice_last_sync_time', time.toISOString());
+  } else {
+    localStorage.removeItem('ginvoice_last_sync_time');
+  }
 };
 
 export const loadState = (): InventoryState | null => {
