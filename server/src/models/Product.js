@@ -1,30 +1,35 @@
 const mongoose = require('mongoose');
 
-// UnitDefinitionSchema is replaced by inline definition in ProductSchema as per instructions.
+const unitSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  multiplier: { type: Number, required: true },
+  sellingPrice: { type: mongoose.Types.Decimal128, default: 0 },
+  costPrice: { type: mongoose.Types.Decimal128, default: 0 }
+}, { _id: false });
 
-const ProductSchema = new mongoose.Schema({
-  businessId: { type: String, index: true, required: true },
+const productSchema = new mongoose.Schema({
+  businessId: { type: String, required: true, index: true },
   id: { type: String, required: true },
   name: { type: String, required: true },
   category: { type: String, default: 'Uncategorized' },
-  baseUnit: { type: String, default: 'Piece' },
   stock: { type: Number, default: 0 },
-  sellingPrice: { type: mongoose.Schema.Types.Decimal128, required: true, default: 0 },
-  costPrice: { type: mongoose.Schema.Types.Decimal128, default: 0 },
-  units: [{
-    name: String,
-    multiplier: Number,
-    sellingPrice: { type: mongoose.Schema.Types.Decimal128, default: 0 },
-    costPrice: { type: mongoose.Schema.Types.Decimal128, default: 0 }
-  }],
-  isManualUpdate: { type: Boolean, default: false }
+  sellingPrice: { type: mongoose.Types.Decimal128, default: 0 },
+  costPrice: { type: mongoose.Types.Decimal128, default: 0 },
+  baseUnit: { type: String, default: 'Piece' },
+
+  // This strict array definition fixes the "Disappearing Units" bug
+  units: [unitSchema],
+
+  image: { type: String },
+  updatedAt: { type: Date, default: Date.now },
+  isManualUpdate: { type: Boolean, default: false } // Keeping for schema compatibility if needed, though unused in logic
 }, { timestamps: true });
 
-ProductSchema.index({ businessId: 1, id: 1 }, { unique: true });
-// Case-Insensitive Unique Index on Name + Category per Business
-ProductSchema.index(
+// Compound index for uniqueness
+productSchema.index({ businessId: 1, id: 1 }, { unique: true });
+productSchema.index(
   { businessId: 1, category: 1, name: 1 },
   { unique: true, collation: { locale: 'en', strength: 2 } }
 );
 
-module.exports = mongoose.model('Product', ProductSchema);
+module.exports = mongoose.model('Product', productSchema);
