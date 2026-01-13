@@ -17,7 +17,7 @@ const DEFAULT_CATEGORIES = ['Food', 'Building', 'Electronics', 'Clothing', 'Hous
 router.get('/', auth, async (req, res) => {
   try {
     const businessId = req.businessId;
-    const categories = await Category.find({ businessId }).sort({ createdAt: 1 });
+    const categories = await Category.find({ businessId }).sort({ usageCount: -1, name: 1 });
     res.json(categories);
   } catch (err) {
     console.error('Fetch Categories Error:', err);

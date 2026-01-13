@@ -4,7 +4,8 @@ const CategorySchema = new mongoose.Schema({
   businessId: { type: String, required: true, index: true },
   name: { type: String, required: true },
   defaultSellingPrice: { type: mongoose.Decimal128, default: 0 },
-  defaultCostPrice: { type: mongoose.Decimal128, default: 0 }
+  defaultCostPrice: { type: mongoose.Decimal128, default: 0 },
+  usageCount: { type: Number, default: 0 }
 }, { timestamps: true });
 
 // Ensure virtuals are included in toJSON

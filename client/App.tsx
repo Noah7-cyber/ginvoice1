@@ -378,7 +378,7 @@ const App: React.FC = () => {
 
       // Force full sync on login
       saveDataVersion(0);
-      saveLastSync(new Date(0));
+      saveLastSync(null); // FORCE NULL
 
       // Attempt to restore data from server
       let restoredData: Partial<InventoryState> = {};
