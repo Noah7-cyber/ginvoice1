@@ -53,8 +53,11 @@ router.get('/', auth, async (req, res) => {
       defaultCostPrice: parseDecimal(c.defaultCostPrice)
     }));
 
+    // 1. Products: Fix invisible stock
     const products = rawProducts.map(p => ({
       ...p,
+      // THE FIX: Use custom ID if present, otherwise use Database ID
+      id: p.id || p._id.toString(),
       currentStock: p.stock,
       sellingPrice: parseDecimal(p.sellingPrice),
       costPrice: parseDecimal(p.costPrice),
@@ -65,8 +68,11 @@ router.get('/', auth, async (req, res) => {
       }))
     }));
 
+    // 2. Transactions: Fix invisible history
     const transactions = rawTransactions.map(t => ({
       ...t,
+      // THE FIX: Safety ID
+      id: t.id || t._id.toString(),
       items: (t.items || []).map(i => ({
         ...i,
         unitPrice: parseDecimal(i.unitPrice),
@@ -80,8 +86,11 @@ router.get('/', auth, async (req, res) => {
       balance: parseDecimal(t.balance)
     }));
 
+    // 3. Expenditures: Fix invisible expenses
     const expenditures = rawExpenditures.map(e => ({
       ...e,
+      // THE FIX: Safety ID
+      id: e.id || e._id.toString(),
       amount: parseDecimal(e.amount)
     }));
 
