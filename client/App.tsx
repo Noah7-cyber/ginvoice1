@@ -108,12 +108,12 @@ const App: React.FC = () => {
     stateRef.current = state;
   }, [state]);
 
-  const triggerSync = useCallback(async (overrideState?: InventoryState) => {
+  const triggerSync = useCallback(async (overrideState?: InventoryState, silent = false) => {
     if (!navigator.onLine) return;
     const currentState = overrideState || stateRef.current;
     if (!currentState.isLoggedIn || isSyncing) return;
 
-    setIsSyncing(true);
+    if (!silent) setIsSyncing(true);
 
     try {
         // 1. Push local changes first
@@ -178,7 +178,7 @@ const App: React.FC = () => {
     } catch (err) {
         console.error("Sync failed", err);
     } finally {
-        setIsSyncing(false);
+        if (!silent) setIsSyncing(false);
     }
   }, [isSyncing]);
 
@@ -302,12 +302,12 @@ const App: React.FC = () => {
 
   useEffect(() => { saveState(state); }, [state]);
 
-  // Auto-sync every 5 seconds
+  // Auto-sync every 15 seconds (Silent)
   useEffect(() => {
     if (state.isLoggedIn) {
       const intervalId = setInterval(() => {
-        triggerSync();
-      }, 5000); // 5 seconds
+        triggerSync(undefined, true);
+      }, 15000); // 15 seconds
 
       return () => clearInterval(intervalId);
     }
@@ -683,7 +683,7 @@ const App: React.FC = () => {
               onEditExpenditure={handleEditExpenditure}
             />
           )}
-          {activeTab === 'settings' && state.role === 'owner' && <SettingsScreen business={state.business} onUpdateBusiness={b => setState(prev => ({ ...prev, business: b }))} onManualSync={triggerSync} lastSyncedAt={state.lastSyncedAt} onLogout={handleLogout} onDeleteAccount={handleDeleteAccount} />}
+          {activeTab === 'settings' && state.role === 'owner' && <SettingsScreen business={state.business} onUpdateBusiness={b => setState(prev => ({ ...prev, business: b }))} onManualSync={() => triggerSync(undefined, false)} lastSyncedAt={state.lastSyncedAt} onLogout={handleLogout} onDeleteAccount={handleDeleteAccount} />}
         </div>
 
         {/* Mobile Bottom Nav */}
