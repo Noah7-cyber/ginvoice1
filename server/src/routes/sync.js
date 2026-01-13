@@ -133,30 +133,27 @@ router.get('/', auth, async (req, res) => {
       return res.status(204).send();
     }
 
-    // 2. Fetch Deltas (Changed Items)
-    // Products
-    const rawProducts = await Product.find({
-      businessId,
-      updatedAt: { $gt: lastSyncDate }
-    }).lean();
+    // 2. Fetch Deltas (Smart Query)
+    // If lastSync is 0 (Epoch), fetch EVERYTHING (handles old data without timestamps)
+    const isFullSync = lastSyncDate.getTime() === 0;
 
-    // Transactions (use createdAt or updatedAt if available, schema has timestamps now)
-    const rawTransactions = await Transaction.find({
-      businessId,
-      updatedAt: { $gt: lastSyncDate }
-    }).lean();
+    // Construct specific queries for each collection
+    const productQuery = isFullSync ? { businessId } : { businessId, updatedAt: { $gt: lastSyncDate } };
+    const transactionQuery = isFullSync ? { businessId } : { businessId, updatedAt: { $gt: lastSyncDate } };
+    const categoryQuery = isFullSync ? { businessId } : { businessId, updatedAt: { $gt: lastSyncDate } };
+    // Expenditure uses 'business' field, not 'businessId'
+    const expenditureQuery = isFullSync
+      ? { business: businessId }
+      : { business: businessId, updatedAt: { $gt: lastSyncDate } };
 
-    // Categories
-    const rawCategories = await Category.find({
-      businessId,
-      updatedAt: { $gt: lastSyncDate }
-    }).lean();
-
-    // Expenditures
-    const rawExpenditures = await Expenditure.find({
-      business: businessId,
-      updatedAt: { $gt: lastSyncDate }
-    }).lean();
+    // Apply this query to all collections in parallel
+    const [rawProducts, rawTransactions, rawCategories, rawExpenditures] = await Promise.all([
+      Product.find(productQuery).lean(),
+      // Sort transactions by most recent first. Limit only on full sync if needed (e.g. 500)
+      Transaction.find(transactionQuery).sort({ createdAt: -1 }).limit(isFullSync ? 500 : 0).lean(),
+      Category.find(categoryQuery).sort({ usageCount: -1, name: 1 }).lean(),
+      Expenditure.find(expenditureQuery).lean()
+    ]);
 
     // 3. Fetch IDs for Hard Deletes
     const productIds = (await Product.find({ businessId }).select('id').lean()).map(p => p.id);
