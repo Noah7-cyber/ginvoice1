@@ -110,24 +110,28 @@ const App: React.FC = () => {
 
   const refreshData = useCallback(async (overrideState?: InventoryState) => {
     if (!navigator.onLine) return;
+
+    // Check login status from override or current state
+    const currentState = overrideState || stateRef.current;
+    if (!currentState.isLoggedIn) return;
+
     setIsSyncing(true);
     try {
-      const currentState = overrideState || stateRef.current;
-
-      // Force fetch all (version 0)
-      const response = await fetchRemoteState(0, null);
+      // TRUE = Force Full Fetch (Ignore versions)
+      const response = await fetchRemoteState(true);
 
       if (response.status === 200 && response.data) {
-         const { version, serverTime, changes, business } = response.data;
+         const { products, transactions, categories, expenditures, business } = response.data;
 
          const nextState: InventoryState = {
            ...currentState,
-           products: changes.products || [],
-           transactions: changes.transactions || [],
-           categories: changes.categories || [],
-           expenditures: changes.expenditures || [],
+           // DIRECT STATE REPLACEMENT (No merging)
+           products: products || [],
+           transactions: transactions || [],
+           categories: categories || [],
+           expenditures: expenditures || [],
            business: business ? { ...currentState.business, ...business } : currentState.business,
-           lastSyncedAt: serverTime,
+           lastSyncedAt: new Date().toISOString(),
            isLoggedIn: true
          };
 
@@ -137,15 +141,16 @@ const App: React.FC = () => {
          }
 
          setState(nextState);
-         saveDataVersion(version);
-         saveLastSync(new Date(serverTime));
+         // Note: We deliberately do NOT save data version here as we always force full fetch
+         saveLastSync(new Date());
       }
     } catch (err) {
-      console.error("Refresh data failed", err);
+      console.error("Data refresh failed", err);
+      addToast("Could not load data from server", "error");
     } finally {
       setIsSyncing(false);
     }
-  }, []);
+  }, [addToast]);
 
   const handleLogout = useCallback(() => {
     clearAuthToken();
@@ -213,9 +218,11 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (state.isLoggedIn && navigator.onLine) {
-      fetchEntitlements();
+       // Initial load data refresh
+       refreshData();
+       fetchEntitlements();
     }
-  }, [state.isLoggedIn]);
+  }, [state.isLoggedIn, refreshData, fetchEntitlements]);
 
   const openPaymentLink = useCallback(async () => {
     if (!navigator.onLine) {
@@ -301,13 +308,6 @@ const App: React.FC = () => {
     try {
       const response = await login(credentials.email, credentials.pin);
       saveAuthToken(response.token);
-
-      try {
-        saveDataVersion(0);
-        saveLastSync(null);
-      } catch (err) {
-        console.warn("Could not reset sync version, continuing anyway:", err);
-      }
 
       const newState: InventoryState = {
         ...state,

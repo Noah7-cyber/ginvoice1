@@ -97,20 +97,19 @@ export const syncState = async (state: InventoryState) => {
   });
 };
 
-export const fetchRemoteState = async (version = 0, lastSync: Date | null = null) => {
+// Updated: supports forceFull mode to ignore versions and get full state
+export const fetchRemoteState = async (forceFull = false) => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');
 
-  const query = new URLSearchParams({
-    version: version.toString(),
-    lastSync: lastSync ? lastSync.toISOString() : ''
-  });
+  // If forceFull is true, send NO query params to trigger server legacy fallback
+  const query = forceFull ? '' : new URLSearchParams({
+    version: '0',
+    lastSync: ''
+  }).toString();
 
-  // We need to access the full response to check status code (204 vs 200)
-  // Our request helper only returns JSON body and throws on error status.
-  // Ideally, request helper should be updated or we use fetch directly here.
-  // Let's use fetch directly to handle 204 gracefully.
-  const url = buildUrl(`/api/sync?${query.toString()}`);
+  const url = buildUrl(`/api/sync${query ? `?${query}` : ''}`);
+
   try {
     const res = await fetch(url, {
       method: 'GET',
@@ -121,7 +120,8 @@ export const fetchRemoteState = async (version = 0, lastSync: Date | null = null
     });
 
     if (res.status === 204) {
-      return { status: 204 };
+        // Should not happen with forceFull=true as server always returns data
+        return { status: 204 };
     }
 
     if (!res.ok) {
