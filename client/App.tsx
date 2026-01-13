@@ -131,6 +131,15 @@ const App: React.FC = () => {
         if (response.status === 200 && response.data) {
             const { version, serverTime, changes, ids, business } = response.data;
 
+            // FIX: Immediately update user permissions if business data is present in sync
+            if (business) {
+               // Update local storage to persist permissions across reloads
+               const current = loadState();
+               if (current) {
+                   saveState({ ...current, business: { ...current.business, ...business } });
+               }
+            }
+
             setState(prev => {
                 const mergeData = (localList: any[], changedItems: any[], validIds: string[]) => {
                     const idSet = new Set(validIds);
@@ -377,8 +386,12 @@ const App: React.FC = () => {
       saveAuthToken(response.token);
 
       // Force full sync on login
-      saveDataVersion(0);
-      saveLastSync(null); // FORCE NULL
+      try {
+        saveDataVersion(0);
+        saveLastSync(null); // FORCE NULL
+      } catch (err) {
+        console.warn("Could not reset sync version, continuing anyway:", err);
+      }
 
       // Attempt to restore data from server
       let restoredData: Partial<InventoryState> = {};
