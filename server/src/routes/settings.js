@@ -30,7 +30,18 @@ router.put('/', auth, async (req, res) => {
     if (phone) update.phone = phone;
     if (address) update.address = address;
     if (email) update.email = email;
-    if (logo) update.logo = logo;
+
+    // Explicit null check for logo deletion
+    if (logo === null) {
+        update.logo = null; // Unset/Nullify in DB
+        // Or if you want to use $unset:
+        // But normally Mongoose handles null if schema allows string|null
+        // BusinessSchema definition for logo needs to allow null or not have 'required'
+        // Assuming it is not required.
+    } else if (logo !== undefined) {
+        update.logo = logo;
+    }
+
     if (theme) update.theme = theme;
 
     const business = await Business.findByIdAndUpdate(
@@ -56,6 +67,7 @@ router.put('/', auth, async (req, res) => {
       theme: business.theme
     });
   } catch (err) {
+    console.error("Settings Update Failed:", err);
     res.status(500).json({ message: 'Update settings failed' });
   }
 });

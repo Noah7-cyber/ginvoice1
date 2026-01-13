@@ -454,7 +454,7 @@ const App: React.FC = () => {
            ...item,
            quantity: newQuantity,
            // Update total as well to keep data consistent
-           total: item.unitPrice * newQuantity
+           total: safeCalculate(item.unitPrice, newQuantity)
         };
         return newCart;
       } else {

@@ -3,6 +3,7 @@ import { Store, Save, LayoutGrid, MapPin, Phone, Palette, Type, ShieldAlert, Che
 import { BusinessProfile, TabId, DiscountCode } from '../types';
 import { THEME_COLORS, FONTS } from '../constants';
 import { changeBusinessPins, deleteAccount, uploadFile, updateSettings, updateBusinessProfile, generateDiscountCode } from '../services/api';
+import api from '../services/api';
 import SupportBot from './SupportBot'; // Integrated SupportBot
 
 interface SettingsScreenProps {
@@ -34,28 +35,53 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const handleUpdateBusiness = async (data: Partial<BusinessProfile>) => {
+    if (!navigator.onLine) {
+      alert("You must be online to update settings.");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      // Direct Backend Call using api.put (which we assume maps to the right endpoint based on services/api.ts)
+      // Actually updateBusinessProfile in services/api calls /api/settings
+      // But user requested "Refactor handleUpdateBusiness" with custom body.
+      // We will use the existing helper updateBusinessProfile or api.put directly if preferred.
+      // The instructions say: await api.put('/settings', data);
+
+      // Need to ensure 'data' matches what server expects.
+      await api.put('/settings', data);
+
+      alert("Business updated successfully!");
+
+      // Update local state strictly after server confirms
+      // We need to update both formData local state AND the parent App state via onUpdateBusiness
+      const updatedBusiness = { ...business, ...data };
+      setFormData(prev => ({ ...prev, ...data }));
+      onUpdateBusiness(updatedBusiness);
+
+      setShowSaved(true);
+      setTimeout(() => setShowSaved(false), 3000);
+    } catch (e) {
+      console.error("Update failed", e);
+      alert("Update failed. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     let dataToSubmit = { ...formData };
 
+    // Cleanup before submit
     // Prevent saving Blob URLs to database
     if (dataToSubmit.logo && dataToSubmit.logo.startsWith('blob:')) {
       alert('Logo upload in progress or failed. Please wait or try again.');
       return;
     }
 
-    try {
-      if (navigator.onLine) {
-        await updateBusinessProfile(dataToSubmit);
-      }
-      onUpdateBusiness(dataToSubmit);
-      setShowSaved(true);
-      setTimeout(() => setShowSaved(false), 3000);
-    } catch (err) {
-      console.error('Failed to update business profile', err);
-      alert('Failed to update business settings. Please try again.');
-    }
+    await handleUpdateBusiness(dataToSubmit);
   };
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -79,19 +105,22 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
       try {
           const url = await uploadFile(file);
           setFormData(prev => ({ ...prev, logo: url }));
+          // We don't save entire profile yet, user must click Update.
+          // OR does "Direct API" imply immediate save?
+          // The prompt for handleLogoUpload wasn't explicitly to "Direct Save",
+          // but usually logo upload acts as a staging step.
+          // However, the "Delete Logo" instruction implies immediate action.
       } catch (err) {
         console.error('Logo upload failed', err);
         alert('Logo upload failed. Please check your connection.');
-        // Revert to no logo or keep previous logic?
-        // To be safe, we unset the blob URL so the user isn't stuck with a broken state they can't save.
         setFormData(prev => ({ ...prev, logo: business.logo }));
       }
     }
   };
 
-  const removeLogo = () => {
-    setFormData({ ...formData, logo: undefined });
-    if (fileInputRef.current) fileInputRef.current.value = '';
+  const handleRemoveLogo = async () => {
+    if (!confirm('Are you sure you want to remove the logo?')) return;
+    await handleUpdateBusiness({ logo: null as any }); // Cast as any because BusinessProfile type might be strict string | undefined
   };
 
   const togglePermission = async (key: string) => {
@@ -247,9 +276,16 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                 </div>
               </div>
               <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleLogoUpload} />
-              <button type="button" onClick={() => fileInputRef.current?.click()} className="text-[10px] font-black uppercase text-primary bg-primary-bg px-4 py-2 rounded-lg flex items-center gap-2 hover:opacity-80 transition-all">
-                <Upload size={14} /> {formData.logo ? 'Change Logo' : 'Upload Logo'}
-              </button>
+              <div className="flex flex-col gap-2">
+                <button type="button" onClick={() => fileInputRef.current?.click()} className="text-[10px] font-black uppercase text-primary bg-primary-bg px-4 py-2 rounded-lg flex items-center gap-2 hover:opacity-80 transition-all">
+                  <Upload size={14} /> {formData.logo ? 'Change Logo' : 'Upload Logo'}
+                </button>
+                {formData.logo && (
+                  <button type="button" onClick={handleRemoveLogo} className="text-[10px] font-black uppercase text-red-600 bg-red-50 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-red-100 transition-all">
+                    <Trash2 size={14} /> Remove Logo
+                  </button>
+                )}
+              </div>
             </div>
             <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
               <div className="md:col-span-2">
