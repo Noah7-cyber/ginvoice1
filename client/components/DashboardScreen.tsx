@@ -173,28 +173,28 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Existing Cards */}
         <StatCard 
-          title="Total Revenue" 
+          title="Total Sales"
           value={`${CURRENCY}${stats.totalRevenue.toLocaleString()}`} 
           icon={<DollarSign className="text-blue-600" />} 
           trend={stats.revenueTrendText || '+12% from last month'}
           color="bg-blue-50"
         />
         <StatCard 
-          title="Estimated Profit" 
+          title="Total Profit"
           value={`${CURRENCY}${stats.totalProfit.toLocaleString()}`} 
           icon={<TrendingUp className="text-green-600" />} 
           trend={stats.profitTrendText || '+8.4% from last month'}
           color="bg-green-50"
         />
         <StatCard 
-          title="Outstanding Debt" 
+          title="Money Owed To You"
           value={`${CURRENCY}${stats.totalDebt.toLocaleString()}`} 
           icon={<AlertCircle className="text-red-600" />} 
           trend="Total money owed to you"
           color="bg-red-50"
         />
         <StatCard 
-          title="Total Orders" 
+          title="Sales Count"
           value={stats.totalSales.toString()} 
           icon={<ShoppingBag className="text-purple-600" />} 
           trend="Lifetime transactions"
@@ -265,22 +265,22 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
              <div className="space-y-1 animate-in fade-in slide-in-from-right duration-300">
                <p className="text-sm font-medium text-gray-500">Yearly Sales</p>
                <h4 className="text-2xl font-black text-gray-900">{CURRENCY}{(stats.yearlySales || 0).toLocaleString()}</h4>
-               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Accrual Basis</p>
+               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Includes Debts</p>
              </div>
            )}
         </div>
         <StatCard
-          title="Shop Cost"
+          title="Cost of Stock"
           value={`${CURRENCY}${(stats.shopCost || 0).toLocaleString()}`}
           icon={<Coins className="text-orange-600" />}
-          trend="Total inventory cost value"
+          trend="Money you spent buying goods"
           color="bg-orange-50"
         />
         <StatCard
-          title="Shop Worth"
+          title="Value of Stock"
           value={`${CURRENCY}${(stats.shopWorth || 0).toLocaleString()}`}
           icon={<Gem className="text-purple-600" />}
-          trend="Total inventory sales value"
+          trend="Money you will make"
           color="bg-purple-50"
         />
       </div>

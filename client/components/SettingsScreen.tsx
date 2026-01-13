@@ -210,7 +210,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Store Identity */}
         <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
-          <h2 className="text-lg font-bold flex items-center gap-2"><Store className="text-primary" /> Store Identity</h2>
+          <h2 className="text-lg font-bold flex items-center gap-2"><Store className="text-primary" /> Shop Information</h2>
           <div className="flex flex-col md:flex-row gap-8 items-start">
             <div className="flex flex-col items-center gap-3">
               {business.id && (
@@ -270,7 +270,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
 
         {/* Appearance */}
         <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
-          <h2 className="text-lg font-bold flex items-center gap-2"><Palette className="text-primary" /> App Appearance</h2>
+          <h2 className="text-lg font-bold flex items-center gap-2"><Palette className="text-primary" /> Colors & Fonts</h2>
           <div className="flex flex-wrap gap-4">
             {THEME_COLORS.map(color => (
               <button key={color.value} type="button" onClick={() => setFormData({ ...formData, theme: { ...formData.theme, primaryColor: color.value }})} className={`w-12 h-12 rounded-full border-4 transition-all ${formData.theme.primaryColor === color.value ? 'border-indigo-100 scale-110' : 'border-transparent'}`} style={{ backgroundColor: color.value }}>
@@ -301,7 +301,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
 
         {/* Staff Permissions */}
         <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
-          <h2 className="text-lg font-bold flex items-center gap-2"><ShieldAlert className="text-primary" /> Staff Permissions</h2>
+          <h2 className="text-lg font-bold flex items-center gap-2"><ShieldAlert className="text-primary" /> What Staff Can Do</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {PERMISSION_OPTIONS.map(opt => {
               const isActive = (formData.staffPermissions as any)?.[opt.id];
@@ -382,7 +382,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
 
         {/* Danger Zone */}
         <div className="bg-red-50 rounded-3xl shadow-sm border border-red-100 p-6 md:p-8 space-y-6">
-           <h2 className="text-lg font-bold flex items-center gap-2 text-red-600"><AlertTriangle className="text-red-600" /> Danger Zone</h2>
+           <h2 className="text-lg font-bold flex items-center gap-2 text-red-600"><AlertTriangle className="text-red-600" /> Delete Account</h2>
            <div className="flex flex-col md:flex-row justify-between items-center gap-4">
              <p className="text-sm text-red-800">
                Deleting your business account will permanently remove all data, including products, transactions, and settings. This action cannot be undone.

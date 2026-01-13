@@ -144,8 +144,8 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
       {/* Header & View Toggle */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Billing & Debts</h1>
-          <p className="text-gray-500">Track payments and manage your debt book</p>
+          <h1 className="text-2xl font-bold text-gray-900">Sales & Debtors</h1>
+          <p className="text-gray-500">See past sales and who owes you money</p>
           
           <div className="flex p-1 bg-gray-100 rounded-xl mt-4 w-fit border shadow-inner">
             <button 
@@ -162,7 +162,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
                 viewMode === 'debtors' ? 'bg-white shadow-md text-red-600' : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              <Users size={16} /> Debtors Ledger
+              <Users size={16} /> Debtors List
             </button>
           </div>
         </div>
@@ -310,7 +310,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
                   <div className="flex flex-col items-end px-6 md:border-x border-gray-100 min-w-[200px]">
                     <div className="flex items-center gap-2 text-red-600 mb-1">
                       <AlertCircle size={14} />
-                      <span className="text-[10px] font-black uppercase tracking-widest">Total Outstanding</span>
+                      <span className="text-[10px] font-black uppercase tracking-widest">Total Debt</span>
                     </div>
                     <p className="text-3xl font-black text-red-600">{CURRENCY}{debtor.totalOwed.toLocaleString()}</p>
                   </div>
