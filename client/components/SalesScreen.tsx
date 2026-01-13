@@ -46,11 +46,15 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permis
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
             <input 
               type="text"
+              list="product-suggestions"
               placeholder="Search products..."
               className="w-full pl-10 pr-4 py-3 bg-white border border-gray-100 rounded-2xl focus:ring-2 focus:ring-primary outline-none shadow-sm font-medium"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
+            <datalist id="product-suggestions">
+              {products.map(p => <option key={p.id} value={p.name} />)}
+            </datalist>
           </div>
           <select 
             className="px-4 py-3 bg-white border border-gray-100 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-primary outline-none shadow-sm"
