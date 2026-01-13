@@ -1,12 +1,6 @@
 const mongoose = require('mongoose');
 
-const UnitDefinitionSchema = new mongoose.Schema({
-  _id: false,
-  name: { type: String, required: true },
-  multiplier: { type: Number, required: true, min: 1 },
-  sellingPrice: { type: mongoose.Schema.Types.Decimal128, required: true, default: 0 },
-  costPrice: { type: mongoose.Schema.Types.Decimal128, default: 0 }
-});
+// UnitDefinitionSchema is replaced by inline definition in ProductSchema as per instructions.
 
 const ProductSchema = new mongoose.Schema({
   businessId: { type: String, index: true, required: true },
@@ -17,7 +11,12 @@ const ProductSchema = new mongoose.Schema({
   stock: { type: Number, default: 0 },
   sellingPrice: { type: mongoose.Schema.Types.Decimal128, required: true, default: 0 },
   costPrice: { type: mongoose.Schema.Types.Decimal128, default: 0 },
-  units: [UnitDefinitionSchema], // CRITICAL FIX: Explicitly define array of subdocs
+  units: [{
+    name: String,
+    multiplier: Number,
+    sellingPrice: { type: mongoose.Schema.Types.Decimal128, default: 0 },
+    costPrice: { type: mongoose.Schema.Types.Decimal128, default: 0 }
+  }],
   isManualUpdate: { type: Boolean, default: false }
 }, { timestamps: true });
 

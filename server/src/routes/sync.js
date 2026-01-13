@@ -11,13 +11,8 @@ const auth = require('../middleware/auth');
 
 const router = express.Router();
 
-const toDecimal = (value) => {
-  if (value === null || value === undefined || value === '' || Number.isNaN(Number(value))) return mongoose.Types.Decimal128.fromString('0');
-  return mongoose.Types.Decimal128.fromString(String(value));
-};
-
-// Helper to safely convert Decimal128 to Number
-const parseDecimal = (val) => parseFloat((val || 0).toString());
+const toDecimal = (val) => val ? val.toString() : "0";
+const parseDecimal = (val) => val ? parseFloat(val.toString()) : 0;
 
 const safeSubtract = (a, b) => {
   // Multiplies by 10000 to work with integers, then divides back
