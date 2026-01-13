@@ -281,8 +281,8 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     <div className="max-w-7xl mx-auto pb-24">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Inventory Management</h1>
-          <p className="text-gray-500">Track and manage your warehouse stock</p>
+          <h1 className="text-2xl font-bold text-gray-900">Manage Stock</h1>
+          <p className="text-gray-500">Add or edit items in your shop</p>
         </div>
         <div className="flex gap-2">
            {!safeReadOnly && (
@@ -301,7 +301,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
               className={`bg-indigo-50 text-indigo-700 px-6 py-3 rounded-xl flex items-center gap-2 font-bold border border-indigo-200 hover:bg-indigo-100 transition-all ${!navigator.onLine ? 'opacity-50 cursor-not-allowed' : ''}`}
               title={!navigator.onLine ? "Internet connection required for bulk updates." : ""}
             >
-              <ListTodo size={20} /> Bulk Update ({selectedIds.size})
+              <ListTodo size={20} /> Edit Many Items ({selectedIds.size})
             </button>
           )}
           {!safeReadOnly && (
@@ -645,7 +645,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                     </div>
                   </div>
                    <div>
-                    <label className="text-xs font-black text-gray-400 uppercase mb-2 block">Set Cost Price</label>
+                    <label className="text-xs font-black text-gray-400 uppercase mb-2 block">Set Buying Price</label>
                     <div className="relative">
                       <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                       <input 
@@ -767,7 +767,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                       <div className="flex gap-2">
                         {/* NEW INPUT: Cost Price */}
                         <div className="flex-1">
-                            <label className="text-[10px] uppercase font-bold text-gray-400">Cost Price</label>
+                            <label className="text-[10px] uppercase font-bold text-gray-400">Buying Price</label>
                             <input
                               type="number"
                               className="w-full px-3 py-2 text-sm rounded-lg border"
@@ -797,7 +797,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Cost Price ({CURRENCY})</label>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Buying Price ({CURRENCY})</label>
                   <input required type="number" className="w-full px-4 py-3 rounded-xl border" value={newProduct.costPrice} onChange={e => setNewProduct({...newProduct, costPrice: Number(e.target.value)})} />
                 </div>
                 <div>
@@ -805,7 +805,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                   <input required type="number" className="w-full px-4 py-3 rounded-xl border" value={newProduct.sellingPrice} onChange={e => setNewProduct({...newProduct, sellingPrice: Number(e.target.value)})} />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Stock Quantity</label>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Quantity Left</label>
                   <input required type="number" className="w-full px-4 py-3 rounded-xl border" value={newProduct.currentStock} onChange={e => setNewProduct({...newProduct, currentStock: Number(e.target.value)})} />
                 </div>
               </div>

@@ -34,6 +34,15 @@ import ForgotPasswordScreen from './components/ForgotPasswordScreen';
 import SupportBot from './components/SupportBot';
 import useServerWakeup from './services/useServerWakeup';
 
+const TAB_LABELS: Record<string, string> = {
+  sales: 'Sales',
+  inventory: 'My Stock',
+  history: 'Past Sales',
+  dashboard: 'Dashboard',
+  expenditure: 'Expenses',
+  settings: 'Settings'
+};
+
 const App: React.FC = () => {
   const { addToast } = useToast();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -520,7 +529,7 @@ const App: React.FC = () => {
           </div>
           <div className="mt-4 flex items-center gap-2 text-[10px] font-bold uppercase opacity-60">
             {isOnline ? <Wifi size={12} className="text-emerald-400" /> : <WifiOff size={12} className="text-orange-400" />}
-            {isOnline ? (isSyncing ? <RefreshCw size={12} className="animate-spin text-white" /> : 'Cloud Sync Active') : 'Offline Mode'}
+            {isOnline ? (isSyncing ? <RefreshCw size={12} className="animate-spin text-white" /> : 'Backup Active') : 'No Internet'}
           </div>
         </div>
         <nav className="flex-1 px-4 py-4 space-y-1">
@@ -528,7 +537,7 @@ const App: React.FC = () => {
             <SidebarLink key={tab} active={activeTab === tab} onClick={() => setActiveTab(tab)} icon={
               tab === 'sales' ? <ShoppingBag /> : tab === 'inventory' ? <Package /> : tab === 'history' ? <History /> : 
               tab === 'dashboard' ? <BarChart3 /> : tab === 'expenditure' ? <Wallet /> : <Settings />
-            } label={tab.charAt(0).toUpperCase() + tab.slice(1)} />
+            } label={TAB_LABELS[tab] || tab.charAt(0).toUpperCase() + tab.slice(1)} />
           ))}
         </nav>
         <div className="p-4 border-t border-white/10">
@@ -607,7 +616,7 @@ const App: React.FC = () => {
             <MobileNavLink key={tab} active={activeTab === tab} onClick={() => setActiveTab(tab)} icon={
               tab === 'sales' ? <ShoppingBag /> : tab === 'inventory' ? <Package /> : tab === 'history' ? <History /> : 
               tab === 'dashboard' ? <BarChart3 /> : tab === 'expenditure' ? <Wallet /> : <Settings />
-            } label={tab === 'expenditure' ? 'Expend' : tab.charAt(0).toUpperCase() + tab.slice(1, 4)} />
+            } label={TAB_LABELS[tab] || tab.charAt(0).toUpperCase() + tab.slice(1)} />
           ))}
         </nav>
       </main>

@@ -134,7 +134,7 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
   return (
     <div className="p-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Expenditures</h1>
+        <h1 className="text-2xl font-bold text-gray-800">Shop Expenses</h1>
 
         <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
            {/* Date Filters */}
@@ -178,7 +178,7 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
           </p>
         </div>
         <div className="bg-purple-50 p-4 rounded-xl border border-purple-100">
-          <p className="text-xs font-bold text-purple-500 uppercase tracking-wider mb-1">Total All-Time</p>
+          <p className="text-xs font-bold text-purple-500 uppercase tracking-wider mb-1">Total Spent</p>
           <p className="text-2xl font-black text-purple-700">
             {new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(summaryMetrics.allTimeTotal)}
           </p>
