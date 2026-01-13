@@ -18,8 +18,8 @@ import {
 } from 'lucide-react';
 import { InventoryState, UserRole, Product, ProductUnit, Transaction, BusinessProfile, TabId, SaleItem, PaymentMethod, Expenditure } from './types';
 import { INITIAL_PRODUCTS } from './constants';
-import { saveState, loadState, syncWithBackend, getDataVersion, saveDataVersion, getLastSync, saveLastSync } from './services/storage';
-import { login, registerBusiness, saveAuthToken, clearAuthToken, deleteTransaction, getEntitlements, initializePayment, fetchRemoteState } from './services/api';
+import { saveState, loadState, pushToBackend, getDataVersion, saveDataVersion, getLastSync, saveLastSync } from './services/storage';
+import { login, registerBusiness, saveAuthToken, clearAuthToken, deleteTransaction, getEntitlements, initializePayment, fetchRemoteState, deleteExpenditure } from './services/api';
 import { useToast } from './components/ToastProvider';
 import SalesScreen from './components/SalesScreen';
 import InventoryScreen from './components/InventoryScreen';
@@ -108,79 +108,44 @@ const App: React.FC = () => {
     stateRef.current = state;
   }, [state]);
 
-  const triggerSync = useCallback(async (overrideState?: InventoryState, silent = false) => {
+  const refreshData = useCallback(async (overrideState?: InventoryState) => {
     if (!navigator.onLine) return;
-    const currentState = overrideState || stateRef.current;
-    if (!currentState.isLoggedIn || isSyncing) return;
-
-    if (!silent) setIsSyncing(true);
-
+    setIsSyncing(true);
     try {
-        // 1. Push local changes first
-        await syncWithBackend(currentState);
+      const currentState = overrideState || stateRef.current;
 
-        // 2. Hybrid Delta Fetch
-        const currentVersion = getDataVersion();
-        const lastSync = getLastSync();
+      // Force fetch all (version 0)
+      const response = await fetchRemoteState(0, null);
 
-        const response = await fetchRemoteState(currentVersion, lastSync);
+      if (response.status === 200 && response.data) {
+         const { version, serverTime, changes, business } = response.data;
 
-        if (response.status === 204) {
-            setIsSyncing(false);
-            return;
-        }
+         const nextState: InventoryState = {
+           ...currentState,
+           products: changes.products || [],
+           transactions: changes.transactions || [],
+           categories: changes.categories || [],
+           expenditures: changes.expenditures || [],
+           business: business ? { ...currentState.business, ...business } : currentState.business,
+           lastSyncedAt: serverTime,
+           isLoggedIn: true
+         };
 
-        if (response.status === 200 && response.data) {
-            const { version, serverTime, changes, ids, business } = response.data;
+         if (business) {
+             const current = loadState();
+             if (current) saveState({ ...current, business: { ...current.business, ...business } });
+         }
 
-            // FIX: Immediately update user permissions if business data is present in sync
-            if (business) {
-               // Update local storage to persist permissions across reloads
-               const current = loadState();
-               if (current) {
-                   saveState({ ...current, business: { ...current.business, ...business } });
-               }
-            }
-
-            setState(prev => {
-                const mergeData = (localList: any[], changedItems: any[], validIds: string[]) => {
-                    const idSet = new Set(validIds);
-                    const changesMap = new Map(changedItems.map(i => [i.id, i]));
-
-                    // Upsert changes
-                    const merged = localList.map(item => changesMap.has(item.id) ? changesMap.get(item.id) : item);
-
-                    // Add new items from changes that weren't in local list
-                    changedItems.forEach(item => {
-                        if (!merged.find(m => m.id === item.id)) {
-                            merged.push(item);
-                        }
-                    });
-
-                    // Hard Delete: Keep only items in validIds list
-                    return merged.filter(item => idSet.has(item.id));
-                };
-
-                return {
-                    ...prev,
-                    products: mergeData(prev.products, changes.products, ids.products),
-                    transactions: mergeData(prev.transactions, changes.transactions, ids.transactions),
-                    categories: mergeData(prev.categories || [], changes.categories, ids.categories),
-                    expenditures: mergeData(prev.expenditures || [], changes.expenditures, ids.expenditures),
-                    business: business ? { ...prev.business, ...business } : prev.business,
-                    lastSyncedAt: serverTime
-                };
-            });
-
-            saveDataVersion(version);
-            saveLastSync(new Date(serverTime));
-        }
+         setState(nextState);
+         saveDataVersion(version);
+         saveLastSync(new Date(serverTime));
+      }
     } catch (err) {
-        console.error("Sync failed", err);
+      console.error("Refresh data failed", err);
     } finally {
-        if (!silent) setIsSyncing(false);
+      setIsSyncing(false);
     }
-  }, [isSyncing]);
+  }, []);
 
   const handleLogout = useCallback(() => {
     clearAuthToken();
@@ -189,7 +154,6 @@ const App: React.FC = () => {
 
   const handleDeleteAccount = useCallback(() => {
     localStorage.clear(); // Wipe all data
-    // Reset state to force the Registration Screen to appear
     setState(prev => ({
       ...prev,
       isLoggedIn: false,
@@ -213,10 +177,9 @@ const App: React.FC = () => {
       const trialExpired = data.trialEndsAt ? new Date(data.trialEndsAt) < new Date() : false;
       if (data.plan === 'FREE' && trialExpired) {
         if (!subscriptionLocked) {
-          // Transitioning from Valid -> Expired
           setSubscriptionLocked(true);
           addToast('Your subscription has expired. Session ended for security.', 'error');
-          handleLogout(); // Auto-logout on new expiry detection
+          handleLogout();
         }
       } else if (subscriptionLocked) {
         setSubscriptionLocked(false);
@@ -226,28 +189,11 @@ const App: React.FC = () => {
     }
   }, [subscriptionLocked, addToast, handleLogout]);
 
-  // Sync optimization: Only sync when transitioning from offline to online
   useEffect(() => {
     const handleOnline = async () => {
       setIsOnline(true);
       if (!wasOnlineRef.current && state.isLoggedIn) {
-        setIsSyncing(true);
-        const result = await syncWithBackend(state);
-        if (result) {
-          if (typeof result === 'string') {
-            setState(prev => ({ ...prev, lastSyncedAt: result }));
-          } else {
-             setState(prev => ({
-              ...prev,
-              lastSyncedAt: result.lastSyncedAt,
-              products: result.products || prev.products,
-              transactions: result.transactions || prev.transactions,
-              expenditures: result.expenditures || prev.expenditures,
-              business: result.business ? { ...prev.business, ...result.business } : prev.business
-            }));
-          }
-        }
-        setIsSyncing(false);
+        await refreshData();
       }
       await fetchEntitlements();
     };
@@ -259,7 +205,7 @@ const App: React.FC = () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [state, fetchEntitlements]);
+  }, [state.isLoggedIn, fetchEntitlements, refreshData]);
 
   useEffect(() => {
     wasOnlineRef.current = isOnline;
@@ -267,10 +213,9 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (state.isLoggedIn && navigator.onLine) {
-      triggerSync().catch(err => console.warn('Background sync failed:', err));
       fetchEntitlements();
     }
-  }, [state.isLoggedIn]); // Removed fetchEntitlements dependency to avoid loops if it changes
+  }, [state.isLoggedIn]);
 
   const openPaymentLink = useCallback(async () => {
     if (!navigator.onLine) {
@@ -302,51 +247,19 @@ const App: React.FC = () => {
 
   useEffect(() => { saveState(state); }, [state]);
 
-  // Auto-sync every 15 seconds (Silent)
-  useEffect(() => {
-    if (state.isLoggedIn) {
-      const intervalId = setInterval(() => {
-        triggerSync(undefined, true);
-      }, 15000); // 15 seconds
-
-      return () => clearInterval(intervalId);
-    }
-  }, [state.isLoggedIn, triggerSync]);
-
   const handleAddExpenditure = (newExpenditure: Expenditure) => {
     setState(prev => {
       const updated = [newExpenditure, ...prev.expenditures];
-      // Trigger background sync immediately if online
-      if (navigator.onLine) syncWithBackend({ ...prev, expenditures: updated });
+      if (navigator.onLine) pushToBackend({ expenditures: [newExpenditure] });
       return { ...prev, expenditures: updated };
     });
   };
 
   const handleDeleteExpenditure = async (id: string) => {
-    // Optimistic update
-    setState(prev => {
-        const next = { ...prev, expenditures: prev.expenditures.filter(e => e.id !== id) };
-        if (navigator.onLine) {
-             const api = import('./services/api').then(m => m.default ? m.default.delete : null); // api.delete is not default export?
-             // api.ts exports `deleteProduct` etc. but doesn't expose generic delete on api object easily or I need to import it.
-             // Wait, I see `import { deleteProduct, deleteTransaction }` in imports.
-             // I should add deleteExpenditure to api.ts or use the sync route.
-             // For now, syncing the new state (without the item) via syncWithBackend might work IF the backend supports deleting missing items OR if I explicitly call delete.
-             // The prompt said: "calls api.delete('/expenditures/:id')".
-             // `api` default export has `delete` method? Check api.ts.
-             // `api.ts` exports `default api` with `get` and `post`. No `delete`.
-             // I will implement `deleteExpenditure` in `api.ts` later.
-             // For now I will assume `deleteExpenditure` is available or I will add it.
-             // Let's defer the API call implementation details to `api.ts` step.
-             // I will import `deleteExpenditure` (which I will add) and call it.
-        }
-        return next;
-    });
-
+    setState(prev => ({ ...prev, expenditures: prev.expenditures.filter(e => e.id !== id) }));
     if (navigator.onLine) {
         try {
-            const { deleteExpenditure } = await import('./services/api');
-            if (deleteExpenditure) await deleteExpenditure(id);
+            await deleteExpenditure(id);
         } catch (err) {
             console.error(err);
         }
@@ -356,7 +269,7 @@ const App: React.FC = () => {
   const handleEditExpenditure = (updated: Expenditure) => {
       setState(prev => {
           const newExp = prev.expenditures.map(e => e.id === updated.id ? updated : e);
-          if (navigator.onLine) syncWithBackend({ ...prev, expenditures: newExp });
+          if (navigator.onLine) pushToBackend({ expenditures: [updated] });
           return { ...prev, expenditures: newExp };
       });
   };
@@ -389,16 +302,13 @@ const App: React.FC = () => {
       const response = await login(credentials.email, credentials.pin);
       saveAuthToken(response.token);
 
-      // Force full sync on login
       try {
         saveDataVersion(0);
-        saveLastSync(null); // FORCE NULL
+        saveLastSync(null);
       } catch (err) {
         console.warn("Could not reset sync version, continuing anyway:", err);
       }
 
-      // Construct new state (Logged In but Empty Data)
-      // We explicitly clear old data to avoid conflicts and force a clean UI until sync completes
       const newState: InventoryState = {
         ...state,
         isRegistered: true,
@@ -413,8 +323,8 @@ const App: React.FC = () => {
 
       setState(newState);
 
-      // BLOCKING SYNC: Fetch full data (Version 0) before removing loading screen
-      await triggerSync(newState);
+      // Pass the new state directly to refreshData
+      await refreshData(newState);
 
       setIsLoading(false);
 
@@ -427,7 +337,6 @@ const App: React.FC = () => {
   };
 
   const handleLogin = async (pin: string, selectedRole: UserRole) => {
-    // Strictly enforce online login as requested
     if (!navigator.onLine) {
       addToast('Login requires internet connection.', 'error');
       return false;
@@ -435,11 +344,22 @@ const App: React.FC = () => {
 
     try {
       if (state.business.email) {
-        // Pass selectedRole to login to prevent privilege escalation
         const response = await login(state.business.email, pin, selectedRole);
         saveAuthToken(response.token);
-        setState(prev => ({ ...prev, role: response.role, isLoggedIn: true, business: { ...prev.business, ...response.business } }));
-        setActiveTab('history'); // Default to History for safety
+
+        const newState = {
+          ...state,
+          role: response.role,
+          isLoggedIn: true,
+          business: { ...state.business, ...response.business }
+        };
+
+        setState(newState);
+        setActiveTab('history');
+
+        // Pass the new state directly to refreshData
+        refreshData(newState);
+
         return true;
       }
     } catch (err) {
@@ -470,13 +390,11 @@ const App: React.FC = () => {
     } catch (err) { addToast('Delete failed.', 'error'); }
   };
 
-  // POS UX fix: No auto-open on mobile
   const addToCart = (product: Product, unit?: ProductUnit) => {
     const multiplier = unit ? unit.multiplier : 1;
     if (product.currentStock < multiplier) return;
 
     setCart(prev => {
-      // FIX: Always add new item with unique cartId (allow duplicates/linked items to be separate)
       return [...prev, {
         cartId: crypto.randomUUID(),
         productId: product.id,
@@ -516,9 +434,13 @@ const App: React.FC = () => {
     setCart([]); setCustomerName(''); setCustomerPhone(''); setAmountPaid(0); setGlobalDiscount(0); setSignature(''); setIsLocked(false);
     if (window.innerWidth < 768) setIsCartOpen(false);
 
-    // 3. PUSH to Server immediately (Fire and Forget)
+    // 3. PUSH to Server immediately
     if (navigator.onLine) {
-      syncWithBackend(nextState).catch(err => console.error("Instant sync failed:", err));
+      pushToBackend({ transactions: [transaction], products: updatedProducts })
+        .catch(err => {
+            console.error("Instant sync failed:", err);
+            addToast("Sale saved locally. Connect to internet to back up.", "warning");
+        });
     }
   };
 
@@ -526,7 +448,7 @@ const App: React.FC = () => {
     const nextState = { ...state, products };
     setState(nextState);
     if (navigator.onLine) {
-      syncWithBackend(nextState).catch(err => console.error("Instant sync failed:", err));
+      pushToBackend({ products }).catch(err => console.error("Instant sync failed:", err));
     }
   };
 
@@ -535,32 +457,21 @@ const App: React.FC = () => {
   const canManageHistory = state.role === 'owner' || perms.canEditHistory;
 
   const allowedTabs = useMemo(() => {
-    // Robust check for subscription status using both entitlements and persisted state
     const hasPro = entitlements?.plan === 'PRO' || state.business.isSubscribed;
-
-    // Check trial status from multiple sources, defaulting to strict check if offline
     const entitlementTrial = entitlements?.trialEndsAt ? new Date(entitlements.trialEndsAt) : null;
     const businessTrial = state.business.trialEndsAt ? new Date(state.business.trialEndsAt) : null;
-
-    // Use the latest valid date we have
     const trialEndDate = entitlementTrial || businessTrial;
     const trialActive = trialEndDate ? trialEndDate >= new Date() : false;
 
     if (!hasPro && !trialActive) return ['history'] as TabId[];
     
-    // Page IDs that actually exist in the UI
     const PAGE_IDS: TabId[] = ['sales', 'inventory', 'history', 'expenditure', 'dashboard', 'settings'];
-
     const ownerTabs = PAGE_IDS;
 
     if (state.role === 'owner') return ownerTabs;
 
-    // Filter staff permissions to only include valid page IDs
-    // 'sales' is always allowed for staff
     const staffTabs: string[] = ['sales'];
-
-    // Map permissions to tabs
-    const perms = (state.business.staffPermissions as any) || {}; // Safety fallback
+    const perms = (state.business.staffPermissions as any) || {};
     if (perms.canViewInventory || perms.canEditInventory) staffTabs.push('inventory');
     if (perms.canViewHistory || perms.canEditHistory) staffTabs.push('history');
     if (perms.canViewExpenditure) staffTabs.push('expenditure');
@@ -569,7 +480,6 @@ const App: React.FC = () => {
     return Array.from(new Set(staffTabs)) as TabId[];
   }, [state.role, state.business.staffPermissions, entitlements, state.business.trialEndsAt, state.business.isSubscribed]);
 
-  // Force redirection to allowed tabs if current tab is forbidden
   useEffect(() => {
     if (allowedTabs.length > 0 && !allowedTabs.includes(activeTab)) {
       setActiveTab(allowedTabs[0]);
@@ -683,7 +593,7 @@ const App: React.FC = () => {
               onEditExpenditure={handleEditExpenditure}
             />
           )}
-          {activeTab === 'settings' && state.role === 'owner' && <SettingsScreen business={state.business} onUpdateBusiness={b => setState(prev => ({ ...prev, business: b }))} onManualSync={() => triggerSync(undefined, false)} lastSyncedAt={state.lastSyncedAt} onLogout={handleLogout} onDeleteAccount={handleDeleteAccount} />}
+          {activeTab === 'settings' && state.role === 'owner' && <SettingsScreen business={state.business} onUpdateBusiness={b => setState(prev => ({ ...prev, business: b }))} onManualSync={() => refreshData()} lastSyncedAt={state.lastSyncedAt} onLogout={handleLogout} onDeleteAccount={handleDeleteAccount} />}
         </div>
 
         {/* Mobile Bottom Nav */}
