@@ -9,15 +9,16 @@ const UnitDefinitionSchema = new mongoose.Schema({
 });
 
 const ProductSchema = new mongoose.Schema({
-  businessId: { type: mongoose.Schema.Types.ObjectId, ref: 'Business', index: true, required: true },
+  businessId: { type: String, index: true, required: true },
   id: { type: String, required: true },
   name: { type: String, required: true },
-  category: { type: String },
+  category: { type: String, default: 'Uncategorized' },
   baseUnit: { type: String, default: 'Piece' },
   stock: { type: Number, default: 0 },
   sellingPrice: { type: mongoose.Schema.Types.Decimal128, required: true, default: 0 },
   costPrice: { type: mongoose.Schema.Types.Decimal128, default: 0 },
-  units: { type: [UnitDefinitionSchema], default: [] }
+  units: [UnitDefinitionSchema], // CRITICAL FIX: Explicitly define array of subdocs
+  isManualUpdate: { type: Boolean, default: false }
 }, { timestamps: true });
 
 ProductSchema.index({ businessId: 1, id: 1 }, { unique: true });
