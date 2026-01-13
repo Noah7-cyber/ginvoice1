@@ -95,6 +95,8 @@ export interface Transaction {
   signature?: string;
   isSignatureLocked?: boolean;
   staffId: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 /* New: Expenditure item stored locally */

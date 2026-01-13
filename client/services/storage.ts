@@ -74,7 +74,12 @@ export const syncWithBackend = async (state: InventoryState) => {
       : state.products;
 
     const transactions = lastSyncedAt
-      ? state.transactions.filter(t => !t.createdAt || new Date(t.createdAt) > lastSyncedAt)
+      ? state.transactions.filter(t => {
+          const created = t.createdAt ? new Date(t.createdAt) : new Date(0);
+          const updated = t.updatedAt ? new Date(t.updatedAt) : new Date(0);
+          // Send if it was Created OR Updated after the last sync
+          return created > lastSyncedAt || updated > lastSyncedAt;
+        })
       : state.transactions;
 
     const expenditures = lastSyncedAt
