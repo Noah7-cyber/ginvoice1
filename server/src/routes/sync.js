@@ -485,7 +485,8 @@ router.post('/', auth, async (req, res) => {
               signature: t.signature,
               isSignatureLocked: t.isSignatureLocked,
               staffId: t.staffId,
-              createdAt: t.transactionDate ? new Date(t.transactionDate) : new Date()
+              createdAt: t.transactionDate ? new Date(t.transactionDate) : new Date(),
+              updatedAt: new Date()
             }
           },
           upsert: true
@@ -541,7 +542,8 @@ router.post('/', auth, async (req, res) => {
               description: e.description,
               paymentMethod: e.paymentMethod,
               note: e.note,
-              createdBy: e.createdBy
+              createdBy: e.createdBy,
+              updatedAt: new Date()
             }
           },
           upsert: true
