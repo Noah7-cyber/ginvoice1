@@ -33,13 +33,10 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ onBack, bus
         setErrorMessage('No internet connection.');
         setStatus('error');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Password recovery request failed', err);
-      // For security, usually better to still show "If email exists..." but here we want to let them enter code
-      // We will proceed to verify step so they can enter a code if they got one previously?
-      // Or maybe show error. Let's assume error means network issue.
-      setStep('verify');
-      setStatus('idle');
+      setStatus('error');
+      setErrorMessage(err.message || 'Failed to request code.');
     }
   };
 

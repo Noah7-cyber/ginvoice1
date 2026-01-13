@@ -115,6 +115,7 @@ export interface Expenditure {
 export interface InventoryState {
   products: Product[];
   transactions: Transaction[];
+  categories?: Category[]; // Added for sync
   role: UserRole;
   isLoggedIn: boolean;
   isRegistered: boolean;

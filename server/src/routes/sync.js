@@ -6,6 +6,7 @@ const Transaction = require('../models/Transaction');
 const Business = require('../models/Business');
 const Expenditure = require('../models/Expenditure');
 const DiscountCode = require('../models/DiscountCode');
+const Category = require('../models/Category');
 const auth = require('../middleware/auth');
 
 const router = express.Router();
@@ -47,8 +48,16 @@ router.get('/', auth, async (req, res) => {
     const rawProducts = await Product.find({ businessId }).lean();
     const rawTransactions = await Transaction.find({ businessId }).lean();
     const rawExpenditures = await Expenditure.find({ business: businessId }).lean();
+    const rawCategories = await Category.find({ businessId }).lean();
 
     // 2. Map backend data to frontend-friendly formats (Numbers instead of Decimals)
+
+    const categories = rawCategories.map(c => ({
+      ...c,
+      id: c._id,
+      defaultSellingPrice: parseDecimal(c.defaultSellingPrice),
+      defaultCostPrice: parseDecimal(c.defaultCostPrice)
+    }));
 
     const products = rawProducts.map(p => ({
       ...p,
@@ -85,6 +94,7 @@ router.get('/', auth, async (req, res) => {
     }));
 
     return res.json({
+      categories,
       products,
       transactions,
       expenditures,
@@ -108,11 +118,38 @@ router.get('/', auth, async (req, res) => {
 
 router.post('/', auth, async (req, res) => {
   try {
-    const { products = [], transactions = [], expenditures = [], business } = req.body || {};
+    const { products = [], transactions = [], expenditures = [], business, categories = [] } = req.body || {};
     const businessId = req.businessId;
 
     if (business && typeof business === 'object') {
-       await Business.findByIdAndUpdate(businessId, { $set: { ...business, lastActiveAt: new Date() } });
+       // [FIX] Prevent client from overwriting sensitive fields
+       const { staffPermissions, trialEndsAt, isSubscribed, ...safeUpdates } = business;
+
+       await Business.findByIdAndUpdate(businessId, {
+         $set: {
+           ...safeUpdates,
+           lastActiveAt: new Date()
+         }
+       });
+    }
+
+    // Save Categories
+    if (Array.isArray(categories) && categories.length > 0) {
+      const catOps = categories.map(c => ({
+        updateOne: {
+          filter: { businessId, name: c.name },
+          update: {
+            $set: {
+              businessId,
+              name: c.name,
+              defaultSellingPrice: toDecimal(c.defaultSellingPrice),
+              defaultCostPrice: toDecimal(c.defaultCostPrice)
+            }
+          },
+          upsert: true
+        }
+      }));
+      await Category.bulkWrite(catOps, { ordered: false });
     }
 
     // --- PHASE 1: Strict Transaction Processing (Deduct Stock First) ---
@@ -305,6 +342,14 @@ router.post('/', auth, async (req, res) => {
     const rawProducts = await Product.find({ businessId }).lean();
     const rawTransactions = await Transaction.find({ businessId }).lean();
     const rawExpenditures = await Expenditure.find({ business: businessId }).lean();
+    const rawCategories = await Category.find({ businessId }).lean();
+
+    const fetchedCategories = rawCategories.map(c => ({
+      ...c,
+      id: c._id,
+      defaultSellingPrice: parseDecimal(c.defaultSellingPrice),
+      defaultCostPrice: parseDecimal(c.defaultCostPrice)
+    }));
 
     const fetchedProducts = rawProducts.map(p => ({
       ...p,
@@ -343,6 +388,7 @@ router.post('/', auth, async (req, res) => {
 
     return res.json({
       syncedAt: new Date().toISOString(),
+      categories: fetchedCategories,
       products: fetchedProducts,
       transactions: fetchedTransactions,
       expenditures: fetchedExpenditures,

@@ -179,7 +179,7 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
         {
           $group: {
             _id: { id: '$items.productId', unit: '$items.unit' },
-            totalSales: { $sum: { $multiply: ['$items.quantity', { $toDouble: '$items.unitPrice' }] } }, // Revenue per product
+            totalSales: { $sum: { $toDouble: '$items.total' } }, // Revenue per product
             totalQty: { $sum: '$items.quantity' }
           }
         }
@@ -193,7 +193,7 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
       {
         $group: {
           _id: { id: '$items.productId', unit: '$items.unit' },
-          totalSales: { $sum: { $multiply: ['$items.quantity', { $toDouble: '$items.unitPrice' }] } },
+          totalSales: { $sum: { $toDouble: '$items.total' } },
           totalQty: { $sum: '$items.quantity' }
         }
       }
@@ -206,7 +206,7 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
       {
         $group: {
           _id: { id: '$items.productId', unit: '$items.unit' },
-          totalSales: { $sum: { $multiply: ['$items.quantity', { $toDouble: '$items.unitPrice' }] } },
+          totalSales: { $sum: { $toDouble: '$items.total' } },
           totalQty: { $sum: '$items.quantity' }
         }
       }
