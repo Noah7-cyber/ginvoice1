@@ -13,7 +13,8 @@ import {
   ShoppingCart,
   PanelRightClose,
   PanelRightOpen,
-  Wallet
+  Wallet,
+  Loader2
 } from 'lucide-react';
 import { InventoryState, UserRole, Product, ProductUnit, Transaction, BusinessProfile, TabId, SaleItem, PaymentMethod, Expenditure } from './types';
 import { INITIAL_PRODUCTS } from './constants';
@@ -37,6 +38,7 @@ const App: React.FC = () => {
   const { addToast } = useToast();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const wasOnlineRef = useRef(navigator.onLine);
   
   const [subscriptionLocked, setSubscriptionLocked] = useState(false);
@@ -106,9 +108,9 @@ const App: React.FC = () => {
     stateRef.current = state;
   }, [state]);
 
-  const triggerSync = useCallback(async () => {
+  const triggerSync = useCallback(async (overrideState?: InventoryState) => {
     if (!navigator.onLine) return;
-    const currentState = stateRef.current;
+    const currentState = overrideState || stateRef.current;
     if (!currentState.isLoggedIn || isSyncing) return;
 
     setIsSyncing(true);
@@ -381,6 +383,8 @@ const App: React.FC = () => {
       return;
     }
 
+    setIsLoading(true);
+
     try {
       const response = await login(credentials.email, credentials.pin);
       saveAuthToken(response.token);
@@ -393,36 +397,32 @@ const App: React.FC = () => {
         console.warn("Could not reset sync version, continuing anyway:", err);
       }
 
-      // Attempt to restore data from server
-      let restoredData: Partial<InventoryState> = {};
-      try {
-        const remoteData = await fetchRemoteState();
-        if (remoteData) {
-          restoredData = {
-            products: remoteData.products || [],
-            transactions: remoteData.transactions || [],
-            expenditures: remoteData.expenditures || [],
-            categories: remoteData.categories || [],
-            business: remoteData.business ? { ...response.business, ...remoteData.business } : response.business
-          };
-        }
-      } catch (syncErr) {
-        console.warn('Failed to restore data during login', syncErr);
-        addToast('Logged in, but failed to load data. Please sync manually.', 'info');
-      }
-
-      setState(prev => ({
-        ...prev,
+      // Construct new state (Logged In but Empty Data)
+      // We explicitly clear old data to avoid conflicts and force a clean UI until sync completes
+      const newState: InventoryState = {
+        ...state,
         isRegistered: true,
         isLoggedIn: true,
         role: response.role,
-        business: { ...prev.business, ...response.business },
-        ...restoredData
-      }));
+        business: { ...state.business, ...response.business },
+        products: [],
+        transactions: [],
+        categories: [],
+        expenditures: []
+      };
+
+      setState(newState);
+
+      // BLOCKING SYNC: Fetch full data (Version 0) before removing loading screen
+      await triggerSync(newState);
+
+      setIsLoading(false);
 
     } catch (err: any) {
       console.error('Manual login failed', err);
       addToast(err.message || 'Login failed. Check your credentials.', 'error');
+      setIsLoading(false);
+      setState(prev => ({ ...prev, isLoggedIn: false }));
     }
   };
 
@@ -583,6 +583,16 @@ const App: React.FC = () => {
         businessName={state.business.name}
         email={recoveryEmail || state.business.email}
       />
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
+        <Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
+        <h2 className="text-xl font-bold text-gray-800">Syncing your shop data...</h2>
+        <p className="text-gray-500 text-sm mt-2">This may take a few seconds.</p>
+      </div>
     );
   }
 
