@@ -31,13 +31,14 @@ interface CurrentOrderSidebarProps {
   products: Product[];
   permissions: any;
   isOwner?: boolean; // Added isOwner prop
+  pastCustomers?: string[];
 }
 
 const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
   cart, setCart, customerName, setCustomerName, paymentMethod, setPaymentMethod,
   customerPhone, setCustomerPhone, amountPaid, setAmountPaid, globalDiscount, setGlobalDiscount, isGlobalDiscountPercent,
   setIsGlobalDiscountPercent, signature, setSignature, isLocked, setIsLocked,
-  onCompleteSale, onClose, products, permissions, isOwner = false
+  onCompleteSale, onClose, products, permissions, isOwner = false, pastCustomers
 }) => {
   const [activeDiscountEdit, setActiveDiscountEdit] = useState<string | null>(null);
   const [discountCode, setDiscountCode] = useState('');
@@ -143,11 +144,15 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
             <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
             <input 
               type="text"
+              list="customer-history"
               placeholder="Guest Customer"
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
               className="w-full pl-10 pr-4 py-3 bg-white border border-gray-100 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none font-bold shadow-sm"
             />
+            <datalist id="customer-history">
+              {pastCustomers?.map(name => <option key={name} value={name} />)}
+            </datalist>
           </div>
         </div>
 
