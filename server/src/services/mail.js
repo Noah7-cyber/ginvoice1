@@ -36,30 +36,18 @@ const createTransport = (user, pass) => {
   });
 };
 
-let systemTransport = null;
-let supportTransport = null;
-
-const getSystemTransport = () => {
-  if (systemTransport) return systemTransport;
-  systemTransport = createTransport(process.env.SYSTEM_MAIL_USER, process.env.SYSTEM_MAIL_PASS);
-  return systemTransport;
-};
-
-const getSupportTransport = () => {
-  if (supportTransport) return supportTransport;
-  supportTransport = createTransport(process.env.SUPPORT_MAIL_USER, process.env.SUPPORT_MAIL_PASS);
-  return supportTransport;
-};
+// Initialize transporters once (Singleton)
+const systemTransport = createTransport(process.env.SYSTEM_MAIL_USER, process.env.SYSTEM_MAIL_PASS);
+const supportTransport = createTransport(process.env.SUPPORT_MAIL_USER, process.env.SUPPORT_MAIL_PASS);
 
 const sendSystemEmail = async ({ to, subject, html, text }) => {
-  const transport = getSystemTransport();
-  if (!transport) {
+  if (!systemTransport) {
     console.warn('System Email skipped: Config missing');
     return { sent: false, reason: 'missing_config' };
   }
 
   try {
-    await transport.sendMail({
+    await systemTransport.sendMail({
       from: `"Ginvoice System" <${process.env.SYSTEM_MAIL_USER}>`,
       to,
       subject,
@@ -74,14 +62,13 @@ const sendSystemEmail = async ({ to, subject, html, text }) => {
 };
 
 const sendSupportEmail = async ({ to, subject, html, text }) => {
-  const transport = getSupportTransport();
-  if (!transport) {
+  if (!supportTransport) {
     console.warn('Support Email skipped: Config missing');
     return { sent: false, reason: 'missing_config' };
   }
 
   try {
-    await transport.sendMail({
+    await supportTransport.sendMail({
       from: `"Ginvoice Support" <${process.env.SUPPORT_MAIL_USER}>`,
       to,
       subject,

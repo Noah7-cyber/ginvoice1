@@ -39,21 +39,10 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
 
     let dataToSubmit = { ...formData };
 
-    // [FIX] Force Cloudinary upload if logo is Base64
-    if (logoFile && formData.logo && formData.logo.startsWith('data:image')) {
-      if (navigator.onLine) {
-        try {
-           const url = await uploadFile(logoFile);
-           dataToSubmit.logo = url;
-           // Update state to reflect uploaded URL
-           setFormData(prev => ({ ...prev, logo: url }));
-        } catch (err) {
-           console.error('Logo upload failed before save:', err);
-           // Fallback: Continue with base64 but warn
-           // Ideally we shouldn't block, but base64 bloat is bad.
-           // Since we can't block easily without UI feedback, we proceed.
-        }
-      }
+    // Prevent saving Blob URLs to database
+    if (dataToSubmit.logo && dataToSubmit.logo.startsWith('blob:')) {
+      alert('Logo upload in progress or failed. Please wait or try again.');
+      return;
     }
 
     onUpdateBusiness(dataToSubmit);
@@ -69,24 +58,25 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
         return;
       }
 
-      setLogoFile(file); // Store file for later upload in handleSubmit if needed
+      if (!navigator.onLine) {
+        alert('Online required for logo change');
+        return;
+      }
 
-      // Preview immediately
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData(prev => ({ ...prev, logo: reader.result as string }));
-      };
-      reader.readAsDataURL(file);
+      // Temporary preview
+      const previewUrl = URL.createObjectURL(file);
+      setFormData(prev => ({ ...prev, logo: previewUrl }));
 
-      // Try uploading immediately (optimistic)
+      // Upload immediately
       try {
-        if (navigator.onLine) {
           const url = await uploadFile(file);
           setFormData(prev => ({ ...prev, logo: url }));
-          setLogoFile(null); // Clear pending file since uploaded
-        }
       } catch (err) {
-        console.error('Logo upload failed, using local base64 fallback', err);
+        console.error('Logo upload failed', err);
+        alert('Logo upload failed. Please check your connection.');
+        // Revert to no logo or keep previous logic?
+        // To be safe, we unset the blob URL so the user isn't stuck with a broken state they can't save.
+        setFormData(prev => ({ ...prev, logo: business.logo }));
       }
     }
   };
@@ -96,19 +86,27 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const togglePermission = (key: string) => {
-    // Handle both new object-based and old array-based perms logic if mixing (for now assume object structure is dominant based on new types)
-    const currentPerms = formData.staffPermissions as any || {};
-    // If it's the old array, we might need a migration strategy, but let's assume we are using the new object
-    const newVal = !currentPerms[key];
+  const togglePermission = async (key: string) => {
+    if (!navigator.onLine) {
+        alert('You must be online to change permissions.');
+        return;
+    }
 
-    setFormData(prev => ({
-      ...prev,
-      staffPermissions: {
-        ...prev.staffPermissions,
-        [key]: newVal
-      }
-    }));
+    const currentPerms = formData.staffPermissions as any || {};
+    const newVal = !currentPerms[key];
+    const newPermissions = { ...currentPerms, [key]: newVal };
+
+    try {
+        await updateSettings(undefined, newPermissions);
+        // Only update UI on success
+        setFormData(prev => ({
+          ...prev,
+          staffPermissions: newPermissions
+        }));
+    } catch (err) {
+        console.error('Failed to update permission', err);
+        alert('Failed to update permission. Please try again.');
+    }
   };
 
 
