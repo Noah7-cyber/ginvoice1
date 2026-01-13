@@ -107,7 +107,9 @@ router.get('/', auth, async (req, res) => {
         staffPermissions: businessData.staffPermissions,
         settings: businessData.settings,
         trialEndsAt: businessData.trialEndsAt,
-        isSubscribed: businessData.isSubscribed
+        isSubscribed: businessData.isSubscribed,
+        logo: businessData.logo,
+        theme: businessData.theme
       }
     });
   } catch (err) {
@@ -123,7 +125,17 @@ router.post('/', auth, async (req, res) => {
 
     if (business && typeof business === 'object') {
        // [FIX] Prevent client from overwriting sensitive fields
-       const { staffPermissions, trialEndsAt, isSubscribed, ...safeUpdates } = business;
+       // Exclude sensitive fields to prevent reverting server-side settings
+       const {
+         staffPermissions,
+         trialEndsAt,
+         isSubscribed,
+         ownerPin,
+         staffPin,
+         logo,
+         theme,
+         ...safeUpdates
+       } = business;
 
        await Business.findByIdAndUpdate(businessId, {
          $set: {
@@ -401,7 +413,9 @@ router.post('/', auth, async (req, res) => {
         staffPermissions: latestBusinessData.staffPermissions,
         settings: latestBusinessData.settings,
         trialEndsAt: latestBusinessData.trialEndsAt,
-        isSubscribed: latestBusinessData.isSubscribed
+        isSubscribed: latestBusinessData.isSubscribed,
+        logo: latestBusinessData.logo,
+        theme: latestBusinessData.theme
       } : undefined
     });
   } catch (err) {

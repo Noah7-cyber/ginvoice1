@@ -30,12 +30,33 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
   const [confirmBusinessName, setConfirmBusinessName] = useState('');
   const [deleteError, setDeleteError] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onUpdateBusiness(formData);
+
+    let dataToSubmit = { ...formData };
+
+    // [FIX] Force Cloudinary upload if logo is Base64
+    if (logoFile && formData.logo && formData.logo.startsWith('data:image')) {
+      if (navigator.onLine) {
+        try {
+           const url = await uploadFile(logoFile);
+           dataToSubmit.logo = url;
+           // Update state to reflect uploaded URL
+           setFormData(prev => ({ ...prev, logo: url }));
+        } catch (err) {
+           console.error('Logo upload failed before save:', err);
+           // Fallback: Continue with base64 but warn
+           // Ideally we shouldn't block, but base64 bloat is bad.
+           // Since we can't block easily without UI feedback, we proceed.
+        }
+      }
+    }
+
+    onUpdateBusiness(dataToSubmit);
     setShowSaved(true);
     setTimeout(() => setShowSaved(false), 3000);
   };
@@ -48,6 +69,8 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
         return;
       }
 
+      setLogoFile(file); // Store file for later upload in handleSubmit if needed
+
       // Preview immediately
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -55,11 +78,12 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
       };
       reader.readAsDataURL(file);
 
-      // Try uploading
+      // Try uploading immediately (optimistic)
       try {
         if (navigator.onLine) {
           const url = await uploadFile(file);
           setFormData(prev => ({ ...prev, logo: url }));
+          setLogoFile(null); // Clear pending file since uploaded
         }
       } catch (err) {
         console.error('Logo upload failed, using local base64 fallback', err);

@@ -58,6 +58,7 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabId>('sales');
   const [isCartOpen, setIsCartOpen] = useState(window.innerWidth > 1024);
   const [view, setView] = useState<'main' | 'forgot-password'>('main');
+  const [recoveryEmail, setRecoveryEmail] = useState<string | undefined>(undefined);
 
   const { status: wakeStatus } = useServerWakeup();
   const wakeToastShownRef = useRef(false);
@@ -520,8 +521,18 @@ const App: React.FC = () => {
     }
   }, [allowedTabs, activeTab]);
 
+  if (view === 'forgot-password') {
+    return (
+      <ForgotPasswordScreen
+        onBack={() => setView('main')}
+        businessName={state.business.name}
+        email={recoveryEmail || state.business.email}
+      />
+    );
+  }
+
   if (!state.isRegistered) return <RegistrationScreen onRegister={handleRegister} onManualLogin={handleManualLogin} onForgotPassword={() => setView('forgot-password')} />;
-  if (!state.isLoggedIn) return <AuthScreen onLogin={handleLogin} onForgotPassword={() => setView('forgot-password')} onResetBusiness={() => setState(prev => ({...prev, isRegistered: false}))} business={state.business} />;
+  if (!state.isLoggedIn) return <AuthScreen onLogin={handleLogin} onForgotPassword={(email) => { setRecoveryEmail(email); setView('forgot-password'); }} onResetBusiness={() => setState(prev => ({...prev, isRegistered: false}))} business={state.business} email={state.business.email} />;
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row h-screen overflow-hidden">
