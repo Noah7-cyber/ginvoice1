@@ -26,9 +26,8 @@ const TransactionSchema = new mongoose.Schema({
   balance: { type: Number, default: 0 },
   signature: { type: String },
   isSignatureLocked: { type: Boolean, default: false },
-  staffId: { type: String },
-  createdAt: { type: Date, default: Date.now }
-});
+  staffId: { type: String }
+}, { timestamps: true });
 
 TransactionSchema.index({ businessId: 1, id: 1 }, { unique: true });
 
