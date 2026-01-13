@@ -41,6 +41,79 @@ router.get('/check', auth, async (req, res) => {
 router.get('/', auth, async (req, res) => {
   try {
     const businessId = req.businessId;
+
+    // --- LEGACY CLIENT FALLBACK (No Version sent) ---
+    if (!req.query.version) {
+      // 1. Fetch raw data
+      const businessData = await Business.findById(businessId).lean();
+      const rawProducts = await Product.find({ businessId }).lean();
+      const rawTransactions = await Transaction.find({ businessId }).lean();
+      const rawExpenditures = await Expenditure.find({ business: businessId }).lean();
+      const rawCategories = await Category.find({ businessId }).sort({ createdAt: 1 }).lean();
+
+      // 2. Map backend data to frontend-friendly formats (Numbers instead of Decimals)
+      const categories = rawCategories.map(c => ({
+        id: c._id.toString(),
+        name: c.name,
+        businessId: c.businessId,
+        defaultSellingPrice: c.defaultSellingPrice ? parseDecimal(c.defaultSellingPrice) : 0,
+        defaultCostPrice: c.defaultCostPrice ? parseDecimal(c.defaultCostPrice) : 0
+      }));
+
+      const products = rawProducts.map(p => ({
+        ...p,
+        currentStock: p.stock,
+        sellingPrice: parseDecimal(p.sellingPrice),
+        costPrice: parseDecimal(p.costPrice),
+        units: (p.units || []).map(u => ({
+          ...u,
+          sellingPrice: parseDecimal(u.sellingPrice),
+          costPrice: parseDecimal(u.costPrice)
+        }))
+      }));
+
+      const transactions = rawTransactions.map(t => ({
+        ...t,
+        items: (t.items || []).map(i => ({
+          ...i,
+          unitPrice: parseDecimal(i.unitPrice),
+          discount: parseDecimal(i.discount),
+          total: parseDecimal(i.total)
+        })),
+        subtotal: parseDecimal(t.subtotal),
+        globalDiscount: parseDecimal(t.globalDiscount),
+        totalAmount: parseDecimal(t.totalAmount),
+        amountPaid: parseDecimal(t.amountPaid),
+        balance: parseDecimal(t.balance)
+      }));
+
+      const expenditures = rawExpenditures.map(e => ({
+        ...e,
+        amount: parseDecimal(e.amount)
+      }));
+
+      return res.json({
+        categories,
+        products,
+        transactions,
+        expenditures,
+        business: businessData ? {
+          id: businessData._id,
+          name: businessData.name,
+          email: businessData.email,
+          phone: businessData.phone,
+          address: businessData.address,
+          staffPermissions: businessData.staffPermissions,
+          settings: businessData.settings,
+          trialEndsAt: businessData.trialEndsAt,
+          isSubscribed: businessData.isSubscribed,
+          logo: businessData.logo,
+          theme: businessData.theme
+        } : undefined
+      });
+    }
+
+    // --- NEW HYBRID DELTA LOGIC (Version sent) ---
     const clientVersion = parseInt(req.query.version || '0');
     const lastSyncDate = req.query.lastSync ? new Date(req.query.lastSync) : new Date(0);
 
