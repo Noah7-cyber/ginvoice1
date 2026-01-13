@@ -6,10 +6,11 @@ import { requestPasswordReset, resetPassword } from '../services/api';
 interface ForgotPasswordScreenProps {
   onBack: () => void;
   businessName: string;
+  email?: string;
 }
 
-const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ onBack, businessName }) => {
-  const [email, setEmail] = useState('');
+const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ onBack, businessName, email: initialEmail }) => {
+  const [email, setEmail] = useState(initialEmail || '');
   const [code, setCode] = useState('');
   const [newPin, setNewPin] = useState('');
   const [step, setStep] = useState<'email' | 'verify'>('email');

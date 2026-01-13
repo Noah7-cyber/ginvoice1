@@ -5,12 +5,13 @@ import { UserRole, BusinessProfile } from '../types';
 
 interface AuthScreenProps {
   onLogin: (pin: string, role: UserRole) => Promise<boolean>;
-  onForgotPassword: () => void;
+  onForgotPassword: (email?: string) => void;
   onResetBusiness: () => void;
   business: BusinessProfile;
+  email?: string;
 }
 
-const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onForgotPassword, onResetBusiness, business }) => {
+const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onForgotPassword, onResetBusiness, business, email }) => {
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -155,7 +156,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onForgotPassword, onRe
             <div className="text-center">
               <button 
                 type="button"
-                onClick={onForgotPassword}
+                onClick={() => onForgotPassword(email)}
                 className="text-xs font-bold text-gray-400 hover:text-indigo-600"
               >
                 Forgot Password?
