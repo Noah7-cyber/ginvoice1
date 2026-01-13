@@ -38,6 +38,7 @@ router.post('/', auth, async (req, res) => {
       defaultCostPrice: toDecimal(defaultCostPrice)
     });
 
+    await Business.findByIdAndUpdate(req.businessId, { $inc: { dataVersion: 1 } });
     res.status(201).json(category);
   } catch (err) {
     res.status(500).json({ message: 'Failed to create category' });
@@ -63,6 +64,7 @@ router.put('/:id', auth, async (req, res) => {
     );
 
     if (!category) return res.status(404).json({ message: 'Category not found' });
+    await Business.findByIdAndUpdate(req.businessId, { $inc: { dataVersion: 1 } });
     res.json(category);
   } catch (err) {
     res.status(500).json({ message: 'Failed to update category' });
@@ -75,6 +77,7 @@ router.delete('/:id', auth, async (req, res) => {
     const { id } = req.params;
     // Use _id for MongoDB ID
     await Category.deleteOne({ _id: id, businessId: req.businessId });
+    await Business.findByIdAndUpdate(req.businessId, { $inc: { dataVersion: 1 } });
     res.json({ message: 'Category deleted' });
   } catch (err) {
     res.status(500).json({ message: 'Failed to delete category' });

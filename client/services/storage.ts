@@ -13,6 +13,24 @@ export const saveState = (state: InventoryState) => {
   }
 };
 
+export const getDataVersion = (): number => {
+  const v = localStorage.getItem('ginvoice_data_version');
+  return v ? parseInt(v) : 0;
+};
+
+export const saveDataVersion = (version: number) => {
+  localStorage.setItem('ginvoice_data_version', version.toString());
+};
+
+export const getLastSync = (): Date | null => {
+  const t = localStorage.getItem('ginvoice_last_sync_time');
+  return t ? new Date(t) : null;
+};
+
+export const saveLastSync = (time: Date) => {
+  localStorage.setItem('ginvoice_last_sync_time', time.toISOString());
+};
+
 export const loadState = (): InventoryState | null => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);

@@ -17,9 +17,8 @@ const ProductSchema = new mongoose.Schema({
   stock: { type: Number, default: 0 },
   sellingPrice: { type: mongoose.Schema.Types.Decimal128, required: true, default: 0 },
   costPrice: { type: mongoose.Schema.Types.Decimal128, default: 0 },
-  units: { type: [UnitDefinitionSchema], default: [] },
-  updatedAt: { type: Date, default: Date.now }
-});
+  units: { type: [UnitDefinitionSchema], default: [] }
+}, { timestamps: true });
 
 ProductSchema.index({ businessId: 1, id: 1 }, { unique: true });
 // Case-Insensitive Unique Index on Name + Category per Business

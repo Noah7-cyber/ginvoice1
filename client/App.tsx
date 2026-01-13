@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { InventoryState, UserRole, Product, ProductUnit, Transaction, BusinessProfile, TabId, SaleItem, PaymentMethod, Expenditure } from './types';
 import { INITIAL_PRODUCTS } from './constants';
-import { saveState, loadState, syncWithBackend } from './services/storage';
+import { saveState, loadState, syncWithBackend, getDataVersion, saveDataVersion, getLastSync, saveLastSync } from './services/storage';
 import { login, registerBusiness, saveAuthToken, clearAuthToken, deleteTransaction, getEntitlements, initializePayment, fetchRemoteState } from './services/api';
 import { useToast } from './components/ToastProvider';
 import SalesScreen from './components/SalesScreen';
@@ -108,32 +108,68 @@ const App: React.FC = () => {
 
   const triggerSync = useCallback(async () => {
     if (!navigator.onLine) return;
-
     const currentState = stateRef.current;
-    if (!currentState.isLoggedIn) return;
+    if (!currentState.isLoggedIn || isSyncing) return;
 
     setIsSyncing(true);
-    const result = await syncWithBackend(currentState);
-    if (result) {
-      if (typeof result === 'string') {
-        // Legacy handling if backend only returned string (timestamp)
-        setState(prev => ({ ...prev, lastSyncedAt: result }));
-      } else {
-        // New full sync response
-        setState(prev => ({
-          ...prev,
-          lastSyncedAt: result.lastSyncedAt,
-          products: result.products || prev.products,
-          transactions: result.transactions || prev.transactions,
-          expenditures: result.expenditures || prev.expenditures,
-          categories: Array.isArray(result.categories) ? result.categories : (prev.categories || []),
-          // [FIX] Force update permissions from the server response
-          business: result.business ? { ...prev.business, ...result.business } : prev.business
-        }));
-      }
+
+    try {
+        // 1. Push local changes first
+        await syncWithBackend(currentState);
+
+        // 2. Hybrid Delta Fetch
+        const currentVersion = getDataVersion();
+        const lastSync = getLastSync();
+
+        const response = await fetchRemoteState(currentVersion, lastSync);
+
+        if (response.status === 204) {
+            setIsSyncing(false);
+            return;
+        }
+
+        if (response.status === 200 && response.data) {
+            const { version, serverTime, changes, ids, business } = response.data;
+
+            setState(prev => {
+                const mergeData = (localList: any[], changedItems: any[], validIds: string[]) => {
+                    const idSet = new Set(validIds);
+                    const changesMap = new Map(changedItems.map(i => [i.id, i]));
+
+                    // Upsert changes
+                    const merged = localList.map(item => changesMap.has(item.id) ? changesMap.get(item.id) : item);
+
+                    // Add new items from changes that weren't in local list
+                    changedItems.forEach(item => {
+                        if (!merged.find(m => m.id === item.id)) {
+                            merged.push(item);
+                        }
+                    });
+
+                    // Hard Delete: Keep only items in validIds list
+                    return merged.filter(item => idSet.has(item.id));
+                };
+
+                return {
+                    ...prev,
+                    products: mergeData(prev.products, changes.products, ids.products),
+                    transactions: mergeData(prev.transactions, changes.transactions, ids.transactions),
+                    categories: mergeData(prev.categories || [], changes.categories, ids.categories),
+                    expenditures: mergeData(prev.expenditures || [], changes.expenditures, ids.expenditures),
+                    business: business ? { ...prev.business, ...business } : prev.business,
+                    lastSyncedAt: serverTime
+                };
+            });
+
+            saveDataVersion(version);
+            saveLastSync(new Date(serverTime));
+        }
+    } catch (err) {
+        console.error("Sync failed", err);
+    } finally {
+        setIsSyncing(false);
     }
-    setIsSyncing(false);
-  }, []);
+  }, [isSyncing]);
 
   const handleLogout = useCallback(() => {
     clearAuthToken();
@@ -255,14 +291,16 @@ const App: React.FC = () => {
 
   useEffect(() => { saveState(state); }, [state]);
 
-  // Auto-sync every 60 seconds
+  // Auto-sync every 5 seconds
   useEffect(() => {
-    const intervalId = setInterval(() => {
-      triggerSync();
-    }, 60 * 1000); // 60 seconds
+    if (state.isLoggedIn) {
+      const intervalId = setInterval(() => {
+        triggerSync();
+      }, 5000); // 5 seconds
 
-    return () => clearInterval(intervalId);
-  }, [triggerSync]);
+      return () => clearInterval(intervalId);
+    }
+  }, [state.isLoggedIn, triggerSync]);
 
   const handleAddExpenditure = (newExpenditure: Expenditure) => {
     setState(prev => {

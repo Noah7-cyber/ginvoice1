@@ -11,9 +11,8 @@ const DiscountCodeSchema = new mongoose.Schema({
     index: { expires: '0s' } // Auto-delete when this date is passed
   },
   scope: { type: String, enum: ['global', 'product'], required: true },
-  productId: { type: String }, // Optional, linking to product 'id' (String) not ObjectId if using string IDs
-  createdAt: { type: Date, default: Date.now }
-});
+  productId: { type: String } // Optional, linking to product 'id' (String) not ObjectId if using string IDs
+}, { timestamps: true });
 
 // Ensure codes are unique per business
 DiscountCodeSchema.index({ businessId: 1, code: 1 }, { unique: true });

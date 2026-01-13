@@ -97,16 +97,43 @@ export const syncState = async (state: InventoryState) => {
   });
 };
 
-export const fetchRemoteState = async () => {
+export const fetchRemoteState = async (version = 0, lastSync: Date | null = null) => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');
 
-  return request('/api/sync', {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${token}`
-    }
+  const query = new URLSearchParams({
+    version: version.toString(),
+    lastSync: lastSync ? lastSync.toISOString() : ''
   });
+
+  // We need to access the full response to check status code (204 vs 200)
+  // Our request helper only returns JSON body and throws on error status.
+  // Ideally, request helper should be updated or we use fetch directly here.
+  // Let's use fetch directly to handle 204 gracefully.
+  const url = buildUrl(`/api/sync?${query.toString()}`);
+  try {
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      }
+    });
+
+    if (res.status === 204) {
+      return { status: 204 };
+    }
+
+    if (!res.ok) {
+        throw new Error('Sync failed');
+    }
+
+    const data = await res.json();
+    return { status: 200, data };
+  } catch (err) {
+    console.error('Fetch remote state error', err);
+    throw err;
+  }
 };
 
 export const updateSettings = async (settings: Partial<BusinessProfile['settings']>, staffPermissions?: Partial<BusinessProfile['staffPermissions']>) => {

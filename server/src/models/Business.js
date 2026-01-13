@@ -19,6 +19,7 @@ const BusinessSchema = new mongoose.Schema({
   recoveryCodeExpires: { type: Date },
   isCategoriesSeeded: { type: Boolean, default: false },
   credentialsVersion: { type: Number, default: 1 },
+  dataVersion: { type: Number, default: 0 },
 
   // New Centralized Settings
   settings: {

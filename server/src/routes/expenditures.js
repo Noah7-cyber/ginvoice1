@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
 const Expenditure = require('../models/Expenditure');
+const Business = require('../models/Business');
 
 router.get('/', auth, async (req, res) => {
   try {
@@ -40,6 +41,9 @@ router.post('/', auth, async (req, res) => {
     const expenditure = saved.toObject();
     expenditure.amount = parseFloat((expenditure.amount || 0).toString());
 
+    const businessId = req.user.businessId || req.user.id;
+    await Business.findByIdAndUpdate(businessId, { $inc: { dataVersion: 1 } });
+
     res.json(expenditure);
   } catch (err) {
     console.error(err.message);
@@ -65,6 +69,9 @@ router.put('/:id', auth, async (req, res) => {
 
     const result = expenditure.toObject();
     result.amount = parseFloat((result.amount || 0).toString());
+
+    await Business.findByIdAndUpdate(businessId, { $inc: { dataVersion: 1 } });
+
     res.json(result);
   } catch (err) {
     console.error(err.message);
@@ -79,6 +86,7 @@ router.delete('/:id', auth, async (req, res) => {
     if (!expenditure) return res.status(404).json({ msg: 'Expenditure not found' });
 
     await expenditure.deleteOne();
+    await Business.findByIdAndUpdate(businessId, { $inc: { dataVersion: 1 } });
     res.json({ msg: 'Expenditure removed' });
   } catch (err) {
     console.error(err.message);
