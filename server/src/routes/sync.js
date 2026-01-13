@@ -47,125 +47,28 @@ router.get('/', auth, async (req, res) => {
   try {
     const businessId = req.businessId;
 
-    // --- LEGACY CLIENT FALLBACK (No Version sent) ---
-    if (!req.query.version) {
-      // 1. Fetch raw data
-      const businessData = await Business.findById(businessId).lean();
-      const rawProducts = await Product.find({ businessId }).lean();
-      const rawTransactions = await Transaction.find({ businessId }).lean();
-      const rawExpenditures = await Expenditure.find({ business: businessId }).lean();
-      const rawCategories = await Category.find({ businessId }).sort({ usageCount: -1, name: 1 }).lean();
-
-      // 2. Map backend data to frontend-friendly formats (Numbers instead of Decimals)
-      const categories = rawCategories.map(c => ({
-        id: c._id.toString(),
-        name: c.name,
-        businessId: c.businessId,
-        defaultSellingPrice: c.defaultSellingPrice ? parseDecimal(c.defaultSellingPrice) : 0,
-        defaultCostPrice: c.defaultCostPrice ? parseDecimal(c.defaultCostPrice) : 0
-      }));
-
-      const products = rawProducts.map(p => ({
-        ...p,
-        currentStock: p.stock,
-        sellingPrice: parseDecimal(p.sellingPrice),
-        costPrice: parseDecimal(p.costPrice),
-        units: (p.units || []).map(u => ({
-          ...u,
-          sellingPrice: parseDecimal(u.sellingPrice),
-          costPrice: parseDecimal(u.costPrice)
-        }))
-      }));
-
-      const transactions = rawTransactions.map(t => ({
-        ...t,
-        items: (t.items || []).map(i => ({
-          ...i,
-          unitPrice: parseDecimal(i.unitPrice),
-          discount: parseDecimal(i.discount),
-          total: parseDecimal(i.total)
-        })),
-        subtotal: parseDecimal(t.subtotal),
-        globalDiscount: parseDecimal(t.globalDiscount),
-        totalAmount: parseDecimal(t.totalAmount),
-        amountPaid: parseDecimal(t.amountPaid),
-        balance: parseDecimal(t.balance)
-      }));
-
-      const expenditures = rawExpenditures.map(e => ({
-        ...e,
-        amount: parseDecimal(e.amount)
-      }));
-
-      return res.json({
-        categories,
-        products,
-        transactions,
-        expenditures,
-        business: businessData ? {
-          id: businessData._id,
-          name: businessData.name,
-          email: businessData.email,
-          phone: businessData.phone,
-          address: businessData.address,
-          staffPermissions: businessData.staffPermissions,
-          settings: businessData.settings,
-          trialEndsAt: businessData.trialEndsAt,
-          isSubscribed: businessData.isSubscribed,
-          logo: businessData.logo,
-          theme: businessData.theme
-        } : undefined
-      });
-    }
-
-    // --- NEW HYBRID DELTA LOGIC (Version sent) ---
-    const clientVersion = parseInt(req.query.version || '0');
-    const lastSyncDate = req.query.lastSync ? new Date(req.query.lastSync) : new Date(0);
-
-    // 1. Fetch Business Version
-    const businessData = await Business.findById(businessId).lean();
-    if (!businessData) return res.status(404).json({ message: 'Business not found' });
-
-    const serverVersion = businessData.dataVersion || 0;
-
-    // Traffic Light: If versions match, no content needed
-    if (clientVersion === serverVersion) {
-      return res.status(204).send();
-    }
-
-    // 2. Fetch Deltas (Smart Query)
-    // If lastSync is 0 (Epoch), fetch EVERYTHING (handles old data without timestamps)
-    const isFullSync = lastSyncDate.getTime() === 0;
-
-    // Construct specific queries for each collection
-    const productQuery = isFullSync ? { businessId } : { businessId, updatedAt: { $gt: lastSyncDate } };
-    const transactionQuery = isFullSync ? { businessId } : { businessId, updatedAt: { $gt: lastSyncDate } };
-    const categoryQuery = isFullSync ? { businessId } : { businessId, updatedAt: { $gt: lastSyncDate } };
-    // Expenditure uses 'business' field, not 'businessId'
-    const expenditureQuery = isFullSync
-      ? { business: businessId }
-      : { business: businessId, updatedAt: { $gt: lastSyncDate } };
-
-    // Apply this query to all collections in parallel
-    const [rawProducts, rawTransactions, rawCategories, rawExpenditures] = await Promise.all([
-      Product.find(productQuery).lean(),
-      // Sort transactions by most recent first. Limit only on full sync if needed (e.g. 500)
-      Transaction.find(transactionQuery).sort({ createdAt: -1 }).limit(isFullSync ? 500 : 0).lean(),
-      Category.find(categoryQuery).sort({ usageCount: -1, name: 1 }).lean(),
-      Expenditure.find(expenditureQuery).lean()
+    // 1. Always Fetch Raw Data (No Version Checks)
+    const [businessData, rawProducts, rawTransactions, rawExpenditures, rawCategories] = await Promise.all([
+      Business.findById(businessId).lean(),
+      Product.find({ businessId }).lean(),
+      // Sort transactions by newest first
+      Transaction.find({ businessId }).sort({ createdAt: -1 }).limit(1000).lean(),
+      Expenditure.find({ business: businessId }).lean(),
+      Category.find({ businessId }).sort({ usageCount: -1, name: 1 }).lean()
     ]);
 
-    // 3. Fetch IDs for Hard Deletes
-    const productIds = (await Product.find({ businessId }).select('id').lean()).map(p => p.id);
-    const transactionIds = (await Transaction.find({ businessId }).select('id').lean()).map(t => t.id);
-    // Category uses _id mapped to id
-    const categoryIds = (await Category.find({ businessId }).select('_id').lean()).map(c => c._id.toString());
-    const expenditureIds = (await Expenditure.find({ business: businessId }).select('id').lean()).map(e => e.id);
+    // 2. Map Data (Decimals -> Numbers)
+    const categories = rawCategories.map(c => ({
+      id: c._id.toString(),
+      name: c.name,
+      businessId: c.businessId,
+      defaultSellingPrice: parseDecimal(c.defaultSellingPrice),
+      defaultCostPrice: parseDecimal(c.defaultCostPrice)
+    }));
 
-    // 4. Map to Frontend format (Decimals -> Numbers)
     const products = rawProducts.map(p => ({
       ...p,
-      currentStock: p.stock,
+      currentStock: p.stock, // Ensure stock is mapped correctly
       sellingPrice: parseDecimal(p.sellingPrice),
       costPrice: parseDecimal(p.costPrice),
       units: (p.units || []).map(u => ({
@@ -190,35 +93,18 @@ router.get('/', auth, async (req, res) => {
       balance: parseDecimal(t.balance)
     }));
 
-    const categories = rawCategories.map(c => ({
-      id: c._id.toString(),
-      name: c.name,
-      businessId: c.businessId,
-      defaultSellingPrice: c.defaultSellingPrice ? parseDecimal(c.defaultSellingPrice) : 0,
-      defaultCostPrice: c.defaultCostPrice ? parseDecimal(c.defaultCostPrice) : 0
-    }));
-
     const expenditures = rawExpenditures.map(e => ({
       ...e,
       amount: parseDecimal(e.amount)
     }));
 
+    // 3. Send Response (Clean & Simple)
     return res.json({
-      version: serverVersion,
-      serverTime: new Date(),
-      changes: {
-        products,
-        transactions,
-        categories,
-        expenditures
-      },
-      ids: {
-        products: productIds,
-        transactions: transactionIds,
-        categories: categoryIds,
-        expenditures: expenditureIds
-      },
-      business: {
+      categories,
+      products,
+      transactions,
+      expenditures,
+      business: businessData ? {
         id: businessData._id,
         name: businessData.name,
         email: businessData.email,
@@ -230,8 +116,9 @@ router.get('/', auth, async (req, res) => {
         isSubscribed: businessData.isSubscribed,
         logo: businessData.logo,
         theme: businessData.theme
-      }
+      } : undefined
     });
+
   } catch (err) {
     console.error('Fetch State Error:', err);
     return res.status(500).json({ message: 'Fetch state failed' });
@@ -261,8 +148,7 @@ router.post('/', auth, async (req, res) => {
          $set: {
            ...safeUpdates,
            lastActiveAt: new Date()
-         },
-         $inc: { dataVersion: 1 }
+         }
        });
     }
 
@@ -283,8 +169,6 @@ router.post('/', auth, async (req, res) => {
         }
       }));
       await Category.bulkWrite(catOps, { ordered: false });
-      // Trigger version increment if categories changed
-      await Business.findByIdAndUpdate(businessId, { $inc: { dataVersion: 1 } });
     }
 
     // --- PHASE 1: Strict Transaction Processing (Deduct Stock First) ---
@@ -396,62 +280,36 @@ router.post('/', auth, async (req, res) => {
       }
     }
 
-    // --- PHASE 2: Product Synchronization (Smart Updates) ---
-    // Apply product updates. Only overwrite 'stock' if it's a manual update.
+    // --- PHASE 2: Product Synchronization (Simple Updates) ---
+    // Direct save (Frontend 'currentStock' -> Backend 'stock').
     if (Array.isArray(products) && products.length > 0) {
-      const productOps = products.map((p) => {
-        // Base update fields (Always update details like name, price, etc.)
-        const setFields = {
-          businessId,
-          id: p.id,
-          name: p.name,
-          category: p.category,
-          baseUnit: p.baseUnit || 'Piece',
-          sellingPrice: toDecimal(p.sellingPrice),
-          costPrice: toDecimal(p.costPrice),
-          units: Array.isArray(p.units) ? p.units.map(u => ({
-            name: u.name,
-            multiplier: u.multiplier,
-            sellingPrice: toDecimal(u.sellingPrice),
-            costPrice: toDecimal(u.costPrice)
-          })) : [],
-          updatedAt: new Date()
-        };
-
-        const setOnInsertFields = {};
-
-        // CONDITIONAL STOCK UPDATE (Manual Override Fix):
-        // If 'isManualUpdate' is true, we force the 'stock' field to update.
-        // Otherwise, we only set 'stock' on insert (new product) to avoid overwriting
-        // the server-side calculated stock (which may have been decremented by transactions).
-        if (p.isManualUpdate) {
-          // Manual override: Force update stock
-          setFields.stock = p.currentStock !== undefined ? p.currentStock : p.stock;
-        } else {
-          // Not manual: Only set stock if we are INSERTING a new document
-          setOnInsertFields.stock = p.currentStock !== undefined ? p.currentStock : 0;
+      const productOps = products.map((p) => ({
+        updateOne: {
+          filter: { businessId, id: p.id },
+          update: {
+            $set: {
+              businessId,
+              id: p.id,
+              name: p.name,
+              category: p.category,
+              stock: p.currentStock !== undefined ? p.currentStock : p.stock,
+              sellingPrice: toDecimal(p.sellingPrice),
+              costPrice: toDecimal(p.costPrice),
+              baseUnit: p.baseUnit || 'Piece',
+              units: Array.isArray(p.units) ? p.units.map(u => ({
+                name: u.name,
+                multiplier: u.multiplier,
+                sellingPrice: toDecimal(u.sellingPrice),
+                costPrice: toDecimal(u.costPrice)
+              })) : [],
+              updatedAt: new Date()
+            }
+          },
+          upsert: true
         }
-
-        const updateOp = {
-          $set: setFields
-        };
-
-        if (Object.keys(setOnInsertFields).length > 0) {
-          updateOp.$setOnInsert = setOnInsertFields;
-        }
-
-        return {
-          updateOne: {
-            filter: { businessId, id: p.id },
-            update: updateOp,
-            upsert: true
-          }
-        };
-      });
+      }));
 
       await Product.bulkWrite(productOps, { ordered: false });
-      // Trigger version increment if products changed
-      await Business.findByIdAndUpdate(businessId, { $inc: { dataVersion: 1 } });
     }
 
     // --- PHASE 3: Save Transactions (Persist History) ---
@@ -521,8 +379,6 @@ router.post('/', auth, async (req, res) => {
           { $set: { isUsed: true } }
         );
       }
-      // Trigger version increment if transactions changed
-      await Business.findByIdAndUpdate(businessId, { $inc: { dataVersion: 1 } });
     }
 
     // 4. Save Expenditures
@@ -550,8 +406,6 @@ router.post('/', auth, async (req, res) => {
         }
       }));
       await Expenditure.bulkWrite(expOps, { ordered: false });
-      // Trigger version increment if expenditures changed
-      await Business.findByIdAndUpdate(businessId, { $inc: { dataVersion: 1 } });
     }
 
     // 5. Return Data (Re-using the GET logic for consistency)
@@ -633,7 +487,6 @@ router.delete('/products/:id', auth, async (req, res) => {
     const businessId = req.businessId;
     const { id } = req.params;
     await Product.deleteOne({ businessId, id });
-    await Business.findByIdAndUpdate(businessId, { $inc: { dataVersion: 1 } });
     return res.json({ ok: true });
   } catch (err) {
     return res.status(500).json({ message: 'Delete product failed' });
@@ -664,7 +517,6 @@ router.delete('/transactions/:id', auth, async (req, res) => {
     }
 
     await Transaction.deleteOne({ businessId, id });
-    await Business.findByIdAndUpdate(businessId, { $inc: { dataVersion: 1 } });
     return res.json({ ok: true });
   } catch (err) {
     return res.status(500).json({ message: 'Delete transaction failed' });
@@ -676,7 +528,6 @@ router.delete('/expenditures/:id', auth, async (req, res) => {
     const businessId = req.businessId;
     const { id } = req.params;
     await Expenditure.deleteOne({ business: businessId, id });
-    await Business.findByIdAndUpdate(businessId, { $inc: { dataVersion: 1 } });
     return res.json({ ok: true });
   } catch (err) {
     return res.status(500).json({ message: 'Delete expenditure failed' });

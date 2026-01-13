@@ -575,10 +575,15 @@ const App: React.FC = () => {
               transactions={state.transactions}
               business={state.business}
               onDeleteTransaction={handleDeleteTransaction}
-              onUpdateTransaction={t => setState(prev => ({
-                ...prev,
-                transactions: prev.transactions.map(tx => tx.id === t.id ? { ...t, updatedAt: new Date().toISOString() } : tx)
-              }))}
+              onUpdateTransaction={t => {
+                setState(prev => ({
+                  ...prev,
+                  transactions: prev.transactions.map(tx => tx.id === t.id ? { ...t, updatedAt: new Date().toISOString() } : tx)
+                }));
+                if (navigator.onLine) {
+                  pushToBackend({ transactions: [t] }).catch(err => console.error("Failed to sync edit", err));
+                }
+              }}
               isSubscriptionExpired={subscriptionLocked}
               onRenewSubscription={openPaymentLink}
               isReadOnly={!canManageHistory}
