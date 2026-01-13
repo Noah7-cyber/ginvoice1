@@ -17,24 +17,6 @@ const DEFAULT_CATEGORIES = ['Food', 'Building', 'Electronics', 'Clothing', 'Hous
 router.get('/', auth, async (req, res) => {
   try {
     const businessId = req.businessId;
-    // Check if seeded
-    const business = await Business.findById(businessId);
-
-    if (business && !business.isCategoriesSeeded) {
-      // Seed defaults
-      const seedOps = DEFAULT_CATEGORIES.map(name => ({
-        businessId,
-        name,
-        defaultSellingPrice: toDecimal(0),
-        defaultCostPrice: toDecimal(0)
-      }));
-
-      await Category.insertMany(seedOps);
-
-      business.isCategoriesSeeded = true;
-      await business.save();
-    }
-
     const categories = await Category.find({ businessId }).sort({ createdAt: 1 });
     res.json(categories);
   } catch (err) {

@@ -35,7 +35,10 @@ router.put('/', auth, async (req, res) => {
 
     const business = await Business.findByIdAndUpdate(
       req.businessId,
-      { $set: update },
+      {
+        $set: update,
+        $inc: { credentialsVersion: 1 } // Invalidate existing staff tokens
+      },
       { new: true, runValidators: true }
     ).select('settings staffPermissions name phone address email logo theme');
 
