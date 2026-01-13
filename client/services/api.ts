@@ -120,6 +120,17 @@ export const updateSettings = async (settings: Partial<BusinessProfile['settings
   });
 };
 
+export const updateBusinessProfile = async (profile: Partial<BusinessProfile>) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/settings', {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(profile)
+  });
+};
+
 export const generateDiscountCode = async (payload: { type: 'fixed' | 'percent', value: number, scope: 'global' | 'product', productId?: string, expiryDate?: string }) => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');

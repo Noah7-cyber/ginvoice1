@@ -126,7 +126,7 @@ const App: React.FC = () => {
           products: result.products || prev.products,
           transactions: result.transactions || prev.transactions,
           expenditures: result.expenditures || prev.expenditures,
-          categories: result.categories || prev.categories || [],
+          categories: Array.isArray(result.categories) ? result.categories : (prev.categories || []),
           // [FIX] Force update permissions from the server response
           business: result.business ? { ...prev.business, ...result.business } : prev.business
         }));

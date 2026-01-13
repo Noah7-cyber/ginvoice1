@@ -53,10 +53,12 @@ router.get('/', auth, async (req, res) => {
     // 2. Map backend data to frontend-friendly formats (Numbers instead of Decimals)
 
     const categories = rawCategories.map(c => ({
-      ...c,
-      id: c._id,
-      defaultSellingPrice: parseDecimal(c.defaultSellingPrice),
-      defaultCostPrice: parseDecimal(c.defaultCostPrice)
+      id: c._id.toString(), // Ensure string ID
+      name: c.name,
+      businessId: c.businessId,
+      // Handle potential missing fields with defaults
+      defaultSellingPrice: c.defaultSellingPrice ? parseDecimal(c.defaultSellingPrice) : 0,
+      defaultCostPrice: c.defaultCostPrice ? parseDecimal(c.defaultCostPrice) : 0
     }));
 
     const products = rawProducts.map(p => ({
