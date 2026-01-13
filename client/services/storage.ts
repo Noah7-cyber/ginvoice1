@@ -1,4 +1,3 @@
-// storage.ts - local persistence and syncWithBackend
 import { InventoryState } from '../types';
 import { syncState } from './api';
 
@@ -58,73 +57,13 @@ export const loadState = (): InventoryState | null => {
   }
 };
 
-/*
- syncWithBackend(state)
- - Posts local state to server /api/sync
- - Server returns merged state (or partial update); we return lastSyncedAt value or null.
- - We include expenditures in the sync payload.
-*/
-export const syncWithBackend = async (state: InventoryState) => {
+// Simplified pushToBackend - Send exactly what is passed.
+export const pushToBackend = async (payload: any) => {
   try {
-    const lastSyncedAt = state.lastSyncedAt ? new Date(state.lastSyncedAt) : null;
-
-    // Filter payload: Only send items modified after lastSyncedAt
-    const products = lastSyncedAt
-      ? state.products.filter(p => !p.updatedAt || new Date(p.updatedAt) > lastSyncedAt)
-      : state.products;
-
-    const transactions = lastSyncedAt
-      ? state.transactions.filter(t => {
-          const created = t.createdAt ? new Date(t.createdAt) : new Date(0);
-          const updated = t.updatedAt ? new Date(t.updatedAt) : new Date(0);
-          // Send if it was Created OR Updated after the last sync
-          return created > lastSyncedAt || updated > lastSyncedAt;
-        })
-      : state.transactions;
-
-    const expenditures = lastSyncedAt
-      ? (state.expenditures || []).filter(e => !e.updatedAt || new Date(e.updatedAt) > lastSyncedAt) // Assuming expenditures have updatedAt locally? If not, send all or check logic
-      : (state.expenditures || []);
-
-    // Prepare a minimal sync payload to reduce payload size
-    // Corrected to use full keys as expected by the server
-    const payload = {
-      products,
-      transactions,
-      expenditures,
-      business: state.business,
-      lastSyncedAt: state.lastSyncedAt || null
-    };
-    const res = await syncState(payload as any);
-    // server returns { syncedAt, products, transactions, expenditures, business }
-    // We standardize on 'lastSyncedAt' for the frontend state key, but server sends 'syncedAt'
-    if (res && res.syncedAt) {
-      const nextBusiness = res.business ? {
-        ...state.business,
-        ...res.business, // Only updates Name, Email, Phone, Address
-        // CRITICAL: Preserve local Theme, Logo, and Permissions
-        theme: state.business.theme,
-        logo: state.business.logo,
-        staffPermissions: state.business.staffPermissions
-      } : state.business;
-
-      return {
-        lastSyncedAt: res.syncedAt,
-        products: res.products,
-        transactions: res.transactions,
-        expenditures: res.expenditures,
-        business: nextBusiness
-      };
-    }
-    return null;
+    const res = await syncState(payload);
+    return res;
   } catch (err) {
-    console.warn('syncWithBackend failed', err);
-    return null;
+    console.error('Push failed', err);
+    throw err;
   }
 };
-
-/*
-  We intentionally do not auto-sync on every local change while online.
-  The App now triggers sync only on offline->online transitions.
-  The client can still call syncWithBackend manually (e.g., owner clicks sync).
-*/
