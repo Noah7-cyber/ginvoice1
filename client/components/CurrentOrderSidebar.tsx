@@ -86,18 +86,14 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
 
     let finalSignature = signature;
 
-    // Try uploading signature if present and is base64
-    if (signature && signature.startsWith('data:image')) {
+    // Hybrid Mode: Try upload, fallback to base64
+    if (navigator.onLine && signature.startsWith('data:image')) {
       try {
-        if (navigator.onLine) {
-          const res = await fetch(signature);
-          const blob = await res.blob();
-          const file = new File([blob], 'signature.png', { type: 'image/png' });
-          finalSignature = await uploadFile(file);
-        }
-      } catch (err) {
-        console.warn('Signature upload failed, falling back to base64', err);
-        // finalSignature remains the base64 string as fallback
+        const blob = await (await fetch(signature)).blob();
+        const url = await uploadFile(new File([blob], 'sig.png'));
+        finalSignature = url;
+      } catch (e) {
+        console.warn("Upload failed, saving Base64 as fallback to prevent data loss.");
       }
     }
 
