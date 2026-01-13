@@ -10,8 +10,8 @@ const { sendSystemEmail } = require('../services/mail');
 
 const router = express.Router();
 
-const buildToken = (businessId, role) => {
-  return jwt.sign({ businessId, role }, process.env.JWT_SECRET || '', { expiresIn: '7d' });
+const buildToken = (businessId, role, credentialsVersion) => {
+  return jwt.sign({ businessId, role, credentialsVersion }, process.env.JWT_SECRET || '', { expiresIn: '7d' });
 };
 
 const sanitizeBusiness = (business) => ({
@@ -57,7 +57,7 @@ router.post('/register', async (req, res) => {
       isSubscribed: false
     });
 
-    const token = buildToken(business._id.toString(), 'owner');
+    const token = buildToken(business._id.toString(), 'owner', 1);
 
     if (email) {
       // Registration confirmation email
@@ -108,7 +108,7 @@ router.post('/login', async (req, res) => {
     if (!isOwner && !isStaff) return res.status(401).json({ message: 'Invalid credentials' });
 
     const finalRole = isOwner ? 'owner' : 'staff';
-    const token = buildToken(business._id.toString(), finalRole);
+    const token = buildToken(business._id.toString(), finalRole, business.credentialsVersion || 1);
 
     return res.json({
       token,
