@@ -376,6 +376,10 @@ const App: React.FC = () => {
       const response = await login(credentials.email, credentials.pin);
       saveAuthToken(response.token);
 
+      // Force full sync on login
+      saveDataVersion(0);
+      saveLastSync(new Date(0));
+
       // Attempt to restore data from server
       let restoredData: Partial<InventoryState> = {};
       try {

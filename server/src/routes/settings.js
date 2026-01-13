@@ -42,6 +42,9 @@ router.put('/', auth, async (req, res) => {
       { new: true, runValidators: true }
     ).select('settings staffPermissions name phone address email logo theme');
 
+    // Trigger immediate version bump for sync
+    await Business.findByIdAndUpdate(req.businessId, { $inc: { dataVersion: 1 } });
+
     res.json({
       settings: business.settings,
       staffPermissions: business.staffPermissions,
