@@ -64,6 +64,7 @@ app.use('/api/upload', uploadRouter);
 app.use('/api/categories', categoriesRouter);
 app.use('/api/discounts', discountsRouter);
 app.use('/api/settings', settingsRouter);
+app.use('/api/transactions', require('./routes/transactions'));
 
 const port = process.env.PORT || 4000;
 const mongoUri = process.env.MONGODB_URI || '';

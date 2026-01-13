@@ -22,6 +22,7 @@ import { Transaction, BusinessProfile } from '../types';
 import { CURRENCY } from '../constants';
 import InvoicePreview from './InvoicePreview';
 import { useToast } from './ToastProvider';
+import api from '../services/api';
 
 interface HistoryScreenProps {
   transactions: Transaction[];
@@ -89,16 +90,26 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
     setEditingId(null);
   };
 
-  const handleDelete = (t: Transaction) => {
+  const handleDelete = async (t: Transaction) => {
     if (!navigator.onLine) {
       addToast('Delete requires an internet connection.', 'error');
       return;
     }
-    const restock = confirm('Do you want to add the sold items back to inventory stock?');
-    const confirmDelete = confirm('Are you sure you want to delete this invoice permanently?');
 
-    if (confirmDelete) {
-      onDeleteTransaction(t.id, restock);
+    if (!confirm('Delete this sale? Items will be returned to stock.')) return;
+
+    try {
+      // Call Backend to Restock & Delete
+      // @ts-ignore
+      await api.delete(`/transactions/${t.id}`);
+
+      // Update local state to remove it from UI immediately
+      // Passing true for restockItems to trigger the optimistic stock update in App.tsx
+      onDeleteTransaction(t.id, true);
+      addToast('Transaction deleted and stock restored', 'success');
+    } catch (e) {
+      console.error(e);
+      addToast('Failed to delete. You might be offline.', 'error');
     }
   };
 
