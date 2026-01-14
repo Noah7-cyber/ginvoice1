@@ -1,7 +1,7 @@
 // The "Safe Math" Helper to prevent floating point errors
 
 // Central constant for currency scaling
-const SCALE = 100;
+const SCALE = 1000;
 
 export const safeCalculate = (price: number, quantity: number): number => {
   // 1. Convert to cents (integers) to avoid float errors
