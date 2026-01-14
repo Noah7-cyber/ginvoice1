@@ -312,6 +312,7 @@ const api = {
       headers: { Authorization: `Bearer ${token}` }
     });
   },
+
   post: async (url: string, body: any) => {
     const token = loadAuthToken();
     return request(`/api${url}`, {
@@ -320,6 +321,16 @@ const api = {
       body: JSON.stringify(body)
     });
   },
+
+  put: async (url: string, body: any) => {
+    const token = loadAuthToken();
+    return request(`/api${url}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body)
+    });
+  },
+
   delete: async (url: string) => {
     const token = loadAuthToken();
     return request(`/api${url}`, {
