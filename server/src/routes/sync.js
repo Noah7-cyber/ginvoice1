@@ -53,12 +53,15 @@ router.get('/', auth, async (req, res) => {
       defaultCostPrice: parseDecimal(c.defaultCostPrice)
     }));
 
-    // 1. Products: Fix invisible stock
+    // 1. Products: Strict Safe Mapping
     const products = rawProducts.map(p => ({
       ...p,
-      // THE FIX: Use custom ID if present, otherwise use Database ID
-      id: p.id || p._id.toString(),
-      currentStock: p.stock,
+      // FIX 1: Ignore "undefined" strings and use Database ID as fallback
+      id: (p.id && p.id !== 'undefined' && p.id !== 'null') ? p.id : p._id.toString(),
+
+      // FIX 2: Check both new 'stock' and old 'currentStock' fields
+      currentStock: p.stock !== undefined ? p.stock : (p.currentStock || 0),
+
       sellingPrice: parseDecimal(p.sellingPrice),
       costPrice: parseDecimal(p.costPrice),
       units: (p.units || []).map(u => ({
@@ -68,11 +71,11 @@ router.get('/', auth, async (req, res) => {
       }))
     }));
 
-    // 2. Transactions: Fix invisible history
+    // 2. Transactions: Strict Safe Mapping
     const transactions = rawTransactions.map(t => ({
       ...t,
-      // THE FIX: Safety ID
-      id: t.id || t._id.toString(),
+      // FIX 1: Safety ID
+      id: (t.id && t.id !== 'undefined' && t.id !== 'null') ? t.id : t._id.toString(),
       items: (t.items || []).map(i => ({
         ...i,
         unitPrice: parseDecimal(i.unitPrice),
@@ -86,11 +89,11 @@ router.get('/', auth, async (req, res) => {
       balance: parseDecimal(t.balance)
     }));
 
-    // 3. Expenditures: Fix invisible expenses
+    // 3. Expenditures: Strict Safe Mapping
     const expenditures = rawExpenditures.map(e => ({
       ...e,
-      // THE FIX: Safety ID
-      id: e.id || e._id.toString(),
+      // FIX 1: Safety ID
+      id: (e.id && e.id !== 'undefined' && e.id !== 'null') ? e.id : e._id.toString(),
       amount: parseDecimal(e.amount)
     }));
 
