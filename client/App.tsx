@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { InventoryState, UserRole, Product, ProductUnit, Transaction, BusinessProfile, TabId, SaleItem, PaymentMethod, Expenditure } from './types';
 import { INITIAL_PRODUCTS } from './constants';
+import { safeCalculate } from './utils/math';
 import { saveState, loadState, pushToBackend, getDataVersion, saveDataVersion, getLastSync, saveLastSync } from './services/storage';
 import { login, registerBusiness, saveAuthToken, clearAuthToken, deleteTransaction, getEntitlements, initializePayment, fetchRemoteState, deleteExpenditure } from './services/api';
 import { useToast } from './components/ToastProvider';
