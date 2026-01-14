@@ -26,6 +26,7 @@ const uploadRouter = require('./routes/upload');
 const categoriesRouter = require('./routes/categories');
 const discountsRouter = require('./routes/discounts');
 const settingsRouter = require('./routes/settings');
+const productsRouter = require('./routes/products');
 
 const app = express();
 
@@ -65,6 +66,7 @@ app.use('/api/categories', categoriesRouter);
 app.use('/api/discounts', discountsRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/transactions', require('./routes/transactions'));
+app.use('/api/products', productsRouter);
 
 const port = process.env.PORT || 4000;
 const mongoUri = process.env.MONGODB_URI || '';
