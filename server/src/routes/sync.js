@@ -7,15 +7,14 @@ const Product = require('../models/Product');
 const Transaction = require('../models/Transaction');
 const Business = require('../models/Business');
 const Expenditure = require('../models/Expenditure');
-const DiscountCode = require('../models/DiscountCode');
 const Category = require('../models/Category');
 
-// Middleware (This was missing!)
+// Middleware
 const auth = require('../middleware/auth');
 
 const router = express.Router();
 
-// --- HELPER FUNCTIONS (These were missing!) ---
+// --- HELPER FUNCTIONS ---
 const toDecimal = (value) => {
   if (value === null || value === undefined || value === '') return mongoose.Types.Decimal128.fromString('0');
   if (value instanceof Decimal128) return value;
@@ -30,28 +29,48 @@ const parseDecimal = (val) => {
 
 // --- ROUTES ---
 
-// 1. GET Full State (Online-Only Mode) - WITH DEBUGGING
+// 1. GET Full State (Online-Only Mode) - EMERGENCY VERSION
 router.get('/', auth, async (req, res) => {
   try {
-    const businessId = req.businessId;
+    // FORCE FIX: Trim whitespace to prevent invisible mismatches
+    const businessId = String(req.businessId).trim();
 
-    // DEBUG LOG: Verify the Business ID being used for the query
-    console.log(`[SYNC DEBUG] Sync requested by Business ID: "${businessId}"`);
+    console.log(`[SYNC] 🚀 STARTING FETCH for Business ID: "${businessId}"`);
 
-    // Fetch All Data
+    // Fetch All Data (Simple Query)
     const [businessData, rawProducts, rawTransactions, rawExpenditures, rawCategories] = await Promise.all([
       Business.findById(businessId).lean(),
-      Product.find({ businessId }).lean(), // <--- Critical: Ensures we query by businessId, not _id
+      Product.find({ businessId: businessId }).lean(),
       Transaction.find({ businessId }).sort({ createdAt: -1 }).limit(1000).lean(),
       Expenditure.find({ business: businessId }).lean(),
       Category.find({ businessId }).sort({ usageCount: -1, name: 1 }).lean()
     ]);
 
-    // DEBUG LOG: Verify what the DB actually returned
-    console.log(`[SYNC DEBUG] Raw Products Found in DB: ${rawProducts.length}`);
+    // --- DETECTIVE MODE: DIAGNOSE EMPTY PRODUCTS ---
+    console.log(`[SYNC] Found ${rawProducts.length} products.`);
+
     if (rawProducts.length === 0) {
-        console.log(`[SYNC DEBUG] ⚠️ WARNING: Query "Product.find({ businessId: '${businessId}' })" returned 0 items.`);
+        console.log(`[SYNC] ⚠️ PRODUCTS EMPTY! Running Emergency Check...`);
+
+        // Check if ANY products exist in the DB at all
+        const anyProduct = await Product.findOne({}).lean();
+
+        if (anyProduct) {
+            console.log(`[SYNC] 🕵️  DB Check: Products DO exist.`);
+            console.log(`[SYNC] 🕵️  Comparison:`);
+            console.log(`[SYNC]    👉 Your ID: "${businessId}"`);
+            console.log(`[SYNC]    👉 DB ID:   "${anyProduct.businessId}"`);
+
+            if (String(anyProduct.businessId) === String(businessId)) {
+                console.log(`[SYNC] 🤯 IDs match but query failed? Check Mongoose version.`);
+            } else {
+                console.log(`[SYNC] ✅ Result: ID Mismatch. You are logged into the wrong account.`);
+            }
+        } else {
+            console.log(`[SYNC] 🛑 Result: The 'products' collection is totally empty.`);
+        }
     }
+    // ------------------------------------------------
 
     // Map Decimals to Numbers
     const categories = rawCategories.map(c => ({
@@ -75,7 +94,6 @@ router.get('/', auth, async (req, res) => {
       }))
     }));
 
-    // ... (Keep existing transaction/expenditure mapping code here) ...
     const transactions = rawTransactions.map(t => ({
       ...t,
       id: (t.id && t.id !== 'undefined' && t.id !== 'null') ? t.id : t._id.toString(),
@@ -119,7 +137,7 @@ router.get('/', auth, async (req, res) => {
     });
 
   } catch (err) {
-    console.error('[SYNC DEBUG] ❌ Fetch State Error:', err);
+    console.error('[SYNC DEBUG] ❌ Error:', err);
     return res.status(500).json({ message: 'Fetch state failed' });
   }
 });
@@ -130,13 +148,11 @@ router.post('/', auth, async (req, res) => {
     const { products = [], transactions = [], expenditures = [], business, categories = [] } = req.body || {};
     const businessId = req.businessId;
 
-    // A. Business Updates
     if (business && typeof business === 'object') {
-       const { staffPermissions, trialEndsAt, isSubscribed, ownerPin, staffPin, logo, theme, ...safeUpdates } = business;
+       const { staffPermissions, trialEndsAt, isSubscribed, ...safeUpdates } = business;
        await Business.findByIdAndUpdate(businessId, { $set: { ...safeUpdates, lastActiveAt: new Date() } });
     }
 
-    // B. Categories
     if (categories.length > 0) {
       const catOps = categories.map(c => ({
         updateOne: {
@@ -148,7 +164,6 @@ router.post('/', auth, async (req, res) => {
       await Category.bulkWrite(catOps);
     }
 
-    // C. Products (Direct Stock Update - No Manual Check)
     if (products.length > 0) {
       const productOps = products.map((p) => ({
         updateOne: {
@@ -159,7 +174,7 @@ router.post('/', auth, async (req, res) => {
               id: p.id,
               name: p.name,
               category: p.category,
-              stock: p.currentStock, // Direct Truth from Frontend
+              stock: p.currentStock,
               sellingPrice: toDecimal(p.sellingPrice),
               costPrice: toDecimal(p.costPrice),
               baseUnit: p.baseUnit || 'Piece',
@@ -178,7 +193,6 @@ router.post('/', auth, async (req, res) => {
       await Product.bulkWrite(productOps);
     }
 
-    // D. Transactions (Save & Deduct if needed)
     if (transactions.length > 0) {
       const txOps = transactions.map((t) => ({
         updateOne: {
@@ -189,7 +203,6 @@ router.post('/', auth, async (req, res) => {
               id: t.id,
               transactionDate: t.transactionDate ? new Date(t.transactionDate) : null,
               customerName: t.customerName,
-              customerPhone: t.customerPhone,
               items: (t.items || []).map((item) => ({
                 productId: item.productId,
                 productName: item.productName,
@@ -203,11 +216,8 @@ router.post('/', auth, async (req, res) => {
               subtotal: toDecimal(t.subtotal),
               globalDiscount: toDecimal(t.globalDiscount),
               totalAmount: toDecimal(t.totalAmount),
-              paymentMethod: t.paymentMethod,
               amountPaid: toDecimal(t.amountPaid),
               balance: toDecimal(t.balance),
-              signature: t.signature,
-              staffId: t.staffId,
               createdAt: t.transactionDate ? new Date(t.transactionDate) : new Date(),
               updatedAt: new Date()
             }
@@ -216,17 +226,8 @@ router.post('/', auth, async (req, res) => {
         }
       }));
       await Transaction.bulkWrite(txOps);
-
-      // Increment Category Usage
-      const categoryIds = transactions.flatMap(t => t.items.map(i => i.categoryId)).filter(Boolean);
-      if (categoryIds.length > 0) {
-         // Note: Frontend sends category names usually, but if IDs, this works.
-         // If using names, we'd need to map. Assuming IDs based on schema.
-         await Category.updateMany({ _id: { $in: categoryIds }, businessId }, { $inc: { usageCount: 1 } });
-      }
     }
 
-    // E. Expenditures
     if (expenditures.length > 0) {
       const expOps = expenditures.map((e) => ({
         updateOne: {
@@ -243,57 +244,6 @@ router.post('/', auth, async (req, res) => {
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: 'Sync failed' });
-  }
-});
-
-router.delete('/products/:id', auth, async (req, res) => {
-  try {
-    const businessId = req.businessId;
-    const { id } = req.params;
-    await Product.deleteOne({ businessId, id });
-    return res.json({ ok: true });
-  } catch (err) {
-    return res.status(500).json({ message: 'Delete product failed' });
-  }
-});
-
-router.delete('/transactions/:id', auth, async (req, res) => {
-  try {
-    const businessId = req.businessId;
-    const { id } = req.params;
-    const { restock } = req.query;
-
-    if (restock === 'true') {
-      const transaction = await Transaction.findOne({ businessId, id }).lean();
-      if (transaction && transaction.items) {
-        const restockOps = transaction.items.map(item => {
-           const qty = parseFloat(String(item.quantity || 0));
-           const mult = parseFloat(String(item.multiplier || 1));
-           const qtyToAdd = qty * mult;
-           return Product.updateOne(
-              { businessId, id: item.productId },
-              { $inc: { stock: qtyToAdd } }
-           );
-        });
-        await Promise.all(restockOps);
-      }
-    }
-
-    await Transaction.deleteOne({ businessId, id });
-    return res.json({ ok: true });
-  } catch (err) {
-    return res.status(500).json({ message: 'Delete transaction failed' });
-  }
-});
-
-router.delete('/expenditures/:id', auth, async (req, res) => {
-  try {
-    const businessId = req.businessId;
-    const { id } = req.params;
-    await Expenditure.deleteOne({ business: businessId, id });
-    return res.json({ ok: true });
-  } catch (err) {
-    return res.status(500).json({ message: 'Delete expenditure failed' });
   }
 });
 
