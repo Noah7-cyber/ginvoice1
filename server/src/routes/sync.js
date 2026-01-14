@@ -30,21 +30,33 @@ const parseDecimal = (val) => {
 
 // --- ROUTES ---
 
-// 1. GET Full State (Online-Only Mode)
+// 1. GET Full State (Online-Only Mode) - WITH DEBUGGING
 router.get('/', auth, async (req, res) => {
   try {
     const businessId = req.businessId;
 
-    // Fetch All Data (No "Traffic Lights", No "Versions")
+    // DEBUG LOG 1: Check who is asking
+    console.log(`[SYNC DEBUG] Sync requested by Business ID: "${businessId}"`);
+
+    // Fetch All Data
     const [businessData, rawProducts, rawTransactions, rawExpenditures, rawCategories] = await Promise.all([
       Business.findById(businessId).lean(),
-      Product.find({ businessId }).lean(),
-      Transaction.find({ businessId }).sort({ createdAt: -1 }).limit(1000).lean(), // Limit to 1000 recent
+      Product.find({ businessId }).lean(), // <--- This is the critical query
+      Transaction.find({ businessId }).sort({ createdAt: -1 }).limit(1000).lean(),
       Expenditure.find({ business: businessId }).lean(),
       Category.find({ businessId }).sort({ usageCount: -1, name: 1 }).lean()
     ]);
 
-    // Map Decimals to Numbers for Frontend
+    // DEBUG LOG 2: Check what was found
+    console.log(`[SYNC DEBUG] Raw Products Found in DB: ${rawProducts.length}`);
+    if (rawProducts.length > 0) {
+        console.log(`[SYNC DEBUG] First Product Sample: ID="${rawProducts[0].id}", Name="${rawProducts[0].name}"`);
+    } else {
+        console.log(`[SYNC DEBUG] ⚠️ WARNING: No products found for businessId: "${businessId}"`);
+        // Debug Tip: Check if products in DB actually have this businessId string!
+    }
+
+    // Map Decimals to Numbers
     const categories = rawCategories.map(c => ({
       id: c._id.toString(),
       name: c.name,
@@ -53,15 +65,10 @@ router.get('/', auth, async (req, res) => {
       defaultCostPrice: parseDecimal(c.defaultCostPrice)
     }));
 
-    // 1. Products: Strict Safe Mapping
     const products = rawProducts.map(p => ({
       ...p,
-      // FIX 1: Ignore "undefined" strings and use Database ID as fallback
       id: (p.id && p.id !== 'undefined' && p.id !== 'null') ? p.id : p._id.toString(),
-
-      // FIX 2: Check both new 'stock' and old 'currentStock' fields
       currentStock: p.stock !== undefined ? p.stock : (p.currentStock || 0),
-
       sellingPrice: parseDecimal(p.sellingPrice),
       costPrice: parseDecimal(p.costPrice),
       units: (p.units || []).map(u => ({
@@ -71,10 +78,12 @@ router.get('/', auth, async (req, res) => {
       }))
     }));
 
-    // 2. Transactions: Strict Safe Mapping
+    // DEBUG LOG 3: Confirm final payload count
+    console.log(`[SYNC DEBUG] Sending ${products.length} products to frontend.`);
+
+    // ... (Keep existing transaction/expenditure mapping code here) ...
     const transactions = rawTransactions.map(t => ({
       ...t,
-      // FIX 1: Safety ID
       id: (t.id && t.id !== 'undefined' && t.id !== 'null') ? t.id : t._id.toString(),
       items: (t.items || []).map(i => ({
         ...i,
@@ -89,10 +98,8 @@ router.get('/', auth, async (req, res) => {
       balance: parseDecimal(t.balance)
     }));
 
-    // 3. Expenditures: Strict Safe Mapping
     const expenditures = rawExpenditures.map(e => ({
       ...e,
-      // FIX 1: Safety ID
       id: (e.id && e.id !== 'undefined' && e.id !== 'null') ? e.id : e._id.toString(),
       amount: parseDecimal(e.amount)
     }));
@@ -118,7 +125,7 @@ router.get('/', auth, async (req, res) => {
     });
 
   } catch (err) {
-    console.error('Fetch State Error:', err);
+    console.error('[SYNC DEBUG] ❌ Fetch State Error:', err);
     return res.status(500).json({ message: 'Fetch state failed' });
   }
 });
