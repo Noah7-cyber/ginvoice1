@@ -247,4 +247,15 @@ router.post('/', auth, async (req, res) => {
   }
 });
 
+// TEMPORARY FIX: Transfer all products to the current user
+router.get('/fix-ids', auth, async (req, res) => {
+  try {
+    const myId = String(req.businessId).trim();
+    const result = await Product.updateMany({}, { $set: { businessId: myId } });
+    res.json({ message: `Fixed! transferred ${result.modifiedCount} products to ${myId}` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
