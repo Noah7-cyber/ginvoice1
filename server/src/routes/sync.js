@@ -35,25 +35,22 @@ router.get('/', auth, async (req, res) => {
   try {
     const businessId = req.businessId;
 
-    // DEBUG LOG 1: Check who is asking
+    // DEBUG LOG: Verify the Business ID being used for the query
     console.log(`[SYNC DEBUG] Sync requested by Business ID: "${businessId}"`);
 
     // Fetch All Data
     const [businessData, rawProducts, rawTransactions, rawExpenditures, rawCategories] = await Promise.all([
       Business.findById(businessId).lean(),
-      Product.find({ businessId }).lean(), // <--- This is the critical query
+      Product.find({ businessId }).lean(), // <--- Critical: Ensures we query by businessId, not _id
       Transaction.find({ businessId }).sort({ createdAt: -1 }).limit(1000).lean(),
       Expenditure.find({ business: businessId }).lean(),
       Category.find({ businessId }).sort({ usageCount: -1, name: 1 }).lean()
     ]);
 
-    // DEBUG LOG 2: Check what was found
+    // DEBUG LOG: Verify what the DB actually returned
     console.log(`[SYNC DEBUG] Raw Products Found in DB: ${rawProducts.length}`);
-    if (rawProducts.length > 0) {
-        console.log(`[SYNC DEBUG] First Product Sample: ID="${rawProducts[0].id}", Name="${rawProducts[0].name}"`);
-    } else {
-        console.log(`[SYNC DEBUG] ⚠️ WARNING: No products found for businessId: "${businessId}"`);
-        // Debug Tip: Check if products in DB actually have this businessId string!
+    if (rawProducts.length === 0) {
+        console.log(`[SYNC DEBUG] ⚠️ WARNING: Query "Product.find({ businessId: '${businessId}' })" returned 0 items.`);
     }
 
     // Map Decimals to Numbers
@@ -77,9 +74,6 @@ router.get('/', auth, async (req, res) => {
         costPrice: parseDecimal(u.costPrice)
       }))
     }));
-
-    // DEBUG LOG 3: Confirm final payload count
-    console.log(`[SYNC DEBUG] Sending ${products.length} products to frontend.`);
 
     // ... (Keep existing transaction/expenditure mapping code here) ...
     const transactions = rawTransactions.map(t => ({
