@@ -19,6 +19,7 @@ interface SettingsScreenProps {
 const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusiness, onManualSync, lastSynced, isSyncing, onLogout, onDeleteAccount }) => {
   const [formData, setFormData] = useState<BusinessProfile>(business);
   const [showSaved, setShowSaved] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Security State
   const [currentOwnerPin, setCurrentOwnerPin] = useState('');
@@ -437,8 +438,13 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
         <div className="flex items-center justify-between bg-white p-6 rounded-3xl shadow-lg border-t-4 border-primary mt-8">
           <div>{showSaved && <p className="text-green-600 font-bold animate-bounce">✓ Changes saved!</p>}</div>
           <div className="flex items-center gap-4">
-             <button type="submit" className="bg-primary text-white px-10 py-4 rounded-2xl font-black shadow-xl hover:opacity-90 transition-all flex items-center gap-2 active:scale-95">
-               <Save size={20} /> Update Business
+             <button
+               type="submit"
+               disabled={isLoading}
+               className="bg-primary text-white px-10 py-4 rounded-2xl font-black shadow-xl hover:opacity-90 transition-all flex items-center gap-2 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+             >
+               {isLoading ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
+               {isLoading ? 'Updating...' : 'Update Business'}
              </button>
           </div>
         </div>

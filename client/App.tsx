@@ -31,6 +31,7 @@ import ExpenditureScreen from './components/ExpenditureScreen';
 import RegistrationScreen from './components/RegistrationScreen';
 import CurrentOrderSidebar from './components/CurrentOrderSidebar';
 import ForgotPasswordScreen from './components/ForgotPasswordScreen';
+import VerifyEmailScreen from './components/VerifyEmailScreen';
 import SupportBot from './components/SupportBot';
 import useServerWakeup from './services/useServerWakeup';
 
@@ -70,6 +71,7 @@ const App: React.FC = () => {
   const [isCartOpen, setIsCartOpen] = useState(window.innerWidth > 1024);
   const [view, setView] = useState<'main' | 'forgot-password'>('main');
   const [recoveryEmail, setRecoveryEmail] = useState<string | undefined>(undefined);
+  const [pendingVerificationEmail, setPendingVerificationEmail] = useState<string | null>(null);
 
   const { status: wakeStatus } = useServerWakeup();
   const wakeToastShownRef = useRef(false);
@@ -304,9 +306,15 @@ const App: React.FC = () => {
       }
     } catch (err) { console.error('Registration error', err); }
 
+    // Instead of logging in, we show verification screen
+    setPendingVerificationEmail(details.email);
+
+    // We update business details but keep isLoggedIn false
     setState(prev => ({
       ...prev,
-      isRegistered: true, isLoggedIn: true, role: 'owner',
+      isRegistered: true,
+      isLoggedIn: false, // Ensure they are not logged in yet
+      role: 'owner',
       business: { ...prev.business, ...details, trialEndsAt: details.trialEndsAt || new Date(Date.now() + 40 * 24 * 60 * 60 * 1000).toISOString() }
     }));
   };
@@ -569,6 +577,16 @@ const App: React.FC = () => {
         <p className="text-gray-500 text-sm mt-2">This may take a few seconds.</p>
       </div>
     );
+  }
+
+  if (pendingVerificationEmail) {
+    return <VerifyEmailScreen
+      email={pendingVerificationEmail}
+      onContinue={() => {
+         setPendingVerificationEmail(null);
+         // Redirect to login by ensuring they are registered but not logged in (which is already set in handleRegister)
+      }}
+    />;
   }
 
   if (!state.isRegistered) return <RegistrationScreen onRegister={handleRegister} onManualLogin={handleManualLogin} onForgotPassword={() => setView('forgot-password')} />;

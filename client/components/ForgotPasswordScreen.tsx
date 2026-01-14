@@ -55,6 +55,15 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ onBack, bus
     }
   };
 
+  const handleResend = async () => {
+    try {
+      await requestPasswordReset(email);
+      alert('Code resent! Check your email.');
+    } catch (err) {
+      alert('Failed to resend.');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-indigo-700 flex flex-col items-center justify-center p-6 bg-gradient-to-br from-indigo-700 via-indigo-600 to-indigo-800">
       <div className="mb-8 text-center text-white">
@@ -182,6 +191,12 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ onBack, bus
                     If you didn't provide a valid email during registration, please contact your market supervisor or system administrator.
                 </p>
                 </div>
+            )}
+
+            {step === 'verify' && (
+              <button type="button" onClick={handleResend} className="w-full text-center mt-4 text-sm text-indigo-600 font-bold hover:underline">
+                Resend Code
+              </button>
             )}
           </form>
         )}
