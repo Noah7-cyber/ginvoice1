@@ -128,6 +128,11 @@ router.post('/forgot-password', async (req, res) => {
     const business = await Business.findOne({ email });
     if (!business) return res.status(200).json({ sent: false });
 
+    // Cooldown check: if code expires > 14 mins from now, it was sent < 1 min ago
+    if (business.recoveryCodeExpires && business.recoveryCodeExpires > new Date(Date.now() + 14 * 60 * 1000)) {
+      return res.status(429).json({ message: 'Please wait a minute before requesting again.' });
+    }
+
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const expires = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
 
@@ -153,6 +158,11 @@ router.post('/reset-password', async (req, res) => {
   try {
     const { email, code, newOwnerPin } = req.body;
 
+    // 1. PIN Validation
+    if (!newOwnerPin || !/^\d{4,8}$/.test(newOwnerPin)) {
+      return res.status(400).json({ error: 'PIN must be 4-8 numeric digits' });
+    }
+
     const business = await Business.findOne({
       email,
       recoveryCode: code,
@@ -164,6 +174,9 @@ router.post('/reset-password', async (req, res) => {
     }
 
     const hashedOwnerPin = await bcrypt.hash(newOwnerPin, 10);
+
+    // 2. Session Invalidation
+    business.credentialsVersion = (business.credentialsVersion || 1) + 1;
 
     business.ownerPin = hashedOwnerPin;
     business.recoveryCode = undefined;
