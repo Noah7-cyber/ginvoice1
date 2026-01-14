@@ -1,12 +1,14 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 
 const Business = require('../models/Business');
 const Product = require('../models/Product');
 const Transaction = require('../models/Transaction');
 const Expenditure = require('../models/Expenditure');
 const { sendSystemEmail } = require('../services/mail');
+const { buildWelcomeEmail, buildRecoveryEmail, buildVerificationEmail } = require('../services/emailTemplates');
 
 const router = express.Router();
 
@@ -44,6 +46,17 @@ router.post('/register', async (req, res) => {
     const staffPin = await bcrypt.hash(staffPassword, 10);
     const trialEndsAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
+    // Email Verification Logic
+    let emailVerificationToken = undefined;
+    let emailVerificationExpires = undefined;
+    let rawToken = undefined;
+
+    if (email) {
+      rawToken = crypto.randomBytes(32).toString('hex');
+      emailVerificationToken = crypto.createHash('sha256').update(rawToken).digest('hex');
+      emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    }
+
     const business = await Business.create({
       name,
       email,
@@ -54,18 +67,24 @@ router.post('/register', async (req, res) => {
       logo,
       theme,
       trialEndsAt,
-      isSubscribed: false
+      isSubscribed: false,
+      emailVerified: false,
+      emailVerificationToken,
+      emailVerificationExpires
     });
 
     const token = buildToken(business._id.toString(), 'owner', 1);
 
-    if (email) {
-      // Registration confirmation email
+    if (email && rawToken) {
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+      const verificationUrl = `${frontendUrl}/verify-email?token=${rawToken}`;
+      const emailHtml = buildVerificationEmail({ verificationUrl, businessName: name });
+
       sendSystemEmail({
         to: email,
-        subject: 'Welcome to Ginvoice',
-        text: `Hello ${name}, your store has been registered successfully.`,
-        html: `<p>Hello ${name},</p><p>Your store has been registered successfully.</p>`
+        subject: 'Verify Your Email - Ginvoice',
+        text: `Please verify your email by visiting: ${verificationUrl}`,
+        html: emailHtml
       });
     }
 
@@ -141,11 +160,12 @@ router.post('/forgot-password', async (req, res) => {
     await business.save();
 
     // Password recovery email aligned with frontend intent
+    const emailHtml = buildRecoveryEmail({ code });
     const result = await sendSystemEmail({
       to: email,
-      subject: 'Reset Your Ginvoice PIN',
-      text: `Your recovery code is: ${code}\n\nThis code expires in 15 minutes.`,
-      html: `<p>Your recovery code is: <strong>${code}</strong></p><p>This code expires in 15 minutes.</p>`
+      subject: 'Reset Your PIN - Ginvoice',
+      text: `Your recovery code is: ${code}. This code expires in 15 minutes.`,
+      html: emailHtml
     });
 
     return res.json({ sent: result.sent });
@@ -187,6 +207,46 @@ router.post('/reset-password', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// NEW: Verify Email Endpoint
+router.get('/verify-email', async (req, res) => {
+  try {
+    const { token } = req.query;
+    if (!token) return res.status(400).json({ message: 'Missing token' });
+
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
+    const business = await Business.findOne({
+      emailVerificationToken: hashedToken,
+      emailVerificationExpires: { $gt: Date.now() }
+    });
+
+    if (!business) {
+      return res.status(400).json({ message: 'Invalid or expired verification token' });
+    }
+
+    business.emailVerified = true;
+    business.emailVerificationToken = undefined;
+    business.emailVerificationExpires = undefined;
+    await business.save();
+
+    // Send Welcome Email now that they are verified
+    if (business.email) {
+      const emailHtml = buildWelcomeEmail({ businessName: business.name });
+      sendSystemEmail({
+        to: business.email,
+        subject: 'Welcome to Ginvoice! 🚀',
+        text: `Welcome to Ginvoice, ${business.name}! Your account is verified.`,
+        html: emailHtml
+      });
+    }
+
+    return res.json({ message: 'Email verified successfully', success: true });
+  } catch (err) {
+    console.error('Email verification error:', err);
+    return res.status(500).json({ message: 'Verification failed' });
   }
 });
 
