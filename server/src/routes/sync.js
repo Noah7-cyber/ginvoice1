@@ -1,6 +1,6 @@
 const express = require('express');
 const mongoose = require('mongoose');
-const { Decimal128 } = mongoose.Types;
+const { Decimal128, ObjectId } = mongoose.Types;
 
 // Models
 const Product = require('../models/Product');
@@ -40,7 +40,9 @@ router.get('/', auth, async (req, res) => {
     // Fetch All Data (Simple Query)
     const [businessData, rawProducts, rawTransactions, rawExpenditures, rawCategories] = await Promise.all([
       Business.findById(businessId).lean(),
-      Product.find({ businessId: businessId }).lean(),
+      Product.find({
+        businessId: { $in: [businessId, new ObjectId(businessId)] }
+      }).lean(),
       Transaction.find({ businessId }).sort({ createdAt: -1 }).limit(1000).lean(),
       Expenditure.find({ business: businessId }).lean(),
       Category.find({ businessId }).sort({ usageCount: -1, name: 1 }).lean()
@@ -244,6 +246,17 @@ router.post('/', auth, async (req, res) => {
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: 'Sync failed' });
+  }
+});
+
+// TEMPORARY FIX: Transfer all products to the current user
+router.get('/fix-ids', auth, async (req, res) => {
+  try {
+    const myId = String(req.businessId).trim();
+    const result = await Product.updateMany({}, { $set: { businessId: myId } });
+    res.json({ message: `Fixed! transferred ${result.modifiedCount} products to ${myId}` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
