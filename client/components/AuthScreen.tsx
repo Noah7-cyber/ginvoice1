@@ -31,6 +31,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onForgotPassword, onRe
     const ok = await onLogin(password, selectedRole);
     setIsLoading(false);
     if (!ok) {
+      // Note: If verification is required, parent component (App.tsx) handles redirection
       setError(true);
       setTimeout(() => setError(false), 2000);
     }
