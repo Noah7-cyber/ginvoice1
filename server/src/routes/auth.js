@@ -77,16 +77,25 @@ router.post('/register', async (req, res) => {
     const token = buildToken(business._id.toString(), 'owner', 1);
 
     if (email && rawToken) {
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-      const verificationUrl = `${frontendUrl}/verify-email?token=${rawToken}`;
-      const emailHtml = buildVerificationEmail({ verificationUrl, businessName: name });
+      try {
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+        const verificationUrl = `${frontendUrl}/verify-email?token=${rawToken}`;
+        const emailHtml = buildVerificationEmail({ verificationUrl, businessName: name });
 
-      await sendSystemEmail({
-        to: email,
-        subject: 'Verify Your Email - Ginvoice',
-        text: `Please verify your email by visiting: ${verificationUrl}`,
-        html: emailHtml
-      });
+        await sendSystemEmail({
+          to: email,
+          subject: 'Verify Your Email - Ginvoice',
+          text: `Please verify your email by visiting: ${verificationUrl}`,
+          html: emailHtml
+        });
+      } catch (emailError) {
+        // Atomic Registration: Rollback if email fails
+        await Business.findByIdAndDelete(business._id);
+        console.error('Registration email failed:', emailError);
+        return res.status(500).json({
+          message: 'Registration failed: Could not send verification email. Please try again.'
+        });
+      }
     }
 
     return res.json({
@@ -95,6 +104,7 @@ router.post('/register', async (req, res) => {
       business: sanitizeBusiness(business)
     });
   } catch (err) {
+    console.error('Registration Error:', err);
     return res.status(500).json({ message: 'Registration failed' });
   }
 });
@@ -262,6 +272,7 @@ router.get('/verify-email', async (req, res) => {
 // NEW: Resend Verification Email
 router.post('/resend-verification', async (req, res) => {
   try {
+    // Robust resend logic
     const { email } = req.body;
     if (!email) return res.status(400).json({ message: 'Email required' });
 
@@ -379,6 +390,21 @@ router.delete('/delete-account', require('../middleware/auth'), async (req, res)
   } catch (err) {
     console.error('Delete account error:', err);
     return res.status(500).json({ message: 'Failed to delete account' });
+  }
+});
+
+// TEMPORARY: Cleanup unverified users (Protected)
+router.get('/cleanup-unverified', require('../middleware/auth'), async (req, res) => {
+  try {
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const result = await Business.deleteMany({
+      emailVerified: false,
+      createdAt: { $lt: twentyFourHoursAgo }
+    });
+    return res.json({ message: `Cleaned up ${result.deletedCount} unverified accounts.` });
+  } catch (err) {
+    console.error('Cleanup failed:', err);
+    return res.status(500).json({ message: 'Cleanup failed' });
   }
 });
 
