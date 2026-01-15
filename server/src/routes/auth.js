@@ -82,12 +82,25 @@ router.post('/register', async (req, res) => {
         const verificationUrl = `${frontendUrl}/verify-email?token=${rawToken}`;
         const emailHtml = buildVerificationEmail({ verificationUrl, businessName: name });
 
-        await sendSystemEmail({
+        // Enforce 10-second timeout for email to prevent hanging
+        const emailPromise = sendSystemEmail({
           to: email,
           subject: 'Verify Your Email - Ginvoice',
           text: `Please verify your email by visiting: ${verificationUrl}`,
           html: emailHtml
         });
+
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Email service timed out')), 10000)
+        );
+
+        const result = await Promise.race([emailPromise, timeoutPromise]);
+
+        // Check if the service returned { sent: false } even if it didn't throw
+        if (result && result.sent === false) {
+           throw new Error('Email service returned failure status');
+        }
+
       } catch (emailError) {
         // Atomic Registration: Rollback if email fails
         await Business.findByIdAndDelete(business._id);
@@ -394,7 +407,7 @@ router.delete('/delete-account', require('../middleware/auth'), async (req, res)
 });
 
 // TEMPORARY: Cleanup unverified users (Protected)
-router.get('/cleanup-unverified', require('../middleware/auth'), async (req, res) => {
+router.post('/cleanup-unverified', require('../middleware/auth'), async (req, res) => {
   try {
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const result = await Business.deleteMany({
