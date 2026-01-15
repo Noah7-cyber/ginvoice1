@@ -81,7 +81,7 @@ router.post('/register', async (req, res) => {
       const verificationUrl = `${frontendUrl}/verify-email?token=${rawToken}`;
       const emailHtml = buildVerificationEmail({ verificationUrl, businessName: name });
 
-      sendSystemEmail({
+      await sendSystemEmail({
         to: email,
         subject: 'Verify Your Email - Ginvoice',
         text: `Please verify your email by visiting: ${verificationUrl}`,
@@ -244,7 +244,7 @@ router.get('/verify-email', async (req, res) => {
     // Send Welcome Email now that they are verified
     if (business.email) {
       const emailHtml = buildWelcomeEmail({ businessName: business.name });
-      sendSystemEmail({
+      await sendSystemEmail({
         to: business.email,
         subject: 'Welcome to Ginvoice! 🚀',
         text: `Welcome to Ginvoice, ${business.name}! Your account is verified.`,
@@ -288,7 +288,7 @@ router.post('/resend-verification', async (req, res) => {
     const verificationUrl = `${frontendUrl}/verify-email?token=${rawToken}`;
     const emailHtml = buildVerificationEmail({ verificationUrl, businessName: business.name });
 
-    sendSystemEmail({
+    await sendSystemEmail({
         to: email,
         subject: 'Verify Your Email - Ginvoice',
         text: `Please verify your email by visiting: ${verificationUrl}`,
