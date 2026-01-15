@@ -19,9 +19,10 @@ interface ExpenditureScreenProps {
   onAddExpenditure: (item: Expenditure) => void;
   onDeleteExpenditure: (id: string) => void;
   onEditExpenditure: (item: Expenditure) => void;
+  isOnline: boolean;
 }
 
-const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onAddExpenditure, onDeleteExpenditure, onEditExpenditure }) => {
+const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onAddExpenditure, onDeleteExpenditure, onEditExpenditure, isOnline }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const { addToast } = useToast();
@@ -85,6 +86,10 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isOnline) {
+      addToast('Please connect to the internet to perform this action.', 'error');
+      return;
+    }
     try {
       if (editingId) {
         // Edit Mode
@@ -222,6 +227,10 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
                     <td className="px-6 py-4 text-sm text-right flex justify-end gap-2">
                       <button
                         onClick={() => {
+                          if (!isOnline) {
+                            addToast('Please connect to the internet to perform this action.', 'error');
+                            return;
+                          }
                           setFormData({
                             title: exp.title,
                             amount: exp.amount.toString(),
@@ -239,6 +248,10 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
                       </button>
                       <button
                         onClick={() => {
+                          if (!isOnline) {
+                            addToast('Please connect to the internet to perform this action.', 'error');
+                            return;
+                          }
                           if (window.confirm('Are you sure you want to delete this expenditure?')) {
                             onDeleteExpenditure(exp.id);
                           }

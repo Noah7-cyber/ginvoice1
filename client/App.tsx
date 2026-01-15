@@ -210,6 +210,15 @@ const App: React.FC = () => {
     const handleOnline = async () => {
       setIsOnline(true);
       if (!wasOnlineRef.current && state.isLoggedIn) {
+        // Critical Sync Fix: Push local state first to prevent overwrite
+        try {
+            await pushToBackend({
+                transactions: state.transactions,
+                products: state.products
+            });
+        } catch (err) {
+            console.error('Pre-sync push failed', err);
+        }
         await refreshData();
       }
       await fetchEntitlements();
@@ -222,7 +231,7 @@ const App: React.FC = () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [state.isLoggedIn, fetchEntitlements, refreshData]);
+  }, [state.isLoggedIn, state.transactions, state.products, fetchEntitlements, refreshData]);
 
   useEffect(() => {
     wasOnlineRef.current = isOnline;
@@ -267,6 +276,10 @@ const App: React.FC = () => {
   useEffect(() => { saveState(state); }, [state]);
 
   const handleAddExpenditure = (newExpenditure: Expenditure) => {
+    if (!isOnline) {
+        addToast('Please connect to the internet to perform this action.', 'error');
+        return;
+    }
     setState(prev => {
       const updated = [newExpenditure, ...prev.expenditures];
       if (navigator.onLine) pushToBackend({ expenditures: [newExpenditure] });
@@ -275,6 +288,10 @@ const App: React.FC = () => {
   };
 
   const handleDeleteExpenditure = async (id: string) => {
+     if (!isOnline) {
+        addToast('Please connect to the internet to perform this action.', 'error');
+        return;
+    }
     setState(prev => ({ ...prev, expenditures: prev.expenditures.filter(e => e.id !== id) }));
     if (navigator.onLine) {
         try {
@@ -286,6 +303,10 @@ const App: React.FC = () => {
   };
 
   const handleEditExpenditure = (updated: Expenditure) => {
+      if (!isOnline) {
+        addToast('Please connect to the internet to perform this action.', 'error');
+        return;
+    }
       setState(prev => {
           const newExp = prev.expenditures.map(e => e.id === updated.id ? updated : e);
           if (navigator.onLine) pushToBackend({ expenditures: [updated] });
@@ -647,6 +668,7 @@ const App: React.FC = () => {
               onUpdateProducts={handleUpdateProducts}
               isOwner={state.role === 'owner'}
               isReadOnly={!canManageStock}
+              isOnline={isOnline}
             />
           )}
           {activeTab === 'history' && (
@@ -666,6 +688,7 @@ const App: React.FC = () => {
               isSubscriptionExpired={subscriptionLocked}
               onRenewSubscription={openPaymentLink}
               isReadOnly={!canManageHistory}
+              isOnline={isOnline}
             />
           )}
           {activeTab === 'dashboard' && (state.role === 'owner' || state.business.staffPermissions.includes('dashboard')) && <DashboardScreen transactions={state.transactions} products={state.products} />}
@@ -675,9 +698,10 @@ const App: React.FC = () => {
               onAddExpenditure={handleAddExpenditure}
               onDeleteExpenditure={handleDeleteExpenditure}
               onEditExpenditure={handleEditExpenditure}
+              isOnline={isOnline}
             />
           )}
-          {activeTab === 'settings' && state.role === 'owner' && <SettingsScreen business={state.business} onUpdateBusiness={b => setState(prev => ({ ...prev, business: b }))} onManualSync={() => refreshData()} lastSyncedAt={state.lastSyncedAt} onLogout={handleLogout} onDeleteAccount={handleDeleteAccount} />}
+          {activeTab === 'settings' && state.role === 'owner' && <SettingsScreen business={state.business} onUpdateBusiness={b => setState(prev => ({ ...prev, business: b }))} onManualSync={() => refreshData()} lastSyncedAt={state.lastSyncedAt} onLogout={handleLogout} onDeleteAccount={handleDeleteAccount} isOnline={isOnline} />}
         </div>
 
         {/* Mobile Bottom Nav */}

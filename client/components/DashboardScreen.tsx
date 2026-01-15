@@ -89,15 +89,32 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
     const totalProfit = transactions.reduce((sum, tx) => {
       const txProfit = tx.items.reduce((pSum, item) => {
         const product = products.find(p => p.id === item.productId);
-        const cost = product ? product.costPrice : 0;
+        // FIX: If unit cost is 0, use base cost * multiplier
+        let cost = 0;
+
+        // Check if item has a selected unit (variant sale)
+        if (item.selectedUnit) {
+            // Priority 1: Unit specific cost price
+            if (item.selectedUnit.costPrice > 0) {
+                cost = item.selectedUnit.costPrice;
+            }
+            // Priority 2: Base Product Cost * Multiplier
+            else if (product && product.costPrice > 0) {
+                cost = product.costPrice * item.selectedUnit.multiplier;
+            }
+        }
+        // Direct Base Product Sale (no unit selected or base unit)
+        else {
+             if (product) cost = product.costPrice;
+        }
+
         // [FIX] Use item.total (net price) - (cost * quantity)
         // Profit per item = total_selling - total_cost
         const itemTotalCost = safeCalculate(cost, item.quantity);
         return pSum + (item.total - itemTotalCost);
       }, 0);
+
       // Subtract tx.globalDiscount from profit
-      // Note: We need to handle this carefully.
-      // Profit calculated above is Gross Profit from items.
       // Net Profit = Gross Profit - Global Discount.
       return sum + txProfit - (tx.globalDiscount || 0);
     }, 0);

@@ -178,7 +178,11 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
         { $unwind: '$items' },
         {
           $group: {
-            _id: { id: '$items.productId', unit: '$items.unit' },
+            _id: {
+                 id: '$items.productId',
+                 unit: '$items.unit',
+                 selectedUnit: '$items.selectedUnit' // Need access to the full unit object for multiplier fallback
+            },
             totalSales: { $sum: { $toDouble: '$items.total' } }, // Revenue per product
             totalQty: { $sum: '$items.quantity' }
           }
@@ -192,7 +196,11 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
       { $unwind: '$items' },
       {
         $group: {
-          _id: { id: '$items.productId', unit: '$items.unit' },
+          _id: {
+               id: '$items.productId',
+               unit: '$items.unit',
+               selectedUnit: '$items.selectedUnit'
+          },
           totalSales: { $sum: { $toDouble: '$items.total' } },
           totalQty: { $sum: '$items.quantity' }
         }
@@ -205,7 +213,11 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
       { $unwind: '$items' },
       {
         $group: {
-          _id: { id: '$items.productId', unit: '$items.unit' },
+           _id: {
+               id: '$items.productId',
+               unit: '$items.unit',
+               selectedUnit: '$items.selectedUnit'
+          },
           totalSales: { $sum: { $toDouble: '$items.total' } },
           totalQty: { $sum: '$items.quantity' }
         }
@@ -229,14 +241,42 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
         const product = productMap.get(group._id.id);
         if (!product) return; // Should not happen if data is consistent
 
-        let itemCost = toNumber(product.costPrice);
+        let itemCost = 0;
 
-        // Find specific unit cost if applicable
-        if (group._id.unit && Array.isArray(product.units)) {
-           const unitDef = product.units.find(u => u.name === group._id.unit);
-           if (unitDef && unitDef.costPrice) {
-             itemCost = toNumber(unitDef.costPrice);
-           }
+        const selectedUnit = group._id.selectedUnit; // Check for stored unit data first
+        const unitName = group._id.unit;
+
+        // Cost Priority Logic:
+        // 1. Transaction-stored unit cost (if available in future schema, currently not stored directly usually)
+        // 2. Product-defined unit cost (from product units array)
+        // 3. Fallback: Product Base Cost * Unit Multiplier
+
+        let baseCost = toNumber(product.costPrice);
+        let multiplier = 1;
+
+        if (selectedUnit) {
+             // If we have selectedUnit snapshot from transaction
+             if (selectedUnit.costPrice > 0) {
+                 itemCost = toNumber(selectedUnit.costPrice);
+             } else {
+                 multiplier = toNumber(selectedUnit.multiplier) || 1;
+                 itemCost = baseCost * multiplier;
+             }
+        } else if (unitName && Array.isArray(product.units)) {
+             // Fallback to looking up current product definition if no snapshot
+             const unitDef = product.units.find(u => u.name === unitName);
+             if (unitDef) {
+                 if (unitDef.costPrice > 0) {
+                     itemCost = toNumber(unitDef.costPrice);
+                 } else {
+                     multiplier = toNumber(unitDef.multiplier) || 1;
+                     itemCost = baseCost * multiplier;
+                 }
+             } else {
+                 itemCost = baseCost; // Fallback to base
+             }
+        } else {
+             itemCost = baseCost;
         }
 
         const revenue = toNumber(group.totalSales);

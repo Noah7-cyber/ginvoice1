@@ -32,11 +32,12 @@ interface HistoryScreenProps {
   isSubscriptionExpired?: boolean;
   onRenewSubscription?: () => void;
   isReadOnly?: boolean;
+  isOnline: boolean;
 }
 
 type ViewMode = 'invoices' | 'debtors';
 
-const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, onDeleteTransaction, onUpdateTransaction, isSubscriptionExpired, onRenewSubscription, isReadOnly }) => {
+const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, onDeleteTransaction, onUpdateTransaction, isSubscriptionExpired, onRenewSubscription, isReadOnly, isOnline }) => {
   const { addToast } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>('invoices');
   const [searchTerm, setSearchTerm] = useState('');
@@ -44,6 +45,11 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
   const [editAmountPaid, setEditAmountPaid] = useState<number>(0);
   const [editCustomerName, setEditCustomerName] = useState<string>('');
   const [selectedInvoice, setSelectedInvoice] = useState<Transaction | null>(null);
+
+  // Modal State for Delete
+  const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [shouldRestock, setShouldRestock] = useState(true);
 
   const filteredInvoices = transactions.filter(t => 
     t.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -75,12 +81,20 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
   }, [transactions, searchTerm]);
 
   const handleEditClick = (t: Transaction) => {
+    if (!isOnline) {
+      addToast('Please connect to the internet to perform this action.', 'error');
+      return;
+    }
     setEditingId(t.id);
     setEditAmountPaid(t.amountPaid);
     setEditCustomerName(t.customerName);
   };
 
   const handleSaveEdit = (t: Transaction) => {
+    if (!isOnline) {
+      addToast('Please connect to the internet to perform this action.', 'error');
+      return;
+    }
     onUpdateTransaction({
       ...t,
       customerName: editCustomerName,
@@ -90,26 +104,36 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
     setEditingId(null);
   };
 
-  const handleDelete = async (t: Transaction) => {
-    if (!navigator.onLine) {
-      addToast('Delete requires an internet connection.', 'error');
+  const handleDeleteRequest = (t: Transaction) => {
+     if (!isOnline) {
+      addToast('Please connect to the internet to perform this action.', 'error');
       return;
     }
+    setTransactionToDelete(t);
+    setShouldRestock(true); // Default to true
+  };
 
-    if (!confirm('Delete this sale? Items will be returned to stock.')) return;
+  const confirmDelete = async () => {
+    if (!transactionToDelete) return;
 
+    setIsDeleting(true);
     try {
-      // Call Backend to Restock & Delete
+      // Call Backend to Delete (Pass restock param)
       // @ts-ignore
-      await api.delete(`/transactions/${t.id}`);
+      await api.delete(`/transactions/${transactionToDelete.id}?restock=${shouldRestock}`);
 
       // Update local state to remove it from UI immediately
-      // Passing true for restockItems to trigger the optimistic stock update in App.tsx
-      onDeleteTransaction(t.id, true);
-      addToast('Transaction deleted and stock restored', 'success');
+      // Passing shouldRestock to trigger the optimistic stock update in App.tsx if needed
+      onDeleteTransaction(transactionToDelete.id, shouldRestock);
+
+      const msg = shouldRestock ? 'Transaction deleted and stock restored' : 'Transaction deleted (Stock NOT restored)';
+      addToast(msg, 'success');
+      setTransactionToDelete(null);
     } catch (e) {
       console.error(e);
       addToast('Failed to delete. You might be offline.', 'error');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -281,7 +305,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
                           {!isReadOnly && (
                             <>
                               <button onClick={() => handleEditClick(t)} className="p-2 text-gray-400 hover:text-indigo-600 rounded-lg"><Edit3 size={18} /></button>
-                              <button onClick={() => handleDelete(t)} className="p-2 text-gray-400 hover:text-red-600 rounded-lg"><Trash2 size={18} /></button>
+                              <button onClick={() => handleDeleteRequest(t)} className="p-2 text-gray-400 hover:text-red-600 rounded-lg"><Trash2 size={18} /></button>
                             </>
                           )}
                         </>
@@ -363,6 +387,56 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
           onClose={() => setSelectedInvoice(null)} 
         />
       )}
+
+      {/* Delete Confirmation Modal */}
+      {transactionToDelete && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm scale-100 transform transition-all">
+            <div className="flex justify-between items-start mb-4">
+               <div className="bg-red-50 p-3 rounded-full">
+                  <AlertCircle size={24} className="text-red-600" />
+               </div>
+               <button onClick={() => setTransactionToDelete(null)} className="text-gray-400 hover:text-gray-600"><X size={20}/></button>
+            </div>
+
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Delete Transaction?</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              This action cannot be undone.
+            </p>
+
+             {/* Restock Checkbox */}
+             <div className="flex items-center gap-3 bg-gray-50 p-3 rounded-xl mb-6">
+                <input
+                  type="checkbox"
+                  id="restock"
+                  className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
+                  checked={shouldRestock}
+                  onChange={(e) => setShouldRestock(e.target.checked)}
+                />
+                <label htmlFor="restock" className="text-sm font-bold text-gray-700 cursor-pointer select-none">
+                  Return items to stock?
+                </label>
+             </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setTransactionToDelete(null)}
+                className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={isDeleting}
+                className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-colors shadow-lg shadow-red-200 flex items-center justify-center gap-2"
+              >
+                {isDeleting ? 'Deleting...' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

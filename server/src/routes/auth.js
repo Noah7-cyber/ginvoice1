@@ -27,7 +27,8 @@ const sanitizeBusiness = (business) => ({
   trialEndsAt: business.trialEndsAt,
   isSubscribed: business.isSubscribed,
   subscriptionExpiresAt: business.subscriptionExpiresAt,
-  createdAt: business.createdAt
+  createdAt: business.createdAt,
+  emailVerified: business.emailVerified // Added field
 });
 
 router.post('/register', async (req, res) => {
@@ -125,6 +126,14 @@ router.post('/login', async (req, res) => {
     }
 
     if (!isOwner && !isStaff) return res.status(401).json({ message: 'Invalid credentials' });
+
+    // New Check: Block login if email is not verified
+    if (!business.emailVerified) {
+        return res.status(403).json({
+            message: 'Please verify your email address to continue.',
+            requiresVerification: true
+        });
+    }
 
     const finalRole = isOwner ? 'owner' : 'staff';
     const token = buildToken(business._id.toString(), finalRole, business.credentialsVersion || 1);

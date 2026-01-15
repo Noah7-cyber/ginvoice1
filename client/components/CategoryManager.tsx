@@ -10,9 +10,10 @@ interface CategoryManagerProps {
   onClose: () => void;
   categories: Category[];
   setCategories: (categories: Category[]) => void;
+  isOnline?: boolean;
 }
 
-const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, categories, setCategories }) => {
+const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, categories, setCategories, isOnline = true }) => {
   const { addToast } = useToast();
   const [newCategoryName, setNewCategoryName] = useState('');
   const [defaultCost, setDefaultCost] = useState<number | ''>('');
@@ -24,6 +25,10 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
   const handleAddOrUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCategoryName) return;
+    if (!isOnline) {
+      addToast('Please connect to the internet to perform this action.', 'error');
+      return;
+    }
 
     setLoading(true);
     try {
@@ -84,6 +89,10 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
   };
 
   const handleDelete = async (id: string) => {
+    if (!isOnline) {
+      addToast('Please connect to the internet to perform this action.', 'error');
+      return;
+    }
     if (!confirm('Are you sure? This will not delete products in this category.')) return;
     try {
       await deleteCategory(id);
