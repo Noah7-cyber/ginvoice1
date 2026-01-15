@@ -8,6 +8,7 @@ const Business = require('../models/Business');
 let mongoServer;
 
 beforeAll(async () => {
+  process.env.JWT_SECRET = 'test-secret'; // Mock JWT Secret
   mongoServer = await MongoMemoryServer.create();
   const mongoUri = mongoServer.getUri();
   await mongoose.connect(mongoUri);
