@@ -12,9 +12,10 @@ interface InventoryScreenProps {
   onUpdateProducts: (products: Product[]) => void;
   isOwner: boolean;
   isReadOnly?: boolean;
+  isOnline: boolean;
 }
 
-const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdateProducts, isOwner, isReadOnly }) => {
+const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdateProducts, isOwner, isReadOnly, isOnline }) => {
   // Ensure Owner is NEVER Read-Only. Staff is Read-Only if they lack 'stock-management'.
   const safeReadOnly = isOwner ? false : isReadOnly;
   const { addToast } = useToast();
@@ -40,6 +41,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
   // Inline Editing
   const [inlineEditingId, setInlineEditingId] = useState<string | null>(null);
+  const [itemToDelete, setItemToDelete] = useState<string | null>(null);
 
   // Bulk Edit Panel States
   const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
@@ -105,8 +107,8 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
   const applyBulkUpdates = () => {
     if (safeReadOnly) return;
-    if (!navigator.onLine) {
-        addToast('Internet connection required for bulk updates.', 'error');
+    if (!isOnline) {
+        addToast('Please connect to the internet to perform this action.', 'error');
         return;
     }
     const updatedProducts = products.map(p => {
@@ -151,6 +153,10 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   };
 
   const handleAddNew = () => {
+    if (!isOnline) {
+      addToast('Please connect to the internet to perform this action.', 'error');
+      return;
+    }
     setEditingProductId(null);
     setNewProduct(initialProductState);
     setIsModalOpen(true);
@@ -178,6 +184,10 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (safeReadOnly) return;
+    if (!isOnline) {
+      addToast('Please connect to the internet to perform this action.', 'error');
+      return;
+    }
     setIsSaving(true);
 
     try {
@@ -207,6 +217,10 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   };
 
   const handleInlineSave = async (id: string) => {
+    if (!isOnline) {
+      addToast('Please connect to the internet to perform this action.', 'error');
+      return;
+    }
     const product = products.find(p => p.id === id);
     if (!product) return;
 
@@ -266,17 +280,21 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
   const handleDeleteProduct = async (id: string) => {
     if (safeReadOnly) return;
-    if (!navigator.onLine) {
-      addToast('Delete requires an internet connection.', 'error');
+    if (!isOnline) {
+      addToast('Please connect to the internet to perform this action.', 'error');
       return;
     }
-    if (confirm('Are you sure you want to delete this item?')) {
-      try {
-        await deleteProduct(id);
-        onUpdateProducts(products.filter(p => p.id !== id));
-      } catch (err) {
-        addToast('Delete failed. Please try again.', 'error');
-      }
+    setItemToDelete(id);
+  };
+
+  const confirmDeleteProduct = async () => {
+    if (!itemToDelete) return;
+    try {
+      await deleteProduct(itemToDelete);
+      onUpdateProducts(products.filter(p => p.id !== itemToDelete));
+      setItemToDelete(null);
+    } catch (err) {
+      addToast('Delete failed. Please try again.', 'error');
     }
   };
 
@@ -568,6 +586,10 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                                 </button>
                                 <button
                                     onClick={() => {
+                                        if (!isOnline) {
+                                            addToast('Please connect to the internet to perform this action.', 'error');
+                                            return;
+                                        }
                                         setEditingProductId(product.id);
                                         setNewProduct({ ...product });
                                         setIsModalOpen(true);
@@ -642,6 +664,10 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                    <button
                       onClick={(e) => {
                         e.stopPropagation();
+                        if (!isOnline) {
+                            addToast('Please connect to the internet to perform this action.', 'error');
+                            return;
+                        }
                         setEditingProductId(product.id);
                         setNewProduct({ ...product });
                         setIsModalOpen(true);
@@ -924,7 +950,32 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
         onClose={() => setIsCategoryManagerOpen(false)}
         categories={categories}
         setCategories={setCategories}
+        isOnline={isOnline}
       />
+
+      {/* Delete Confirmation Modal */}
+      {itemToDelete && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm scale-100">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Delete Product?</h3>
+            <p className="text-sm text-gray-500 mb-6">Are you sure you want to delete this item? This action cannot be undone.</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setItemToDelete(null)}
+                className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteProduct}
+                className="flex-1 py-3 bg-red-500 text-white rounded-xl font-bold"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

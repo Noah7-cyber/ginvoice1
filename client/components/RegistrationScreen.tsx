@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from 'react';
 import { ShoppingBag, MapPin, Phone, Mail, ArrowRight, Store, Sparkles, Upload, Trash2, Image as ImageIcon, Lock, ShieldCheck, UserCircle, Info, KeyRound, Loader2, Eye, EyeOff } from 'lucide-react';
 import PhoneInput from 'react-phone-input-2';
@@ -42,6 +41,10 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onM
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (!navigator.onLine) {
+         addToast('Online connection required for logo upload.', 'error');
+         return;
+      }
       // Preview immediately
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -65,6 +68,11 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onM
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!navigator.onLine) {
+      addToast(mode === 'register' ? 'Registration requires internet connection.' : 'Login requires internet connection.', 'error');
+      return;
+    }
+
     setIsLoading(true);
     try {
       if (mode === 'register') {

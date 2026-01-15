@@ -10,13 +10,14 @@ interface SettingsScreenProps {
   business: BusinessProfile;
   onUpdateBusiness: (profile: BusinessProfile) => void;
   onManualSync?: () => void;
-  lastSynced?: string;
+  lastSyncedAt?: string;
   isSyncing?: boolean;
   onLogout?: () => void;
   onDeleteAccount?: () => void;
+  isOnline: boolean;
 }
 
-const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusiness, onManualSync, lastSynced, isSyncing, onLogout, onDeleteAccount }) => {
+const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusiness, onManualSync, lastSyncedAt, isSyncing, onLogout, onDeleteAccount, isOnline }) => {
   const [formData, setFormData] = useState<BusinessProfile>(business);
   const [showSaved, setShowSaved] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -37,7 +38,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleUpdateBusiness = async (data: Partial<BusinessProfile>) => {
-    if (!navigator.onLine) {
+    if (!isOnline) {
       alert("You must be online to update settings.");
       return;
     }
@@ -93,7 +94,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
         return;
       }
 
-      if (!navigator.onLine) {
+      if (!isOnline) {
         alert('Online required for logo change');
         return;
       }
@@ -125,7 +126,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
   };
 
   const togglePermission = async (key: string) => {
-    if (!navigator.onLine) {
+    if (!isOnline) {
         alert('You must be online to change permissions.');
         return;
     }
@@ -149,6 +150,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
 
 
   const handleUpdatePins = async () => {
+    if (!isOnline) return setSecurityMsg('Internet connection required');
     if (!currentOwnerPin) return setSecurityMsg('Current Owner PIN required');
     if (!newStaffPin && !newOwnerPin) return setSecurityMsg('Enter at least one new PIN');
 
@@ -165,6 +167,11 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
   };
 
   const handleDeleteAccount = async () => {
+    if (!isOnline) {
+      setDeleteError('Internet connection required');
+      return;
+    }
+
     if (confirmBusinessName !== business.name) {
       setDeleteError('Business name does not match');
       return;
@@ -189,6 +196,10 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
   const [isGenerating, setIsGenerating] = useState(false);
 
   const handleGenerateDiscount = async () => {
+    if (!isOnline) {
+      alert('Internet connection required to generate codes.');
+      return;
+    }
     setIsGenerating(true);
     try {
       const code = await generateDiscountCode(discountForm);
@@ -224,7 +235,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
              <span>Cloud Backup Active</span>
           </div>
           <p className="text-[10px] text-indigo-400 font-medium uppercase tracking-widest">
-            Last Sync: {lastSynced ? new Date(lastSynced).toLocaleString() : 'Never'}
+            Last Sync: {lastSyncedAt ? new Date(lastSyncedAt).toLocaleString() : 'Never'}
           </p>
           <button 
             type="button"
