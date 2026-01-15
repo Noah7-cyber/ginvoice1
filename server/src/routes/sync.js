@@ -80,7 +80,8 @@ router.get('/', auth, async (req, res) => {
       name: c.name,
       businessId: c.businessId,
       defaultSellingPrice: parseDecimal(c.defaultSellingPrice),
-      defaultCostPrice: parseDecimal(c.defaultCostPrice)
+      defaultCostPrice: parseDecimal(c.defaultCostPrice),
+      defaultUnit: c.defaultUnit || ''
     }));
 
     const products = rawProducts.map(p => ({
@@ -159,7 +160,7 @@ router.post('/', auth, async (req, res) => {
       const catOps = categories.map(c => ({
         updateOne: {
           filter: { businessId, name: c.name },
-          update: { $set: { businessId, name: c.name, defaultSellingPrice: toDecimal(c.defaultSellingPrice), defaultCostPrice: toDecimal(c.defaultCostPrice) } },
+          update: { $set: { businessId, name: c.name, defaultSellingPrice: toDecimal(c.defaultSellingPrice), defaultCostPrice: toDecimal(c.defaultCostPrice), defaultUnit: c.defaultUnit || '' } },
           upsert: true
         }
       }));

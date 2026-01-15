@@ -28,14 +28,15 @@ router.get('/', auth, async (req, res) => {
 // POST create a new category
 router.post('/', auth, async (req, res) => {
   try {
-    const { name, defaultSellingPrice, defaultCostPrice } = req.body;
+    const { name, defaultSellingPrice, defaultCostPrice, defaultUnit } = req.body;
     if (!name) return res.status(400).json({ message: 'Category name is required' });
 
     const category = await Category.create({
       businessId: req.businessId,
       name,
       defaultSellingPrice: toDecimal(defaultSellingPrice),
-      defaultCostPrice: toDecimal(defaultCostPrice)
+      defaultCostPrice: toDecimal(defaultCostPrice),
+      defaultUnit: defaultUnit || ''
     });
 
     await Business.findByIdAndUpdate(req.businessId, { $inc: { dataVersion: 1 } });
@@ -49,7 +50,7 @@ router.post('/', auth, async (req, res) => {
 router.put('/:id', auth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, defaultSellingPrice, defaultCostPrice } = req.body;
+    const { name, defaultSellingPrice, defaultCostPrice, defaultUnit } = req.body;
 
     if (!name) return res.status(400).json({ message: 'Name required' });
 
@@ -58,7 +59,8 @@ router.put('/:id', auth, async (req, res) => {
       {
         name,
         defaultSellingPrice: toDecimal(defaultSellingPrice),
-        defaultCostPrice: toDecimal(defaultCostPrice)
+        defaultCostPrice: toDecimal(defaultCostPrice),
+        defaultUnit: defaultUnit || ''
       },
       { new: true }
     );

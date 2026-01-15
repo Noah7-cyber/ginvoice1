@@ -176,12 +176,7 @@ const App: React.FC = () => {
 
   const handleDeleteAccount = useCallback(() => {
     localStorage.clear(); // Wipe all data
-    setState(prev => ({
-      ...prev,
-      isLoggedIn: false,
-      isRegistered: false,
-      business: { ...prev.business, name: '', email: '' }
-    }));
+    window.location.reload(); // Strict force logout
   }, []);
 
   const fetchEntitlements = useCallback(async () => {

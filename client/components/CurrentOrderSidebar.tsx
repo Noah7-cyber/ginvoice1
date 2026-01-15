@@ -115,6 +115,21 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
       staffId: 'STAFF-01',
       discountCode: discountCode || undefined
     };
+
+    // Save Phone Number for future suggestions
+    if (customerPhone) {
+       try {
+         const stored = localStorage.getItem('ginvoice_recent_phones');
+         const phones = stored ? JSON.parse(stored) : [];
+         if (!phones.includes(customerPhone)) {
+            phones.push(customerPhone);
+            // Limit to last 20
+            if (phones.length > 20) phones.shift();
+            localStorage.setItem('ginvoice_recent_phones', JSON.stringify(phones));
+         }
+       } catch (err) { console.error(err); }
+    }
+
     onCompleteSale(transaction);
   };
 
@@ -164,11 +179,21 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
               type="tel"
               inputMode="tel"
               autoComplete="tel"
+              list="phone-suggestions"
               placeholder="+234..."
               value={customerPhone}
               onChange={(e) => setCustomerPhone(e.target.value)}
               className="w-full pl-10 pr-4 py-3 bg-white border border-gray-100 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none font-bold shadow-sm"
             />
+            <datalist id="phone-suggestions">
+               {(() => {
+                 try {
+                   const stored = localStorage.getItem('ginvoice_recent_phones');
+                   const phones = stored ? JSON.parse(stored) : [];
+                   return phones.map((p: string) => <option key={p} value={p} />);
+                 } catch { return null; }
+               })()}
+            </datalist>
           </div>
         </div>
 
