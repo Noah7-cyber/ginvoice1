@@ -5,6 +5,7 @@ const CategorySchema = new mongoose.Schema({
   name: { type: String, required: true },
   defaultSellingPrice: { type: mongoose.Decimal128, default: 0 },
   defaultCostPrice: { type: mongoose.Decimal128, default: 0 },
+  defaultUnit: { type: String, default: '' },
   usageCount: { type: Number, default: 0 }
 }, { timestamps: true });
 

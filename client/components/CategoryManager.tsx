@@ -17,6 +17,7 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
   const [newCategoryName, setNewCategoryName] = useState('');
   const [defaultCost, setDefaultCost] = useState<number | ''>('');
   const [defaultSelling, setDefaultSelling] = useState<number | ''>('');
+  const [defaultUnit, setDefaultUnit] = useState('');
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -31,13 +32,15 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
         await updateCategory(editingId, {
           name: newCategoryName,
           defaultSellingPrice: Number(defaultSelling) || 0,
-          defaultCostPrice: Number(defaultCost) || 0
+          defaultCostPrice: Number(defaultCost) || 0,
+          defaultUnit
         });
         setCategories(categories.map(c => c.id === editingId ? {
           ...c,
           name: newCategoryName,
           defaultSellingPrice: Number(defaultSelling) || 0,
-          defaultCostPrice: Number(defaultCost) || 0
+          defaultCostPrice: Number(defaultCost) || 0,
+          defaultUnit
         } : c));
         addToast('Category updated', 'success');
         setEditingId(null);
@@ -46,7 +49,8 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
         const newCat = await createCategory({
           name: newCategoryName,
           defaultSellingPrice: Number(defaultSelling) || 0,
-          defaultCostPrice: Number(defaultCost) || 0
+          defaultCostPrice: Number(defaultCost) || 0,
+          defaultUnit
         });
         setCategories([...categories, newCat]);
         addToast('Category created', 'success');
@@ -55,6 +59,7 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
       setNewCategoryName('');
       setDefaultCost('');
       setDefaultSelling('');
+      setDefaultUnit('');
     } catch (err) {
       addToast(editingId ? 'Failed to update' : 'Failed to create', 'error');
     } finally {
@@ -67,6 +72,7 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
     setNewCategoryName(cat.name);
     setDefaultCost(cat.defaultCostPrice);
     setDefaultSelling(cat.defaultSellingPrice);
+    setDefaultUnit(cat.defaultUnit || '');
   };
 
   const cancelEdit = () => {
@@ -74,6 +80,7 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
     setNewCategoryName('');
     setDefaultCost('');
     setDefaultSelling('');
+    setDefaultUnit('');
   };
 
   const handleDelete = async (id: string) => {
@@ -134,6 +141,16 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
                     placeholder="0"
                     value={defaultSelling}
                     onChange={e => setDefaultSelling(Number(e.target.value))}
+                  />
+               </div>
+               <div className="col-span-2">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase">Default Unit Type</label>
+                  <input
+                    type="text"
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                    placeholder="e.g. Bottle, Pack, Kg"
+                    value={defaultUnit}
+                    onChange={e => setDefaultUnit(e.target.value)}
                   />
                </div>
             </div>

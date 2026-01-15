@@ -85,7 +85,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     const matchesMaxPrice = maxPrice === '' || p.sellingPrice <= maxPrice;
 
     return matchesSearch && matchesCategory && matchesLowStock && matchesMinPrice && matchesMaxPrice;
-  });
+  }).sort((a, b) => a.name.localeCompare(b.name));
 
   const toggleSelection = (id: string) => {
     const next = new Set(selectedIds);
@@ -167,6 +167,9 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
       }
       if (!updated.costPrice || updated.costPrice === 0) {
         updated.costPrice = customCat.defaultCostPrice;
+      }
+      if ((!updated.baseUnit || updated.baseUnit === 'Piece') && customCat.defaultUnit) {
+          updated.baseUnit = customCat.defaultUnit;
       }
     }
     setNewProduct(updated);
@@ -277,8 +280,49 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     }
   };
 
+  // Mobile Indexer Logic
+  const [showIndexer, setShowIndexer] = useState(false);
+  const indexerTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+      const handleScroll = () => {
+          setShowIndexer(true);
+          if (indexerTimeoutRef.current) clearTimeout(indexerTimeoutRef.current);
+          indexerTimeoutRef.current = setTimeout(() => setShowIndexer(false), 2000);
+      };
+      window.addEventListener('scroll', handleScroll);
+      return () => {
+          window.removeEventListener('scroll', handleScroll);
+          if (indexerTimeoutRef.current) clearTimeout(indexerTimeoutRef.current);
+      };
+  }, []);
+
+  const scrollToLetter = (letter: string) => {
+      const element = document.getElementById(`section-${letter}`);
+      if (element) {
+          const yOffset = -100; // Header offset
+          const y = element.getBoundingClientRect().top + window.pageYOffset + yOffset;
+          window.scrollTo({ top: y, behavior: 'smooth' });
+      }
+  };
+
+  const alphabet = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+
   return (
-    <div className="max-w-7xl mx-auto pb-24">
+    <div className="max-w-7xl mx-auto pb-24 relative">
+        {/* Mobile Indexer Overlay */}
+        <div className={`fixed right-1 top-1/2 -translate-y-1/2 z-50 flex flex-col gap-0.5 bg-black/40 backdrop-blur-sm p-1 rounded-full transition-opacity duration-300 md:hidden ${showIndexer ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+            {alphabet.map(char => (
+                <button
+                   key={char}
+                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); scrollToLetter(char); }}
+                   className="text-[9px] font-black text-white w-4 h-4 flex items-center justify-center rounded-full hover:bg-white/20"
+                >
+                    {char}
+                </button>
+            ))}
+        </div>
+
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Manage Stock</h1>
@@ -548,13 +592,21 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
       {/* Mobile Card View */}
       <div className="md:hidden space-y-3">
-        {filteredProducts.map(product => (
-          <div
-             key={product.id}
-             className={`bg-white p-4 rounded-2xl shadow-sm border flex flex-col gap-3 transition-colors ${selectedIds.has(product.id) ? 'ring-2 ring-primary bg-indigo-50/30' : ''}`}
-             onClick={() => isSelectionMode && toggleSelection(product.id)}
-          >
-             <div className="flex justify-between items-start">
+        {filteredProducts.map((product, index) => {
+            // Check if this is the first item starting with this letter
+            const firstChar = product.name.charAt(0).toUpperCase();
+            const prevChar = index > 0 ? filteredProducts[index - 1].name.charAt(0).toUpperCase() : null;
+            const showHeader = firstChar !== prevChar;
+            const headerId = `section-${/[A-Z]/.test(firstChar) ? firstChar : '#'}`;
+
+            return (
+              <React.Fragment key={product.id}>
+                {showHeader && <div id={headerId} className="scroll-mt-32"></div>}
+                <div
+                    className={`bg-white p-4 rounded-2xl shadow-sm border flex flex-col gap-3 transition-colors ${selectedIds.has(product.id) ? 'ring-2 ring-primary bg-indigo-50/30' : ''}`}
+                    onClick={() => isSelectionMode && toggleSelection(product.id)}
+                >
+                    <div className="flex justify-between items-start">
                 <div className="flex gap-3 items-start">
                    {isSelectionMode && (
                         <input
@@ -607,7 +659,9 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                </div>
              )}
           </div>
-        ))}
+          </React.Fragment>
+        );
+      })}
       </div>
 
       {/* Bulk Edit Panel */}
@@ -733,8 +787,38 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Base Unit</label>
-                  <input type="text" className="w-full px-4 py-3 rounded-xl border" value={newProduct.baseUnit} onChange={e => setNewProduct({...newProduct, baseUnit: e.target.value})} placeholder="e.g. Bottle" />
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Sold By</label>
+                  <input
+                    type="text"
+                    list="unit-suggestions"
+                    className="w-full px-4 py-3 rounded-xl border"
+                    value={newProduct.baseUnit}
+                    onChange={e => setNewProduct({...newProduct, baseUnit: e.target.value})}
+                    onBlur={(e) => {
+                        const val = e.target.value;
+                        if (val) {
+                            try {
+                                const stored = localStorage.getItem('ginvoice_recent_units');
+                                const units = stored ? JSON.parse(stored) : [];
+                                if (!units.includes(val)) {
+                                    units.push(val);
+                                    if(units.length > 10) units.shift();
+                                    localStorage.setItem('ginvoice_recent_units', JSON.stringify(units));
+                                }
+                            } catch {}
+                        }
+                    }}
+                    placeholder="e.g. Bottle"
+                  />
+                  <datalist id="unit-suggestions">
+                     {(() => {
+                         try {
+                             const stored = localStorage.getItem('ginvoice_recent_units');
+                             const units = stored ? JSON.parse(stored) : [];
+                             return units.map((u: string) => <option key={u} value={u} />);
+                         } catch { return null; }
+                     })()}
+                  </datalist>
                 </div>
               </div>
 
