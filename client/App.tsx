@@ -401,8 +401,13 @@ const App: React.FC = () => {
 
         return true;
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Login failed', err);
+      // Handle verification required check
+      if (err.data?.requiresVerification) {
+          setPendingVerificationEmail(state.business.email);
+          return false;
+      }
     }
     return false;
   };
@@ -691,7 +696,7 @@ const App: React.FC = () => {
               isOnline={isOnline}
             />
           )}
-          {activeTab === 'dashboard' && (state.role === 'owner' || state.business.staffPermissions.includes('dashboard')) && <DashboardScreen transactions={state.transactions} products={state.products} />}
+          {activeTab === 'dashboard' && (state.role === 'owner' || (state.business.staffPermissions as any)?.canViewDashboard) && <DashboardScreen transactions={state.transactions} products={state.products} />}
           {activeTab === 'expenditure' && (
             <ExpenditureScreen
               expenditures={state.expenditures}

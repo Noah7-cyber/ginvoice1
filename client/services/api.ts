@@ -84,6 +84,22 @@ export const resetPassword = async (email: string, code: string, newOwnerPin: st
   });
 };
 
+// NEW: Resend Verification Email
+export const resendVerification = async (email: string) => {
+  return request('/api/auth/resend-verification', {
+    method: 'POST',
+    body: JSON.stringify({ email })
+  });
+};
+
+// NEW: Check Verification Status
+export const checkVerificationStatus = async (email: string) => {
+  return request('/api/auth/verification-status', {
+    method: 'POST',
+    body: JSON.stringify({ email })
+  });
+};
+
 export const syncState = async (state: InventoryState) => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');

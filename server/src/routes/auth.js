@@ -127,8 +127,8 @@ router.post('/login', async (req, res) => {
 
     if (!isOwner && !isStaff) return res.status(401).json({ message: 'Invalid credentials' });
 
-    // New Check: Block login if email is not verified
-    if (!business.emailVerified) {
+    // New Check: Block login ONLY if explicitly false (Strict Check)
+    if (business.emailVerified === false) {
         return res.status(403).json({
             message: 'Please verify your email address to continue.',
             requiresVerification: true
@@ -256,6 +256,67 @@ router.get('/verify-email', async (req, res) => {
   } catch (err) {
     console.error('Email verification error:', err);
     return res.status(500).json({ message: 'Verification failed' });
+  }
+});
+
+// NEW: Resend Verification Email
+router.post('/resend-verification', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ message: 'Email required' });
+
+    const business = await Business.findOne({ email });
+    if (!business) {
+        // Return success to avoid user enumeration, but log it
+        return res.json({ message: 'Verification email sent if account exists.' });
+    }
+
+    if (business.emailVerified === true) {
+        return res.status(400).json({ message: 'Email already verified.' });
+    }
+
+    // Generate new token
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const emailVerificationToken = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+    business.emailVerificationToken = emailVerificationToken;
+    business.emailVerificationExpires = emailVerificationExpires;
+    await business.save();
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const verificationUrl = `${frontendUrl}/verify-email?token=${rawToken}`;
+    const emailHtml = buildVerificationEmail({ verificationUrl, businessName: business.name });
+
+    sendSystemEmail({
+        to: email,
+        subject: 'Verify Your Email - Ginvoice',
+        text: `Please verify your email by visiting: ${verificationUrl}`,
+        html: emailHtml
+    });
+
+    return res.json({ message: 'Verification email sent successfully.' });
+  } catch (err) {
+    console.error('Resend verification error:', err);
+    return res.status(500).json({ message: 'Failed to resend verification email.' });
+  }
+});
+
+// NEW: Check Verification Status
+router.post('/verification-status', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ message: 'Email required' });
+
+    const business = await Business.findOne({ email });
+    if (!business) return res.status(404).json({ message: 'Business not found' });
+
+    return res.json({
+        verified: business.emailVerified === true
+    });
+  } catch (err) {
+    console.error('Verification status check error:', err);
+    return res.status(500).json({ message: 'Failed to check status' });
   }
 });
 
