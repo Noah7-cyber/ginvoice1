@@ -5,6 +5,7 @@ import { THEME_COLORS, FONTS } from '../constants';
 import { changeBusinessPins, deleteAccount, uploadFile, updateSettings, updateBusinessProfile, generateDiscountCode } from '../services/api';
 import api from '../services/api';
 import SupportBot from './SupportBot'; // Integrated SupportBot
+import { useToast } from './ToastProvider';
 
 interface SettingsScreenProps {
   business: BusinessProfile;
@@ -18,6 +19,7 @@ interface SettingsScreenProps {
 }
 
 const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusiness, onManualSync, lastSyncedAt, isSyncing, onLogout, onDeleteAccount, isOnline }) => {
+  const { addToast } = useToast();
   const [formData, setFormData] = useState<BusinessProfile>(business);
   const [showSaved, setShowSaved] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -39,22 +41,16 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
 
   const handleUpdateBusiness = async (data: Partial<BusinessProfile>) => {
     if (!isOnline) {
-      alert("You must be online to update settings.");
+      addToast("You must be online to update settings.", "error");
       return;
     }
 
     setIsLoading(true);
     try {
-      // Direct Backend Call using api.put (which we assume maps to the right endpoint based on services/api.ts)
-      // Actually updateBusinessProfile in services/api calls /api/settings
-      // But user requested "Refactor handleUpdateBusiness" with custom body.
-      // We will use the existing helper updateBusinessProfile or api.put directly if preferred.
-      // The instructions say: await api.put('/settings', data);
-
-      // Need to ensure 'data' matches what server expects.
+      // Direct Backend Call using api.put
       await api.put('/settings', data);
 
-      alert("Business updated successfully!");
+      addToast("Business updated successfully!", "success");
 
       // Update local state strictly after server confirms
       // We need to update both formData local state AND the parent App state via onUpdateBusiness
@@ -66,7 +62,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
       setTimeout(() => setShowSaved(false), 3000);
     } catch (e) {
       console.error("Update failed", e);
-      alert("Update failed. Please try again.");
+      addToast("Update failed. Please try again.", "error");
     } finally {
       setIsLoading(false);
     }
@@ -79,7 +75,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
     // Cleanup before submit
     // Prevent saving Blob URLs to database
     if (dataToSubmit.logo && dataToSubmit.logo.startsWith('blob:')) {
-      alert('Logo upload in progress or failed. Please wait or try again.');
+      addToast('Logo upload in progress or failed. Please wait or try again.', 'error');
       return;
     }
 
@@ -90,12 +86,12 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 200 * 1024) {
-        alert("Image too large. Max 200KB.");
+        addToast("Image too large. Max 200KB.", "error");
         return;
       }
 
       if (!isOnline) {
-        alert('Online required for logo change');
+        addToast('Online required for logo change', 'error');
         return;
       }
 
@@ -107,14 +103,9 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
       try {
           const url = await uploadFile(file);
           setFormData(prev => ({ ...prev, logo: url }));
-          // We don't save entire profile yet, user must click Update.
-          // OR does "Direct API" imply immediate save?
-          // The prompt for handleLogoUpload wasn't explicitly to "Direct Save",
-          // but usually logo upload acts as a staging step.
-          // However, the "Delete Logo" instruction implies immediate action.
       } catch (err) {
         console.error('Logo upload failed', err);
-        alert('Logo upload failed. Please check your connection.');
+        addToast('Logo upload failed. Please check your connection.', 'error');
         setFormData(prev => ({ ...prev, logo: business.logo }));
       }
     }
@@ -127,7 +118,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
 
   const togglePermission = async (key: string) => {
     if (!isOnline) {
-        alert('You must be online to change permissions.');
+        addToast('You must be online to change permissions.', 'error');
         return;
     }
 
@@ -144,7 +135,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
         }));
     } catch (err) {
         console.error('Failed to update permission', err);
-        alert('Failed to update permission. Please try again.');
+        addToast('Failed to update permission. Please try again.', 'error');
     }
   };
 
@@ -197,7 +188,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
 
   const handleGenerateDiscount = async () => {
     if (!isOnline) {
-      alert('Internet connection required to generate codes.');
+      addToast('Internet connection required to generate codes.', 'error');
       return;
     }
     setIsGenerating(true);
@@ -205,7 +196,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
       const code = await generateDiscountCode(discountForm);
       setGeneratedCode(code);
     } catch (err) {
-      alert('Failed to generate code');
+      addToast('Failed to generate code', 'error');
     } finally {
       setIsGenerating(false);
     }

@@ -310,7 +310,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-8">
         {/* Sales Chart */}
         <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border">
           <div className="flex items-center justify-between mb-6">
@@ -329,7 +329,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
               ))}
             </div>
           </div>
-          <div className="h-[300px]">
+          <div className="h-[300px] min-h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData}>
                 <defs>

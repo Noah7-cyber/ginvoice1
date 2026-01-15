@@ -298,29 +298,11 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     }
   };
 
-  // Mobile Indexer Logic
-  const [showIndexer, setShowIndexer] = useState(false);
-  const indexerTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
-
-  useEffect(() => {
-      const handleScroll = () => {
-          setShowIndexer(true);
-          if (indexerTimeoutRef.current) clearTimeout(indexerTimeoutRef.current);
-          indexerTimeoutRef.current = setTimeout(() => setShowIndexer(false), 2000);
-      };
-      window.addEventListener('scroll', handleScroll);
-      return () => {
-          window.removeEventListener('scroll', handleScroll);
-          if (indexerTimeoutRef.current) clearTimeout(indexerTimeoutRef.current);
-      };
-  }, []);
-
+  // Mobile Indexer Logic (Samsung Contacts Style)
   const scrollToLetter = (letter: string) => {
       const element = document.getElementById(`section-${letter}`);
       if (element) {
-          const yOffset = -100; // Header offset
-          const y = element.getBoundingClientRect().top + window.pageYOffset + yOffset;
-          window.scrollTo({ top: y, behavior: 'smooth' });
+          element.scrollIntoView({ behavior: 'auto', block: 'start' });
       }
   };
 
@@ -328,13 +310,13 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
   return (
     <div className="max-w-7xl mx-auto pb-24 relative">
-        {/* Mobile Indexer Overlay */}
-        <div className={`fixed right-1 top-1/2 -translate-y-1/2 z-50 flex flex-col gap-0.5 bg-black/40 backdrop-blur-sm p-1 rounded-full transition-opacity duration-300 md:hidden ${showIndexer ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+        {/* Mobile Alphabet Sidebar */}
+        <div className="fixed right-0 top-1/2 -translate-y-1/2 z-50 flex flex-col items-center gap-0.5 py-2 px-1 bg-transparent md:hidden h-auto max-h-[80vh] overflow-y-auto hide-scrollbar">
             {alphabet.map(char => (
                 <button
                    key={char}
                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); scrollToLetter(char); }}
-                   className="text-[9px] font-black text-white w-4 h-4 flex items-center justify-center rounded-full hover:bg-white/20"
+                   className="text-[10px] font-bold text-indigo-400 w-6 h-4 flex items-center justify-center hover:text-indigo-800 transition-colors"
                 >
                     {char}
                 </button>
@@ -613,17 +595,22 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
       </div>
 
       {/* Mobile Card View */}
-      <div className="md:hidden space-y-3">
+      <div className="md:hidden space-y-3 pb-10">
         {filteredProducts.map((product, index) => {
             // Check if this is the first item starting with this letter
             const firstChar = product.name.charAt(0).toUpperCase();
             const prevChar = index > 0 ? filteredProducts[index - 1].name.charAt(0).toUpperCase() : null;
             const showHeader = firstChar !== prevChar;
-            const headerId = `section-${/[A-Z]/.test(firstChar) ? firstChar : '#'}`;
+            const isAlpha = /[A-Z]/.test(firstChar);
+            const headerId = `section-${isAlpha ? firstChar : '#'}`;
 
             return (
               <React.Fragment key={product.id}>
-                {showHeader && <div id={headerId} className="scroll-mt-32"></div>}
+                {showHeader && (
+                    <div id={headerId} className="sticky top-0 z-10 bg-gray-50/95 backdrop-blur-sm py-2 px-4 -mx-4 mb-2 border-b border-gray-100 font-black text-gray-400 text-xs uppercase tracking-widest scroll-mt-40">
+                        {isAlpha ? firstChar : '#'}
+                    </div>
+                )}
                 <div
                     className={`bg-white p-4 rounded-2xl shadow-sm border flex flex-col gap-3 transition-colors ${selectedIds.has(product.id) ? 'ring-2 ring-primary bg-indigo-50/30' : ''}`}
                     onClick={() => isSelectionMode && toggleSelection(product.id)}
