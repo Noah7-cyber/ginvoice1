@@ -67,16 +67,28 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permis
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 pb-10">
         {filtered.length === 0 ? (
           <div className="col-span-full py-20 flex flex-col items-center text-gray-400">
             <Package size={48} className="opacity-20 mb-4" />
             <p className="font-bold">No products found</p>
           </div>
         ) : (
-          filtered.map(p => (
+          filtered.sort((a, b) => a.name.localeCompare(b.name)).map((p, index, arr) => {
+            const firstChar = p.name.charAt(0).toUpperCase();
+            const prevChar = index > 0 ? arr[index - 1].name.charAt(0).toUpperCase() : null;
+            const showHeader = firstChar !== prevChar;
+            const isAlpha = /[A-Z]/.test(firstChar);
+            const headerId = `section-${isAlpha ? firstChar : '#'}`;
+
+            return (
+              <React.Fragment key={p.id}>
+                 {showHeader && (
+                    <div id={headerId} className="col-span-full sticky top-0 z-10 bg-gray-50/95 backdrop-blur-sm py-2 px-4 -mx-4 sm:mx-0 sm:rounded-lg border-b border-gray-100 font-black text-gray-400 text-xs uppercase tracking-widest scroll-mt-40 md:hidden">
+                        {isAlpha ? firstChar : '#'}
+                    </div>
+                 )}
             <button
-              key={p.id}
               onClick={() => handleProductClick(p)}
               disabled={p.currentStock <= 0}
               className={`
@@ -108,8 +120,28 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permis
                 <Plus size={18} />
               </div>
             </button>
-          ))
+            </React.Fragment>
+          );
+         })
         )}
+      </div>
+
+       {/* Mobile Alphabet Sidebar */}
+       <div className="fixed right-0 top-1/2 -translate-y-1/2 z-50 flex flex-col items-center gap-0.5 py-2 px-1 bg-transparent md:hidden h-auto max-h-[80vh] overflow-y-auto hide-scrollbar">
+          {'#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(char => (
+              <button
+                  key={char}
+                  onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const el = document.getElementById(`section-${char}`);
+                      if (el) el.scrollIntoView({ behavior: 'auto', block: 'start' });
+                  }}
+                  className="text-[10px] font-bold text-indigo-400 w-6 h-4 flex items-center justify-center hover:text-indigo-800 transition-colors"
+              >
+                  {char}
+              </button>
+          ))}
       </div>
 
       {/* Unit Selection Modal */}

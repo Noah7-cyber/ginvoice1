@@ -131,7 +131,7 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
                  onChange={e => setNewCategoryName(e.target.value)}
                />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                <div>
                   <label className="text-[10px] font-bold text-gray-400 uppercase">Default Cost ({CURRENCY})</label>
                   <input
@@ -152,7 +152,7 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
                     onChange={e => setDefaultSelling(Number(e.target.value))}
                   />
                </div>
-               <div className="col-span-2">
+               <div className="col-span-1 sm:col-span-2">
                   <label className="text-[10px] font-bold text-gray-400 uppercase">Default Unit Type</label>
                   <input
                     type="text"
