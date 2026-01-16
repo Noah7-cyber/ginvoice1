@@ -5,6 +5,11 @@ const { MongoMemoryServer } = require('mongodb-memory-server');
 const app = require('../index');
 const Business = require('../models/Business');
 
+// Mock Mail Service
+jest.mock('../services/mail', () => ({
+  sendSystemEmail: jest.fn().mockResolvedValue({ sent: true })
+}));
+
 let mongoServer;
 
 beforeAll(async () => {

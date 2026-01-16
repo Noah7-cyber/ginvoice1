@@ -78,7 +78,9 @@ router.post('/register', async (req, res) => {
 
     if (email && rawToken) {
       try {
-        const baseUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
+        const protocol = req.protocol;
+        const host = req.get('host');
+        const baseUrl = process.env.BACKEND_URL || `${protocol}://${host}`;
         const verificationUrl = `${baseUrl}/api/auth/verify-link?token=${rawToken}`;
         const emailHtml = buildVerificationEmail({ verificationUrl, businessName: name });
 
@@ -310,7 +312,9 @@ router.post('/resend-verification', async (req, res) => {
     business.emailVerificationExpires = emailVerificationExpires;
     await business.save();
 
-    const baseUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
+    const protocol = req.protocol;
+    const host = req.get('host');
+    const baseUrl = process.env.BACKEND_URL || `${protocol}://${host}`;
     const verificationUrl = `${baseUrl}/api/auth/verify-link?token=${rawToken}`;
     const emailHtml = buildVerificationEmail({ verificationUrl, businessName: business.name });
 
