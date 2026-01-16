@@ -138,7 +138,7 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
                     type="number"
                     className="w-full px-3 py-2 border rounded-lg text-sm"
                     placeholder="0"
-                    value={defaultCost}
+                    value={defaultCost || ''}
                     onChange={e => setDefaultCost(Number(e.target.value))}
                   />
                </div>
@@ -148,7 +148,7 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
                     type="number"
                     className="w-full px-3 py-2 border rounded-lg text-sm"
                     placeholder="0"
-                    value={defaultSelling}
+                    value={defaultSelling || ''}
                     onChange={e => setDefaultSelling(Number(e.target.value))}
                   />
                </div>
