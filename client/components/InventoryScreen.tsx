@@ -6,6 +6,7 @@ import { formatCurrency } from '../utils/currency';
 import { deleteProduct, createProduct, updateProduct, getCategories } from '../services/api';
 import { useToast } from './ToastProvider';
 import CategoryManager from './CategoryManager';
+import AlphabetScrubber from './AlphabetScrubber';
 
 interface InventoryScreenProps {
   products: Product[];
@@ -306,21 +307,11 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
       }
   };
 
-  const alphabet = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-
   return (
     <div className="max-w-7xl mx-auto pb-24 relative">
-        {/* Mobile Alphabet Sidebar */}
-        <div className="fixed right-0 top-1/2 -translate-y-1/2 z-50 flex flex-col items-center gap-0.5 py-2 px-1 bg-transparent md:hidden h-auto max-h-[80vh] overflow-y-auto hide-scrollbar">
-            {alphabet.map(char => (
-                <button
-                   key={char}
-                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); scrollToLetter(char); }}
-                   className="text-[10px] font-bold text-indigo-400 w-6 h-4 flex items-center justify-center hover:text-indigo-800 transition-colors"
-                >
-                    {char}
-                </button>
-            ))}
+        {/* New Invisible Scrubber */}
+        <div className="md:hidden">
+            <AlphabetScrubber onScrollTo={scrollToLetter} />
         </div>
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
@@ -899,15 +890,33 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Buying Price ({CURRENCY})</label>
-                  <input required type="number" className="w-full px-4 py-3 rounded-xl border" value={newProduct.costPrice} onChange={e => setNewProduct({...newProduct, costPrice: Number(e.target.value)})} />
+                  <input
+                    required
+                    type="number"
+                    className="w-full px-4 py-3 rounded-xl border"
+                    value={newProduct.costPrice || ''}
+                    onChange={e => setNewProduct({...newProduct, costPrice: Number(e.target.value)})}
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Selling Price ({CURRENCY})</label>
-                  <input required type="number" className="w-full px-4 py-3 rounded-xl border" value={newProduct.sellingPrice} onChange={e => setNewProduct({...newProduct, sellingPrice: Number(e.target.value)})} />
+                  <input
+                    required
+                    type="number"
+                    className="w-full px-4 py-3 rounded-xl border"
+                    value={newProduct.sellingPrice || ''}
+                    onChange={e => setNewProduct({...newProduct, sellingPrice: Number(e.target.value)})}
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Quantity Left</label>
-                  <input required type="number" className="w-full px-4 py-3 rounded-xl border" value={newProduct.currentStock} onChange={e => setNewProduct({...newProduct, currentStock: Number(e.target.value)})} />
+                  <input
+                    required
+                    type="number"
+                    className="w-full px-4 py-3 rounded-xl border"
+                    value={newProduct.currentStock || ''}
+                    onChange={e => setNewProduct({...newProduct, currentStock: Number(e.target.value)})}
+                  />
                 </div>
               </div>
               <div className="pt-4 flex gap-3">

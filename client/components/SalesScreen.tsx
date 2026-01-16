@@ -4,6 +4,7 @@ import { Search, Plus, Package, ShoppingCart } from 'lucide-react';
 import { Product, ProductUnit } from '../types';
 import { CURRENCY } from '../constants';
 import { formatCurrency } from '../utils/currency';
+import AlphabetScrubber from './AlphabetScrubber';
 
 interface SalesScreenProps {
   products: Product[];
@@ -126,23 +127,15 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permis
         )}
       </div>
 
-       {/* Mobile Alphabet Sidebar */}
-       <div className="fixed right-0 top-1/2 -translate-y-1/2 z-50 flex flex-col items-center gap-0.5 py-2 px-1 bg-transparent md:hidden h-auto max-h-[80vh] overflow-y-auto hide-scrollbar">
-          {'#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(char => (
-              <button
-                  key={char}
-                  onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      const el = document.getElementById(`section-${char}`);
-                      if (el) el.scrollIntoView({ behavior: 'auto', block: 'start' });
-                  }}
-                  className="text-[10px] font-bold text-indigo-400 w-6 h-4 flex items-center justify-center hover:text-indigo-800 transition-colors"
-              >
-                  {char}
-              </button>
-          ))}
-      </div>
+       {/* Mobile Invisible Scrubber */}
+       <div className="md:hidden">
+         <AlphabetScrubber
+           onScrollTo={(letter) => {
+              const el = document.getElementById(`section-${letter}`);
+              if (el) el.scrollIntoView({ behavior: 'auto', block: 'start' });
+           }}
+         />
+       </div>
 
       {/* Unit Selection Modal */}
       {selectedProduct && (
