@@ -381,6 +381,14 @@ const App: React.FC = () => {
 
     } catch (err: any) {
       console.error('Manual login failed', err);
+
+      if (err.status === 403 && err.data?.requiresVerification) {
+        setPendingVerificationEmail(credentials.email);
+        addToast('Please verify your email to continue. We have sent you a code.', 'info');
+        setIsLoading(false);
+        return;
+      }
+
       addToast(err.message || 'Login failed. Check your credentials.', 'error');
       setIsLoading(false);
       setState(prev => ({ ...prev, isLoggedIn: false }));
@@ -415,9 +423,10 @@ const App: React.FC = () => {
       }
     } catch (err: any) {
       console.error('Login failed', err);
-      // Handle verification required check
-      if (err.data?.requiresVerification) {
+
+      if ((err.status === 403 && err.data?.requiresVerification) || err.message?.toLowerCase().includes('verify')) {
           setPendingVerificationEmail(state.business.email);
+          addToast('Please verify your email to continue. We have sent you a code.', 'info');
           return false;
       }
     }
