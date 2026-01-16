@@ -43,6 +43,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
       totalSales: number;
       cashSales: number;
       transferSales: number;
+      posSales: number;
       shopCost: number;
       shopWorth: number;
       dailyRevenue: number;
@@ -120,7 +121,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
     }, 0);
 
     const cashSales = transactions.filter(t => t.paymentMethod === 'cash').length;
-    const transferSales = transactions.filter(t => t.paymentMethod === 'transfer').length;
+    const transferSales = transactions.filter(t => ['transfer', 'bank'].includes(t.paymentMethod)).length;
+    const posSales = transactions.filter(t => t.paymentMethod === 'pos').length;
 
     // Calculate Shop Cost & Worth locally
     const shopCost = products.reduce((sum, p) => sum + safeCalculate(p.costPrice, p.currentStock), 0);
@@ -133,7 +135,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
         'totalAmount'
     );
 
-    return { totalRevenue, totalProfit, totalSales: transactions.length, cashSales, transferSales, totalDebt, shopCost, shopWorth, dailyRevenue };
+    return { totalRevenue, totalProfit, totalSales: transactions.length, cashSales, transferSales, posSales, totalDebt, shopCost, shopWorth, dailyRevenue };
   }, [transactions, products]);
 
   // Hybrid Stats Logic: Merge remote and local
@@ -386,6 +388,21 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
                 <div 
                   className="bg-blue-500 h-2 rounded-full" 
                   style={{ width: `${(stats.transferSales / (stats.totalSales || 1)) * 100}%` }}
+                ></div>
+              </div>
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center text-purple-600">
+                    <CreditCard size={18} />
+                  </div>
+                  <span className="text-sm font-medium text-gray-600">POS</span>
+                </div>
+                <span className="font-bold">{stats.posSales || 0}</span>
+              </div>
+              <div className="w-full bg-gray-100 rounded-full h-2">
+                <div
+                  className="bg-purple-500 h-2 rounded-full"
+                  style={{ width: `${((stats.posSales || 0) / (stats.totalSales || 1)) * 100}%` }}
                 ></div>
               </div>
             </div>

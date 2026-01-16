@@ -67,7 +67,10 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
               $sum: { $cond: [{ $eq: ['$paymentMethod', 'cash'] }, 1, 0] }
             },
             transferSales: {
-              $sum: { $cond: [{ $eq: ['$paymentMethod', 'transfer'] }, 1, 0] }
+              $sum: { $cond: [{ $in: ['$paymentMethod', ['transfer', 'bank']] }, 1, 0] }
+            },
+            posSales: {
+              $sum: { $cond: [{ $eq: ['$paymentMethod', 'pos'] }, 1, 0] }
             }
           }
         },
@@ -158,7 +161,7 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
       ])
     ]);
 
-    const stats = summaryStats[0] || { totalRevenue: 0, totalDebt: 0, totalSales: 0, cashSales: 0, transferSales: 0 };
+    const stats = summaryStats[0] || { totalRevenue: 0, totalDebt: 0, totalSales: 0, cashSales: 0, transferSales: 0, posSales: 0 };
     const curRev = currentMonthStats[0]?.revenue || 0;
     const prevRev = previousMonthStats[0]?.revenue || 0;
 
@@ -332,6 +335,7 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
         totalSales: stats.totalSales,
         cashSales: stats.cashSales,
         transferSales: stats.transferSales,
+        posSales: stats.posSales,
         shopCost: toNumber(shopCost),
         shopWorth: toNumber(shopWorth),
         // Carousel Data

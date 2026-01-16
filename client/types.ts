@@ -67,7 +67,7 @@ export interface Product {
   isManualUpdate?: boolean; // Flag to indicate if stock was manually adjusted
 }
 
-export type PaymentMethod = 'cash' | 'transfer' | 'credit';
+export type PaymentMethod = 'cash' | 'transfer' | 'pos' | 'bank' | 'credit';
 
 export interface SaleItem {
   cartId: string; // Unique ID for cart management

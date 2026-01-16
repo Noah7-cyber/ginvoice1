@@ -21,7 +21,7 @@ const TransactionSchema = new mongoose.Schema({
   subtotal: { type: Number, default: 0 },
   globalDiscount: { type: Number, default: 0 },
   totalAmount: { type: Number, default: 0 },
-  paymentMethod: { type: String },
+  paymentMethod: { type: String, enum: ['cash', 'transfer', 'pos', 'bank', 'credit'], default: 'cash' },
   amountPaid: { type: Number, default: 0 },
   balance: { type: Number, default: 0 },
   signature: { type: String },
