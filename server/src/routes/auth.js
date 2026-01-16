@@ -78,8 +78,8 @@ router.post('/register', async (req, res) => {
 
     if (email && rawToken) {
       try {
-        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-        const verificationUrl = `${frontendUrl}/verify-email?token=${rawToken}`;
+        const baseUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
+        const verificationUrl = `${baseUrl}/api/auth/verify-link?token=${rawToken}`;
         const emailHtml = buildVerificationEmail({ verificationUrl, businessName: name });
 
         // Enforce 10-second timeout for email to prevent hanging
@@ -242,11 +242,13 @@ router.post('/reset-password', async (req, res) => {
   }
 });
 
-// NEW: Verify Email Endpoint
-router.get('/verify-email', async (req, res) => {
+// NEW: Verify Email Endpoint (Backend Redirect)
+router.get('/verify-link', async (req, res) => {
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+
   try {
     const { token } = req.query;
-    if (!token) return res.status(400).json({ message: 'Missing token' });
+    if (!token) return res.redirect(`${frontendUrl}?error=invalid_token`);
 
     const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
 
@@ -256,7 +258,7 @@ router.get('/verify-email', async (req, res) => {
     });
 
     if (!business) {
-      return res.status(400).json({ message: 'Invalid or expired verification token' });
+      return res.redirect(`${frontendUrl}?error=invalid_token`);
     }
 
     business.emailVerified = true;
@@ -275,10 +277,10 @@ router.get('/verify-email', async (req, res) => {
       });
     }
 
-    return res.json({ message: 'Email verified successfully', success: true });
+    return res.redirect(`${frontendUrl}?verified=true`);
   } catch (err) {
     console.error('Email verification error:', err);
-    return res.status(500).json({ message: 'Verification failed' });
+    return res.redirect(`${frontendUrl}?error=server_error`);
   }
 });
 
@@ -308,8 +310,8 @@ router.post('/resend-verification', async (req, res) => {
     business.emailVerificationExpires = emailVerificationExpires;
     await business.save();
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    const verificationUrl = `${frontendUrl}/verify-email?token=${rawToken}`;
+    const baseUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
+    const verificationUrl = `${baseUrl}/api/auth/verify-link?token=${rawToken}`;
     const emailHtml = buildVerificationEmail({ verificationUrl, businessName: business.name });
 
     await sendSystemEmail({
