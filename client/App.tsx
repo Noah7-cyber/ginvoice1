@@ -77,6 +77,18 @@ const App: React.FC = () => {
   const { status: wakeStatus } = useServerWakeup();
   const wakeToastShownRef = useRef(false);
 
+  // Email Verification Feedback
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('verified') === 'true') {
+      addToast('Email verified successfully! You can now login.', 'success');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (params.get('error') === 'invalid_token') {
+      addToast('Verification link invalid or expired.', 'error');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, [addToast]);
+
   useEffect(() => {
     if (wakeStatus === 'waking' && !wakeToastShownRef.current) {
       addToast('Waking up cloud sync server...', 'info');
