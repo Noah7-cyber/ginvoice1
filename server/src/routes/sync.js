@@ -261,4 +261,54 @@ router.get('/fix-ids', auth, async (req, res) => {
   }
 });
 
+// 3. DELETE Routes (Missing in original sync)
+router.delete('/products/:id', auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const businessId = req.businessId;
+    await Product.deleteOne({ businessId, id });
+    res.json({ success: true, id });
+  } catch (err) {
+    res.status(500).json({ message: 'Delete failed' });
+  }
+});
+
+router.delete('/transactions/:id', auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const businessId = new mongoose.Types.ObjectId(req.businessId); // Transactions use ObjectId
+
+    // Check if restock is requested
+    if (req.query.restock === 'true') {
+        const transaction = await Transaction.findOne({ businessId, id });
+        if (transaction && transaction.items) {
+            // Restore stock
+            for (const item of transaction.items) {
+                 await Product.updateOne(
+                    { businessId: req.businessId, id: item.productId },
+                    { $inc: { stock: item.quantity } }
+                 );
+            }
+        }
+    }
+
+    await Transaction.deleteOne({ businessId, id });
+    res.json({ success: true, id });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Delete failed' });
+  }
+});
+
+router.delete('/expenditures/:id', auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const businessId = req.businessId;
+    await Expenditure.deleteOne({ business: businessId, id });
+    res.json({ success: true, id });
+  } catch (err) {
+    res.status(500).json({ message: 'Delete failed' });
+  }
+});
+
 module.exports = router;

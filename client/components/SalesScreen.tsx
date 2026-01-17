@@ -106,7 +106,12 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permis
               
               <div className="flex-1 min-w-0">
                 <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest truncate">{p.category}</p>
-                <h3 className="font-bold text-gray-900 truncate leading-tight mb-1">{p.name}</h3>
+                <div className="mb-1">
+                    <h3 className="font-bold text-gray-900 truncate leading-tight">{p.name}</h3>
+                    {(p.sku || p.id) && (
+                        <p className="text-[10px] text-gray-400 font-medium font-mono">#{p.sku || p.id.slice(-5)}</p>
+                    )}
+                </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-black text-primary">{formatCurrency(p.sellingPrice)}</span>
                   <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
