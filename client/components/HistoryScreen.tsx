@@ -4,7 +4,8 @@ import {
   Search, 
   Trash2, 
   Edit3, 
-  Calendar, 
+  Calendar,
+  Tag,
   User, 
   ArrowRight, 
   Download, 
@@ -41,6 +42,8 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
   const { addToast } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>('invoices');
   const [searchTerm, setSearchTerm] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editAmountPaid, setEditAmountPaid] = useState<number>(0);
   const [editCustomerName, setEditCustomerName] = useState<string>('');
@@ -51,10 +54,23 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
   const [isDeleting, setIsDeleting] = useState(false);
   const [shouldRestock, setShouldRestock] = useState(true);
 
-  const filteredInvoices = transactions.filter(t => 
-    t.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    t.id.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredInvoices = transactions.filter(t => {
+    const matchesSearch = t.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          t.id.toLowerCase().includes(searchTerm.toLowerCase());
+
+    let matchesDate = true;
+    if (startDate) {
+        matchesDate = matchesDate && new Date(t.transactionDate) >= new Date(startDate);
+    }
+    if (endDate) {
+        // End of day
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        matchesDate = matchesDate && new Date(t.transactionDate) <= end;
+    }
+
+    return matchesSearch && matchesDate;
+  });
 
   // Aggregated Debtors Ledger
   const debtorsLedger = useMemo(() => {
@@ -214,6 +230,34 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
         </div>
       </div>
 
+      {/* Date Filters */}
+      {viewMode === 'invoices' && (
+        <div className="flex gap-4 items-center bg-white p-3 rounded-xl border w-fit">
+            <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-gray-500 uppercase">From</span>
+                <input
+                    type="date"
+                    className="bg-gray-50 border rounded-lg px-2 py-1 text-sm font-bold text-gray-700"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                />
+            </div>
+            <ArrowRight size={16} className="text-gray-300" />
+            <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-gray-500 uppercase">To</span>
+                <input
+                    type="date"
+                    className="bg-gray-50 border rounded-lg px-2 py-1 text-sm font-bold text-gray-700"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                />
+            </div>
+            {(startDate || endDate) && (
+                <button onClick={() => { setStartDate(''); setEndDate(''); }} className="text-xs font-bold text-red-500 hover:underline ml-2">Clear</button>
+            )}
+        </div>
+      )}
+
       {/* Main List */}
       <div className="grid gap-4">
         {viewMode === 'invoices' ? (
@@ -247,6 +291,15 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
                           <p className="text-xs text-gray-400">ID: {t.id} • {new Date(t.transactionDate).toLocaleDateString()}</p>
                         </div>
                       </div>
+
+                      {/* Discount Badge */}
+                      {(t.globalDiscount > 0 || t.items.some(i => i.discount > 0)) && (
+                          <div className="hidden sm:flex items-center gap-1 px-2 py-1 bg-yellow-50 text-yellow-700 rounded-lg border border-yellow-100 self-center">
+                              <Tag size={12} />
+                              <span className="text-[10px] font-bold uppercase">Discount Applied</span>
+                          </div>
+                      )}
+
                       <div className="lg:hidden text-right">
                          <p className="text-lg font-black">{CURRENCY}{t.totalAmount.toLocaleString()}</p>
                          <p className={`text-[10px] font-bold uppercase ${t.balance > 0 ? 'text-red-500' : 'text-green-500'}`}>
@@ -261,6 +314,13 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
                           {item.quantity}x {item.productName}
                         </span>
                       ))}
+                       {/* Mobile Discount Badge */}
+                       {(t.globalDiscount > 0 || t.items.some(i => i.discount > 0)) && (
+                          <div className="sm:hidden flex items-center gap-1 px-2 py-1 bg-yellow-50 text-yellow-700 rounded-lg border border-yellow-100">
+                              <Tag size={12} />
+                              <span className="text-[10px] font-bold uppercase">Discount</span>
+                          </div>
+                      )}
                     </div>
                   </div>
 

@@ -16,11 +16,15 @@ const AlphabetScrubber: React.FC<AlphabetScrubberProps> = ({ onScrollTo, classNa
   const handleInteraction = useCallback((clientY: number) => {
     if (!trackRef.current) return;
     const { top, height } = trackRef.current.getBoundingClientRect();
-    const relativeY = clientY - top;
+
+    // Adjust for padding (py-2 which is approx 8px top/bottom)
+    const padding = 8;
+    const contentHeight = height - (padding * 2);
+    const relativeY = clientY - top - padding;
 
     // Calculate index based on height
     // Clamp between 0 and 1
-    const percentage = Math.max(0, Math.min(1, relativeY / height));
+    const percentage = Math.max(0, Math.min(1, relativeY / contentHeight));
     const index = Math.floor(percentage * ALPHABET.length);
     const safeIndex = Math.min(index, ALPHABET.length - 1);
 

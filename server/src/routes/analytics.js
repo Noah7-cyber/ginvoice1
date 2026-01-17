@@ -117,19 +117,21 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
       ]),
 
       // 6. Inventory Valuation (Shop Cost & Shop Worth)
+      // FIX: Product schema uses String `businessId` while Transaction uses ObjectId.
+      // We must use the string version for Product aggregations.
       Product.aggregate([
-        { $match: { businessId } }, // Fixed: uses ObjectId `businessId` instead of `req.businessId` string
+        { $match: { businessId: req.businessId } },
         {
           $group: {
             _id: null,
             shopCost: {
               $sum: {
-                $multiply: [ '$stock', { $toDouble: '$costPrice' } ]
+                $multiply: [ '$currentStock', { $toDouble: '$costPrice' } ] // User requested change $stock -> $currentStock
               }
             },
             shopWorth: {
               $sum: {
-                $multiply: [ '$stock', { $toDouble: '$sellingPrice' } ]
+                $multiply: [ '$currentStock', { $toDouble: '$sellingPrice' } ] // User requested change $stock -> $currentStock
               }
             }
           }
