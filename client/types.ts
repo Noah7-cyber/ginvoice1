@@ -58,6 +58,7 @@ export interface ProductUnit {
 export interface Product {
   id: string;
   name: string;
+  sku?: string;
   category: string;
   costPrice: number;     // NOTE: client uses integers (kobo) when interacting with server
   sellingPrice: number;  // stored as integer kobo values when synced

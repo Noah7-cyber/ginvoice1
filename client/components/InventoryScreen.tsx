@@ -70,6 +70,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
   const initialProductState: Partial<Product> = {
     name: '',
+    sku: '',
     category: allCategoryNames[0] || 'Uncategorized',
     costPrice: 0,
     sellingPrice: 0,
@@ -159,7 +160,10 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
       return;
     }
     setEditingProductId(null);
-    setNewProduct(initialProductState);
+    setNewProduct({
+      ...initialProductState,
+      sku: Date.now().toString().slice(-5) // Default 5-digit SKU
+    });
     setIsModalOpen(true);
   };
 
@@ -198,7 +202,15 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
              const updatedProducts = products.map(p => p.id === editingProductId ? updatedItem : p);
              onUpdateProducts(updatedProducts);
         } else {
-             const newItem: Product = { ...(newProduct as Product), id: `PRD-${Date.now()}`, isManualUpdate: true };
+             // Fix: Sanitize numeric fields to prevent crashes if empty
+             const sanitizedProduct = {
+               ...newProduct,
+               costPrice: Number(newProduct.costPrice) || 0,
+               sellingPrice: Number(newProduct.sellingPrice) || 0,
+               currentStock: Number(newProduct.currentStock) || 0,
+             } as Product;
+
+             const newItem: Product = { ...sanitizedProduct, id: `PRD-${Date.now()}`, isManualUpdate: true };
              await createProduct(newItem);
              onUpdateProducts([...products, newItem]);
         }
@@ -488,7 +500,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                   </td>
                   <td className="px-6 py-4">
                     <div className="font-bold text-gray-900">{product.name}</div>
-                    <div className="text-[10px] text-gray-400 font-medium">#{product.id.slice(-5)}</div>
+                    <div className="text-[10px] text-gray-400 font-medium">#{product.sku || product.id.slice(-5)}</div>
                   </td>
                   <td className="px-6 py-4 hidden sm:table-cell">
                     <span className="px-2 py-1 bg-white border rounded text-[10px] font-bold uppercase text-gray-500">
@@ -618,7 +630,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                    )}
                     <div>
                       <h3 className="font-bold text-gray-900">{product.name}</h3>
-                      <p className="text-xs text-gray-400">#{product.id.slice(-5)}</p>
+                      <p className="text-xs text-gray-400">#{product.sku || product.id.slice(-5)}</p>
                     </div>
                 </div>
                 <span className="px-2 py-1 bg-gray-100 rounded text-[10px] font-bold uppercase text-gray-500">
@@ -783,12 +795,31 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Product Name</label>
                 <input required type="text" className="w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary outline-none" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} placeholder="e.g. OMO Detergent" />
               </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">SKU / Code</label>
+                <input
+                   type="text"
+                   className="w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary outline-none font-mono"
+                   value={newProduct.sku || ''}
+                   onChange={e => setNewProduct({...newProduct, sku: e.target.value})}
+                   placeholder="e.g. 12345"
+                />
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Category</label>
-                  <select className="w-full px-4 py-3 rounded-xl border" value={newProduct.category} onChange={e => handleCategoryChange(e.target.value)}>
-                    {allCategoryNames.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                  </select>
+                  <input
+                    list="category-suggestions"
+                    className="w-full px-4 py-3 rounded-xl border"
+                    value={newProduct.category}
+                    onChange={e => handleCategoryChange(e.target.value)}
+                    placeholder="Type or select..."
+                  />
+                  <datalist id="category-suggestions">
+                    {allCategoryNames.map(cat => <option key={cat} value={cat} />)}
+                  </datalist>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Sold By</label>
@@ -891,7 +922,6 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Buying Price ({CURRENCY})</label>
                   <input
-                    required
                     type="number"
                     className="w-full px-4 py-3 rounded-xl border"
                     value={newProduct.costPrice || ''}
@@ -901,7 +931,6 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Selling Price ({CURRENCY})</label>
                   <input
-                    required
                     type="number"
                     className="w-full px-4 py-3 rounded-xl border"
                     value={newProduct.sellingPrice || ''}
@@ -911,7 +940,6 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Quantity Left</label>
                   <input
-                    required
                     type="number"
                     className="w-full px-4 py-3 rounded-xl border"
                     value={newProduct.currentStock || ''}
