@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Edit3, Trash2, CheckCircle2, X, ListTodo, Layers, Tag, DollarSign, ArrowUp, Maximize2, Save, Loader2, Calculator } from 'lucide-react';
+import { Plus, Search, Edit3, Trash2, CheckCircle2, X, ListTodo, Layers, Tag, DollarSign, ArrowUp, Maximize2, Save, Loader2, Calculator, SlidersHorizontal } from 'lucide-react';
 import { Product, Category } from '../types';
 import { CURRENCY } from '../constants';
 import { formatCurrency } from '../utils/currency';
@@ -39,6 +39,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   const [maxPrice, setMaxPrice] = useState<number | ''>('');
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
 
   // Category Management
   const [categories, setCategories] = useState<Category[]>([]);
@@ -330,8 +331,8 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
             <AlphabetScrubber onScrollTo={scrollToLetter} />
         </div>
 
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 shrink-0">
-        <div>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2 md:mb-8 shrink-0">
+        <div className="hidden md:block">
           <h1 className="text-2xl font-bold text-gray-900">Manage Stock</h1>
           <p className="text-gray-500">Add or edit items in your shop</p>
         </div>
@@ -341,7 +342,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                onClick={() => setIsCategoryManagerOpen(true)}
                className="bg-white text-gray-700 px-4 py-3 rounded-xl flex items-center gap-2 font-bold border hover:bg-gray-50 transition-all"
              >
-               <Tag size={20} /> Manage Categories
+               <Tag size={20} /> <span className="hidden md:inline">Manage Categories</span>
              </button>
            )}
 
@@ -352,7 +353,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
               className={`bg-indigo-50 text-indigo-700 px-6 py-3 rounded-xl flex items-center gap-2 font-bold border border-indigo-200 hover:bg-indigo-100 transition-all ${!navigator.onLine ? 'opacity-50 cursor-not-allowed' : ''}`}
               title={!navigator.onLine ? "Internet connection required for bulk updates." : ""}
             >
-              <ListTodo size={20} /> Edit Many Items ({selectedIds.size})
+              <ListTodo size={20} /> Edit Many ({selectedIds.size})
             </button>
           )}
           {!safeReadOnly && (
@@ -360,31 +361,44 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
               onClick={handleAddNew}
               className="bg-primary text-white px-6 py-3 rounded-xl flex items-center gap-2 font-bold shadow-lg shadow-indigo-100 hover:opacity-90 transition-all active:scale-95"
             >
-              <Plus size={20} /> Add New
+              <Plus size={20} /> <span className="hidden md:inline">Add New</span>
             </button>
           )}
         </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-white p-4 rounded-2xl shadow-sm border mb-6 flex flex-col gap-4 shrink-0">
-        <div className="flex flex-col md:flex-row gap-4 items-center">
-            <div className="relative flex-1 w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-            <input
-                type="text"
-                list="inventory-suggestions"
-                placeholder="Search products..."
-                className="w-full pl-10 pr-4 py-2 bg-gray-50 border-none rounded-lg focus:ring-2 focus:ring-primary outline-none"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-            />
-            <datalist id="inventory-suggestions">
-              {products.map(p => <option key={p.id} value={p.name} />)}
-            </datalist>
+      <div className="bg-white p-4 rounded-2xl shadow-sm border mb-6 flex flex-col gap-4 shrink-0 sticky top-0 z-20">
+
+        {/* Row 1: Search + Toggle */}
+        <div className="flex gap-2 items-center">
+             <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                <input
+                    type="text"
+                    list="inventory-suggestions"
+                    placeholder="Search products..."
+                    className="w-full pl-10 pr-4 py-2 bg-gray-50 border-none rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                />
+                <datalist id="inventory-suggestions">
+                {products.map(p => <option key={p.id} value={p.name} />)}
+                </datalist>
             </div>
+            <button
+                onClick={() => setIsFiltersOpen(!isFiltersOpen)}
+                className={`md:hidden p-2 rounded-lg border ${isFiltersOpen ? 'bg-primary text-white' : 'bg-gray-50 text-gray-600'}`}
+            >
+                <SlidersHorizontal size={20} />
+            </button>
+        </div>
+
+        {/* Row 2: Collapsible Filters */}
+        <div className={`${isFiltersOpen ? 'flex' : 'hidden'} md:flex flex-col md:flex-row gap-4 items-center animate-in slide-in-from-top-2 md:animate-none`}>
+
             <select
-            className="bg-gray-50 border-none rounded-lg px-4 py-2 text-sm font-medium focus:ring-2 focus:ring-primary outline-none"
+            className="w-full md:w-auto bg-gray-50 border-none rounded-lg px-4 py-2 text-sm font-medium focus:ring-2 focus:ring-primary outline-none"
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
             >
@@ -393,25 +407,25 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
             </select>
 
             {/* Price Range Filters */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full md:w-auto">
                 <input
                     type="number"
-                    placeholder="Min Price"
-                    className="w-24 px-3 py-2 bg-gray-50 border-none rounded-lg text-sm"
+                    placeholder="Min"
+                    className="flex-1 md:w-24 px-3 py-2 bg-gray-50 border-none rounded-lg text-sm"
                     value={minPrice}
                     onChange={e => setMinPrice(e.target.value ? Number(e.target.value) : '')}
                 />
                 <span className="text-gray-400">-</span>
                 <input
                     type="number"
-                    placeholder="Max Price"
-                    className="w-24 px-3 py-2 bg-gray-50 border-none rounded-lg text-sm"
+                    placeholder="Max"
+                    className="flex-1 md:w-24 px-3 py-2 bg-gray-50 border-none rounded-lg text-sm"
                     value={maxPrice}
                     onChange={e => setMaxPrice(e.target.value ? Number(e.target.value) : '')}
                 />
             </div>
 
-            <div className="flex items-center gap-2 px-2 whitespace-nowrap">
+            <div className="flex items-center gap-2 px-2 whitespace-nowrap w-full md:w-auto">
                 <input
                     type="checkbox"
                     id="lowStock"
@@ -429,24 +443,24 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                 />
                 <span className="text-sm font-bold text-gray-600">)</span>
             </div>
-        </div>
 
-        {/* Selection Toggle */}
-        <div className="flex justify-between md:hidden">
-             <button
-                onClick={() => setIsSelectionMode(!isSelectionMode)}
-                className={`px-4 py-2 rounded-lg text-sm font-bold ${isSelectionMode ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'}`}
-             >
-                {isSelectionMode ? 'Done' : 'Select Items'}
-             </button>
-             {isSelectionMode && (
+            {/* Selection Toggle (Moved inside Collapsible Area for Compactness) */}
+            <div className="flex justify-between md:hidden w-full border-t pt-4">
                 <button
-                    onClick={selectAll}
-                    className="px-4 py-2 bg-gray-100 rounded-lg text-sm font-bold text-gray-600"
+                    onClick={() => setIsSelectionMode(!isSelectionMode)}
+                    className={`flex-1 px-4 py-2 rounded-lg text-sm font-bold ${isSelectionMode ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'}`}
                 >
-                    {selectedIds.size === filteredProducts.length ? 'Deselect All' : 'Select All'}
+                    {isSelectionMode ? 'Done Selecting' : 'Select Items'}
                 </button>
-             )}
+                {isSelectionMode && (
+                    <button
+                        onClick={selectAll}
+                        className="ml-2 px-4 py-2 bg-gray-100 rounded-lg text-sm font-bold text-gray-600"
+                    >
+                        {selectedIds.size === filteredProducts.length ? 'Deselect All' : 'Select All'}
+                    </button>
+                )}
+            </div>
         </div>
       </div>
 
