@@ -10,6 +10,7 @@ const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 const AlphabetScrubber: React.FC<AlphabetScrubberProps> = ({ onScrollTo, className }) => {
   const [activeLetter, setActiveLetter] = useState<string | null>(null);
   const [isInteracting, setIsInteracting] = useState(false);
+  const [touchY, setTouchY] = useState(0);
   const trackRef = useRef<HTMLDivElement>(null);
   const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -30,6 +31,8 @@ const AlphabetScrubber: React.FC<AlphabetScrubberProps> = ({ onScrollTo, classNa
 
     const letter = ALPHABET[safeIndex];
 
+    setTouchY(clientY); // Update touch position for bubble
+
     if (letter !== activeLetter) {
         setActiveLetter(letter);
         onScrollTo(letter);
@@ -41,13 +44,11 @@ const AlphabetScrubber: React.FC<AlphabetScrubberProps> = ({ onScrollTo, classNa
 
   const onTouchStart = (e: React.TouchEvent) => {
     setIsInteracting(true);
-    handleInteraction(e.touches[0].clientY);
+    handleInteraction(e.touches[0].clientY); // Immediate trigger
     if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current);
   };
 
   const onTouchMove = (e: React.TouchEvent) => {
-    // Prevent default scroll
-    // e.preventDefault(); // Might interfere with passive listeners, better handled by CSS touch-action
     handleInteraction(e.touches[0].clientY);
   };
 
@@ -76,7 +77,7 @@ const AlphabetScrubber: React.FC<AlphabetScrubberProps> = ({ onScrollTo, classNa
       {/* The Track */}
       <div
         ref={trackRef}
-        className={`fixed right-0 top-20 bottom-24 w-6 z-[60] flex flex-col items-center justify-between py-2 touch-none select-none transition-opacity duration-300 ${isInteracting ? 'opacity-100 bg-black/5' : 'opacity-0 hover:opacity-100'}`}
+        className={`fixed right-0 top-20 bottom-24 w-8 z-[60] flex flex-col items-center justify-between py-2 touch-none select-none transition-opacity duration-300 ${isInteracting ? 'opacity-100 bg-black/5' : 'opacity-0 hover:opacity-100'}`}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
@@ -90,11 +91,16 @@ const AlphabetScrubber: React.FC<AlphabetScrubberProps> = ({ onScrollTo, classNa
          ))}
       </div>
 
-      {/* The Pop-Up Bubble */}
+      {/* The Pop-Up Bubble (Side Indicator) */}
       {activeLetter && isInteracting && (
-        <div className="fixed inset-0 pointer-events-none z-[70] flex items-center justify-center">
-            <div className="w-24 h-24 bg-primary rounded-full shadow-2xl flex items-center justify-center animate-in zoom-in fade-in duration-200">
-                <span className="text-5xl font-black text-white">{activeLetter}</span>
+        <div
+            className="fixed right-12 z-[70] pointer-events-none flex items-center justify-center animate-in zoom-in fade-in duration-150"
+            style={{ top: touchY - 24 }} // Center vertically on touch
+        >
+            <div className="w-12 h-12 bg-primary text-white rounded-full shadow-xl flex items-center justify-center relative">
+                <span className="text-xl font-black">{activeLetter}</span>
+                {/* Little triangle pointing right */}
+                <div className="absolute -right-1 top-1/2 -translate-y-1/2 w-3 h-3 bg-primary rotate-45 transform origin-center"></div>
             </div>
         </div>
       )}

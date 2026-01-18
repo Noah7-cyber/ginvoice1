@@ -11,6 +11,7 @@ const productSchema = new mongoose.Schema({
   businessId: { type: String, required: true, index: true },
   id: { type: String, required: true },
   name: { type: String, required: true },
+  sku: { type: String, default: '' },
   category: { type: String, default: 'Uncategorized' },
   stock: { type: Number, default: 0 },
   sellingPrice: { type: mongoose.Types.Decimal128, default: 0 },
