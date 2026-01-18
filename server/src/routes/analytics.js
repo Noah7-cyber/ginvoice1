@@ -126,12 +126,12 @@ router.get('/', auth, requireActiveSubscription, async (req, res) => {
             _id: null,
             shopCost: {
               $sum: {
-                $multiply: [ '$currentStock', { $toDouble: '$costPrice' } ] // User requested change $stock -> $currentStock
+                $multiply: [ '$stock', { $toDouble: '$costPrice' } ]
               }
             },
             shopWorth: {
               $sum: {
-                $multiply: [ '$currentStock', { $toDouble: '$sellingPrice' } ] // User requested change $stock -> $currentStock
+                $multiply: [ '$stock', { $toDouble: '$sellingPrice' } ]
               }
             }
           }

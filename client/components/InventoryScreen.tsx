@@ -43,6 +43,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   // Inline Editing
   const [inlineEditingId, setInlineEditingId] = useState<string | null>(null);
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Bulk Edit Panel States
   const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
@@ -302,12 +303,16 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
   const confirmDeleteProduct = async () => {
     if (!itemToDelete) return;
+    console.log('Deleting ID:', itemToDelete);
+    setIsDeleting(true);
     try {
       await deleteProduct(itemToDelete);
       onUpdateProducts(products.filter(p => p.id !== itemToDelete));
       setItemToDelete(null);
     } catch (err) {
       addToast('Delete failed. Please try again.', 'error');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -986,15 +991,17 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
             <div className="flex gap-3">
               <button
                 onClick={() => setItemToDelete(null)}
-                className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold"
+                disabled={isDeleting}
+                className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmDeleteProduct}
-                className="flex-1 py-3 bg-red-500 text-white rounded-xl font-bold"
+                disabled={isDeleting}
+                className="flex-1 py-3 bg-red-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-70"
               >
-                Confirm
+                {isDeleting ? <Loader2 className="animate-spin" size={20} /> : 'Confirm'}
               </button>
             </div>
           </div>
