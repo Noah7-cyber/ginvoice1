@@ -1,10 +1,10 @@
-
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Search, Plus, Package, ShoppingCart } from 'lucide-react';
 import { Product, ProductUnit } from '../types';
 import { CURRENCY } from '../constants';
 import { formatCurrency } from '../utils/currency';
 import AlphabetScrubber from './AlphabetScrubber';
+import { useAlphabetIndexer } from '@/hooks/useAlphabetIndexer';
 
 interface SalesScreenProps {
   products: Product[];
@@ -17,6 +17,8 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permis
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
+  const listRef = useRef<HTMLDivElement>(null);
+
   const categories = Array.from(new Set(products.map(p => p.category)));
 
   const filtered = products.filter(p => {
@@ -25,6 +27,8 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permis
     const matchesCat = categoryFilter === 'All' || p.category === categoryFilter;
     return matchesSearch && matchesCat;
   });
+
+  const { scrollToLetter } = useAlphabetIndexer(listRef, [filtered]);
 
   const handleProductClick = (p: Product) => {
     if (p.units && p.units.length > 0) {
@@ -35,8 +39,8 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permis
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex flex-col gap-4">
+    <div className="h-full flex flex-col overflow-hidden relative animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex flex-col gap-4 mb-6 shrink-0">
         <div>
           <h2 className="text-xl font-black text-gray-900">Select Items</h2>
           <p className="text-sm text-gray-500">Tap to add products to the current bill</p>
@@ -68,7 +72,8 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permis
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 pb-10">
+      <div className="flex-1 overflow-y-auto pb-24 relative" ref={listRef}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
         {filtered.length === 0 ? (
           <div className="col-span-full py-20 flex flex-col items-center text-gray-400">
             <Package size={48} className="opacity-20 mb-4" />
@@ -85,7 +90,7 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permis
             return (
               <React.Fragment key={p.id}>
                  {showHeader && (
-                    <div id={headerId} className="col-span-full sticky top-0 z-10 bg-gray-50/95 backdrop-blur-sm py-2 px-4 -mx-4 sm:mx-0 sm:rounded-lg border-b border-gray-100 font-black text-gray-400 text-xs uppercase tracking-widest scroll-mt-40 md:hidden">
+                    <div id={headerId} className="col-span-full sticky top-0 z-10 bg-gray-50/95 backdrop-blur-sm py-2 px-4 -mx-4 sm:mx-0 sm:rounded-lg border-b border-gray-100 font-black text-gray-400 text-xs uppercase tracking-widest scroll-mt-0 md:hidden">
                         {isAlpha ? firstChar : '#'}
                     </div>
                  )}
@@ -131,15 +136,11 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permis
          })
         )}
       </div>
+      </div>
 
        {/* Mobile Invisible Scrubber */}
        <div className="md:hidden">
-         <AlphabetScrubber
-           onScrollTo={(letter) => {
-              const el = document.getElementById(`section-${letter}`);
-              if (el) el.scrollIntoView({ behavior: 'auto', block: 'start' });
-           }}
-         />
+         <AlphabetScrubber onScrollTo={scrollToLetter} />
        </div>
 
       {/* Unit Selection Modal */}
