@@ -7,6 +7,7 @@ import { deleteProduct, createProduct, updateProduct, getCategories } from '../s
 import { useToast } from './ToastProvider';
 import CategoryManager from './CategoryManager';
 import AlphabetScrubber from './AlphabetScrubber';
+import { useAlphabetIndexer } from '@/hooks/useAlphabetIndexer';
 
 interface InventoryScreenProps {
   products: Product[];
@@ -20,6 +21,9 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   // Ensure Owner is NEVER Read-Only. Staff is Read-Only if they lack 'stock-management'.
   const safeReadOnly = isOwner ? false : isReadOnly;
   const { addToast } = useToast();
+
+  // Ref for scroll container
+  const listRef = React.useRef<HTMLDivElement>(null);
 
   // States
   const [searchTerm, setSearchTerm] = useState('');
@@ -91,6 +95,9 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
     return matchesSearch && matchesCategory && matchesLowStock && matchesMinPrice && matchesMaxPrice;
   }).sort((a, b) => a.name.localeCompare(b.name));
+
+  // Initialize Indexer Hook
+  const { scrollToLetter } = useAlphabetIndexer(listRef, [filteredProducts]);
 
   const toggleSelection = (id: string) => {
     const next = new Set(selectedIds);
@@ -316,22 +323,14 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     }
   };
 
-  // Mobile Indexer Logic (Samsung Contacts Style)
-  const scrollToLetter = (letter: string) => {
-      const element = document.getElementById(`section-${letter}`);
-      if (element) {
-          element.scrollIntoView({ behavior: 'auto', block: 'start' });
-      }
-  };
-
   return (
-    <div className="max-w-7xl mx-auto pb-24 relative">
-        {/* New Invisible Scrubber */}
+    <div className="max-w-7xl mx-auto h-full flex flex-col overflow-hidden relative">
+        {/* New Invisible Scrubber - Position fixed relative to viewport is fine, but it needs to call our hook */}
         <div className="md:hidden">
             <AlphabetScrubber onScrollTo={scrollToLetter} />
         </div>
 
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 shrink-0">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Manage Stock</h1>
           <p className="text-gray-500">Add or edit items in your shop</p>
@@ -368,7 +367,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
       </div>
 
       {/* Filters */}
-      <div className="bg-white p-4 rounded-2xl shadow-sm border mb-6 flex flex-col gap-4">
+      <div className="bg-white p-4 rounded-2xl shadow-sm border mb-6 flex flex-col gap-4 shrink-0">
         <div className="flex flex-col md:flex-row gap-4 items-center">
             <div className="relative flex-1 w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
@@ -450,6 +449,9 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
              )}
         </div>
       </div>
+
+      {/* Scrollable Content Area */}
+      <div className="flex-1 overflow-y-auto relative pb-24" ref={listRef}>
 
       {/* Desktop Table View */}
       <div className="hidden md:block bg-white rounded-2xl shadow-sm border overflow-hidden">
@@ -615,7 +617,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
             return (
               <React.Fragment key={product.id}>
                 {showHeader && (
-                    <div id={headerId} className="sticky top-0 z-10 bg-gray-50/95 backdrop-blur-sm py-2 px-4 -mx-4 mb-2 border-b border-gray-100 font-black text-gray-400 text-xs uppercase tracking-widest scroll-mt-40">
+                    <div id={headerId} className="sticky top-0 z-10 bg-gray-50/95 backdrop-blur-sm py-2 px-4 -mx-4 mb-2 border-b border-gray-100 font-black text-gray-400 text-xs uppercase tracking-widest scroll-mt-0">
                         {isAlpha ? firstChar : '#'}
                     </div>
                 )}
@@ -684,6 +686,8 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
         );
       })}
       </div>
+
+      </div> {/* End of Scrollable Content */}
 
       {/* Bulk Edit Panel */}
       {isBulkEditOpen && (
