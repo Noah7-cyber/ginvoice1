@@ -165,6 +165,49 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onRegister, onLogin }) =>
          </div>
       </section>
 
+      {/* Pricing Section */}
+      <section className="py-24 px-4 bg-gray-900 text-white">
+         <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-center gap-12 bg-white/5 rounded-[3rem] p-8 md:p-12 border border-white/10 relative overflow-hidden">
+            {/* Glow Effect */}
+            <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/20 blur-[100px] rounded-full -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+
+            <div className="flex-1 space-y-6 z-10">
+               <h2 className="text-4xl font-black">Simple Pricing.<br />No Surprises.</h2>
+               <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                     <div className="bg-emerald-500/20 p-1 rounded-full text-emerald-400"><CheckCircle size={16} /></div>
+                     <span className="font-medium text-gray-300">Unlimited Invoices & Receipts</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                     <div className="bg-emerald-500/20 p-1 rounded-full text-emerald-400"><CheckCircle size={16} /></div>
+                     <span className="font-medium text-gray-300">Offline Sales Support</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                     <div className="bg-emerald-500/20 p-1 rounded-full text-emerald-400"><CheckCircle size={16} /></div>
+                     <span className="font-medium text-gray-300">Multi-Staff Permissions</span>
+                  </div>
+               </div>
+               <div className="inline-flex items-center gap-2 bg-white/10 px-4 py-2 rounded-lg text-sm font-bold text-yellow-400">
+                  <Sparkles size={16} /> 7-Day Free Trial included
+               </div>
+            </div>
+
+            <div className="bg-white text-gray-900 p-8 rounded-3xl w-full max-w-xs text-center space-y-6 shadow-2xl z-10 transform md:rotate-3 hover:rotate-0 transition-transform duration-300">
+               <h3 className="text-gray-500 font-bold uppercase tracking-widest text-xs">Standard Plan</h3>
+               <div className="space-y-1">
+                  <p className="text-5xl font-black">₦2,000</p>
+                  <p className="text-gray-400 font-medium">per month</p>
+               </div>
+               <button
+                  onClick={onRegister}
+                  className="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-2"
+               >
+                  Get Started <ArrowRight size={18} />
+               </button>
+            </div>
+         </div>
+      </section>
+
       {/* Real Stories (Testimonials) */}
       <section className="py-24 px-4 bg-gray-50">
          <div className="max-w-6xl mx-auto space-y-12">
