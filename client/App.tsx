@@ -14,7 +14,8 @@ import {
   PanelRightClose,
   PanelRightOpen,
   Wallet,
-  Loader2
+  Loader2,
+  Bell
 } from 'lucide-react';
 import { InventoryState, UserRole, Product, ProductUnit, Transaction, BusinessProfile, TabId, SaleItem, PaymentMethod, Expenditure } from './types';
 import { INITIAL_PRODUCTS } from './constants';
@@ -35,6 +36,7 @@ import ForgotPasswordScreen from './components/ForgotPasswordScreen';
 import VerifyEmailScreen from './components/VerifyEmailScreen';
 import SupportBot from './components/SupportBot';
 import useServerWakeup from './services/useServerWakeup';
+import NotificationCenter from './components/NotificationCenter';
 
 const TAB_LABELS: Record<string, string> = {
   sales: 'Sales',
@@ -76,6 +78,7 @@ const App: React.FC = () => {
 
   const { status: wakeStatus } = useServerWakeup();
   const wakeToastShownRef = useRef(false);
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
 
   // Email Verification Feedback
   useEffect(() => {
@@ -679,6 +682,16 @@ const App: React.FC = () => {
             <button onClick={handleLogout} className="md:hidden p-2 text-gray-400 hover:text-red-500">
               <LogOut size={24} />
             </button>
+            <button
+              onClick={() => setIsNotificationOpen(true)}
+              className="relative p-2 rounded-xl text-primary bg-indigo-50 hover:bg-indigo-100 transition-all"
+            >
+               <Bell size={24} />
+               {/* Show red dot if there are notifications (e.g. low stock) */}
+               {state.products.some(p => p.currentStock < (state.business.settings?.lowStockThreshold || 10)) && (
+                 <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 rounded-full border border-white"></span>
+               )}
+            </button>
             <button onClick={() => setIsCartOpen(!isCartOpen)} className={`relative p-2 rounded-xl transition-all ${isCartOpen ? 'bg-primary text-white' : 'text-primary bg-indigo-50'}`}>
               <ShoppingCart size={24} />
               {cart.length > 0 && !isCartOpen && <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] font-black w-5 h-5 flex items-center justify-center rounded-full animate-bounce">{cart.length}</span>}
@@ -740,6 +753,14 @@ const App: React.FC = () => {
           ))}
         </nav>
       </main>
+
+      <NotificationCenter
+        isOpen={isNotificationOpen}
+        onClose={() => setIsNotificationOpen(false)}
+        transactions={state.transactions}
+        products={state.products}
+        lowStockThreshold={state.business.settings?.lowStockThreshold || 10}
+      />
 
       {/* Cart Sidebar */}
       <div className={`fixed inset-y-0 right-0 z-[60] transition-all duration-300 ease-in-out md:relative md:inset-auto md:z-auto ${isCartOpen ? 'translate-x-0 w-full max-w-sm md:w-80 lg:w-96 border-l shadow-2xl md:shadow-none' : 'translate-x-full w-0 overflow-hidden'}`}>
