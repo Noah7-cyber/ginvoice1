@@ -281,6 +281,12 @@ export const deleteExpenditure = async (id: string) => {
   });
 };
 
+export const getBusinessCount = async () => {
+  return request('/api/stats/business-count', {
+    method: 'GET'
+  });
+};
+
 export const contactSupport = async (message: string, email: string, businessName: string) => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');

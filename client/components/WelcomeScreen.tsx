@@ -1,5 +1,6 @@
-import React from 'react';
-import { Sparkles, ShieldCheck, Box, User, Receipt, CheckCircle, ArrowRight, Star, Globe, Lock } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Sparkles, ShieldCheck, Box, User, Receipt, CheckCircle, ArrowRight, Star, Globe, Lock, Play, Layers, WifiOff, Cloud, Database } from 'lucide-react';
+import { getBusinessCount } from '../services/api';
 
 interface WelcomeScreenProps {
   onRegister: () => void;
@@ -7,6 +8,16 @@ interface WelcomeScreenProps {
 }
 
 const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onRegister, onLogin }) => {
+  const [businessCount, setBusinessCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    getBusinessCount().then(data => {
+      if (data && typeof data.count === 'number') {
+        setBusinessCount(data.count);
+      }
+    }).catch(() => setBusinessCount(null));
+  }, []);
+
   return (
     <div className="min-h-screen bg-white font-sans text-gray-900 scroll-smooth">
       {/* Sticky Navbar */}
@@ -70,6 +81,23 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onRegister, onLogin }) =>
         </div>
       </section>
 
+      {/* Social Proof Strip */}
+      <section className="bg-gray-900 py-6 text-white overflow-hidden">
+         <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row items-center justify-center gap-6 text-center">
+            <div className="flex -space-x-2">
+               <div className="w-8 h-8 rounded-full bg-indigo-500 border-2 border-gray-900"></div>
+               <div className="w-8 h-8 rounded-full bg-pink-500 border-2 border-gray-900"></div>
+               <div className="w-8 h-8 rounded-full bg-emerald-500 border-2 border-gray-900"></div>
+               <div className="w-8 h-8 rounded-full bg-white text-gray-900 flex items-center justify-center text-[10px] font-bold border-2 border-gray-900">+</div>
+            </div>
+            <p className="font-medium text-gray-300 text-sm md:text-base">
+               Join <span className="font-black text-white text-lg">
+                 {businessCount !== null ? (businessCount >= 2000 ? '2,000+' : businessCount.toLocaleString()) : '1,000+'}
+               </span> businesses growing with Ginvoice today.
+            </p>
+         </div>
+      </section>
+
       {/* Features Strip */}
       <section className="py-12 bg-white border-b border-gray-100">
          <div className="max-w-6xl mx-auto px-4 grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -92,6 +120,46 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onRegister, onLogin }) =>
                <div>
                   <h3 className="font-bold text-gray-900">Remote Supervision</h3>
                   <p className="text-sm text-gray-500">Manage your shop from anywhere.</p>
+               </div>
+            </div>
+         </div>
+      </section>
+
+      {/* Ready on Day One Section */}
+      <section className="py-20 px-4 bg-white">
+         <div className="max-w-4xl mx-auto bg-gradient-to-br from-indigo-50 to-white rounded-[2.5rem] p-8 md:p-12 border border-indigo-100 shadow-xl">
+            <div className="text-center space-y-4 mb-10">
+               <div className="inline-flex items-center gap-2 bg-indigo-100 px-4 py-1.5 rounded-full text-indigo-700 text-xs font-black uppercase tracking-widest">
+                  <Play size={12} fill="currentColor" /> Instant Start
+               </div>
+               <h2 className="text-3xl font-black text-gray-900">Ready on Day One.</h2>
+               <p className="text-gray-500 max-w-lg mx-auto">No setup fees. No training required. Log in and start working immediately.</p>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+               <div className="text-center space-y-3">
+                  <div className="w-12 h-12 bg-white rounded-2xl shadow-sm flex items-center justify-center text-indigo-600 mx-auto border border-indigo-50">
+                     <Receipt size={24} />
+                  </div>
+                  <p className="font-bold text-sm text-gray-900">Create Invoices</p>
+               </div>
+               <div className="text-center space-y-3">
+                  <div className="w-12 h-12 bg-white rounded-2xl shadow-sm flex items-center justify-center text-pink-600 mx-auto border border-pink-50">
+                     <Box size={24} />
+                  </div>
+                  <p className="font-bold text-sm text-gray-900">Track Inventory</p>
+               </div>
+               <div className="text-center space-y-3">
+                  <div className="w-12 h-12 bg-white rounded-2xl shadow-sm flex items-center justify-center text-emerald-600 mx-auto border border-emerald-50">
+                     <User size={24} />
+                  </div>
+                  <p className="font-bold text-sm text-gray-900">Add Staff</p>
+               </div>
+               <div className="text-center space-y-3">
+                  <div className="w-12 h-12 bg-white rounded-2xl shadow-sm flex items-center justify-center text-orange-600 mx-auto border border-orange-50">
+                     <Layers size={24} />
+                  </div>
+                  <p className="font-bold text-sm text-gray-900">Monitor Debtors</p>
                </div>
             </div>
          </div>
@@ -145,6 +213,24 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onRegister, onLogin }) =>
                      <span className="font-bold text-sm text-gray-900">Tretize</span>
                   </div>
                </div>
+            </div>
+         </div>
+      </section>
+
+      {/* Trust & Reliability Signals */}
+      <section className="py-12 bg-gray-50 border-t border-gray-200">
+         <div className="max-w-6xl mx-auto px-4 flex flex-wrap justify-center gap-x-12 gap-y-6 text-gray-500 font-bold text-xs uppercase tracking-widest">
+            <div className="flex items-center gap-3">
+               <Lock size={16} className="text-gray-400" /> Secure by Design
+            </div>
+            <div className="flex items-center gap-3">
+               <WifiOff size={16} className="text-gray-400" /> Offline-First Support
+            </div>
+            <div className="flex items-center gap-3">
+               <Database size={16} className="text-gray-400" /> Data Backed Up Automatically
+            </div>
+            <div className="flex items-center gap-3">
+               <Cloud size={16} className="text-gray-400" /> Built for Unstable Internet
             </div>
          </div>
       </section>

@@ -27,6 +27,7 @@ const categoriesRouter = require('./routes/categories');
 const discountsRouter = require('./routes/discounts');
 const settingsRouter = require('./routes/settings');
 const supportRouter = require('./routes/support');
+const statsRouter = require('./routes/stats');
 
 const app = express();
 
@@ -66,6 +67,7 @@ app.use('/api/categories', categoriesRouter);
 app.use('/api/discounts', discountsRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/support', supportRouter);
+app.use('/api/stats', statsRouter);
 app.use('/api/transactions', require('./routes/transactions'));
 
 const port = process.env.PORT || 4000;
