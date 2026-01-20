@@ -9,11 +9,12 @@ interface RegistrationScreenProps {
   onRegister: (details: { name: string, address: string, phone: string, email: string, logo?: string, ownerPassword?: string, staffPassword?: string }) => Promise<void>;
   onManualLogin: (details: { email: string, pin: string }) => Promise<void>;
   onForgotPassword: () => void;
+  defaultMode?: 'register' | 'login';
 }
 
-const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onManualLogin, onForgotPassword }) => {
+const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onManualLogin, onForgotPassword, defaultMode }) => {
   const { addToast } = useToast();
-  const [mode, setMode] = useState<'register' | 'login'>('register');
+  const [mode, setMode] = useState<'register' | 'login'>(defaultMode || 'register');
   const [acceptedPolicy, setAcceptedPolicy] = useState(false);
   const [showPolicy, setShowPolicy] = useState(false);
   const [isLoading, setIsLoading] = useState(false);

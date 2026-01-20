@@ -68,6 +68,12 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
     }
   };
 
+  const handleSaveChanges = () => {
+     handleUpdateBusiness(formData);
+  };
+
+  const hasChanges = JSON.stringify(formData) !== JSON.stringify(business);
+
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -244,7 +250,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
       </div>
 
       {/* Content Area */}
-      <div className="flex-1 overflow-y-auto pr-1">
+      <div className="flex-1 overflow-y-auto pr-1 pb-24">
           {/* SHOP TAB */}
           {activeTab === 'shop' && (
              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
@@ -287,7 +293,6 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                                     type="text"
                                     value={formData.name}
                                     onChange={e => setFormData({...formData, name: e.target.value})}
-                                    onBlur={() => handleUpdateBusiness({ name: formData.name })}
                                     className="w-full mt-1 px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold text-gray-900"
                                 />
                             </div>
@@ -298,7 +303,6 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                                         type="tel"
                                         value={formData.phone}
                                         onChange={e => setFormData({...formData, phone: e.target.value})}
-                                        onBlur={() => handleUpdateBusiness({ phone: formData.phone })}
                                         className="w-full mt-1 px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold text-gray-900"
                                     />
                                 </div>
@@ -308,7 +312,6 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                                         type="text"
                                         value={formData.address}
                                         onChange={e => setFormData({...formData, address: e.target.value})}
-                                        onBlur={() => handleUpdateBusiness({ address: formData.address })}
                                         className="w-full mt-1 px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold text-gray-900"
                                     />
                                 </div>
@@ -342,7 +345,6 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                         {THEME_COLORS.map(color => (
                         <button key={color.value} type="button" onClick={() => {
                             setFormData({ ...formData, theme: { ...formData.theme, primaryColor: color.value }});
-                            handleUpdateBusiness({ theme: { ...formData.theme, primaryColor: color.value } });
                         }} className={`w-12 h-12 rounded-full border-4 transition-all ${formData.theme.primaryColor === color.value ? 'border-indigo-100 scale-110' : 'border-transparent'}`} style={{ backgroundColor: color.value }}>
                             {formData.theme.primaryColor === color.value && <CheckCircle2 className="text-white" size={24} />}
                         </button>
@@ -356,7 +358,6 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                                 key={font.value}
                                 onClick={() => {
                                     setFormData({ ...formData, theme: { ...formData.theme, fontFamily: font.value } });
-                                    handleUpdateBusiness({ theme: { ...formData.theme, fontFamily: font.value } });
                                 }}
                                 className={`px-4 py-3 rounded-xl border-2 text-sm transition-all ${formData.theme.fontFamily === font.value ? 'border-primary bg-primary-bg text-primary font-bold shadow-sm' : 'border-gray-100 text-gray-600 hover:border-gray-200'}`}
                                 style={{ fontFamily: font.value }}
@@ -427,9 +428,9 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                           </p>
                       </div>
 
-                      {/* Manual Verification */}
+                      {/* Payment Troubleshooting */}
                       <div className="border-t pt-6">
-                          <h3 className="font-bold text-gray-900 mb-2">Verify Payment</h3>
+                          <h3 className="font-bold text-gray-900 mb-2">Payment Troubleshooting</h3>
                           <p className="text-sm text-gray-500 mb-4">If you paid via bank transfer or USSD and your account isn't active, verify your reference code here.</p>
                           <div className="flex gap-2">
                               <input
@@ -444,7 +445,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                                   disabled={isVerifying || !paystackReference}
                                   className="px-6 py-3 bg-gray-900 text-white rounded-xl font-bold disabled:opacity-50"
                               >
-                                  {isVerifying ? <Loader2 className="animate-spin" /> : 'Verify'}
+                                  {isVerifying ? <Loader2 className="animate-spin" /> : 'Verify Payment'}
                               </button>
                           </div>
                       </div>
@@ -520,6 +521,20 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
               </div>
           )}
       </div>
+
+      {/* Floating Save Button */}
+      {(activeTab === 'shop' || activeTab === 'preferences') && hasChanges && (
+         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30">
+            <button
+               onClick={handleSaveChanges}
+               disabled={isLoading}
+               className="bg-gray-900 text-white px-8 py-4 rounded-full font-black text-lg shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-2 animate-in slide-in-from-bottom-10 fade-in duration-300"
+            >
+               {isLoading ? <Loader2 className="animate-spin" /> : <Save size={20} />}
+               Save Changes
+            </button>
+         </div>
+      )}
 
       {/* Discount Code Modal */}
       {showDiscountModal && (
