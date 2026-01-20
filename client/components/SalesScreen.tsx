@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect  } from 'react';
 import { Search, Plus, Package, ShoppingCart } from 'lucide-react';
 import { Product, ProductUnit } from '../types';
 import { CURRENCY } from '../constants';
