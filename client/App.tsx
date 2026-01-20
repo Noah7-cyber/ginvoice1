@@ -37,6 +37,7 @@ import VerifyEmailScreen from './components/VerifyEmailScreen';
 import SupportBot from './components/SupportBot';
 import useServerWakeup from './services/useServerWakeup';
 import NotificationCenter from './components/NotificationCenter';
+import WelcomeScreen from './components/WelcomeScreen';
 
 // Helper to check for active alerts (duplicated from NotificationCenter to avoid circular deps or complex state lifting)
 const hasActiveAlerts = (products: Product[], business: BusinessProfile, lowStockThreshold: number) => {
@@ -96,6 +97,12 @@ const App: React.FC = () => {
   const [view, setView] = useState<'main' | 'forgot-password'>('main');
   const [recoveryEmail, setRecoveryEmail] = useState<string | undefined>(undefined);
   const [pendingVerificationEmail, setPendingVerificationEmail] = useState<string | null>(null);
+
+  // Welcome Screen State
+  // PWA Standalone check
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
+  const [showWelcome, setShowWelcome] = useState<boolean>(!isStandalone);
+  const [loginMode, setLoginMode] = useState(false);
 
   const { status: wakeStatus } = useServerWakeup();
   const wakeToastShownRef = useRef(false);
@@ -656,7 +663,19 @@ const App: React.FC = () => {
     />;
   }
 
-  if (!state.isRegistered) return <RegistrationScreen onRegister={handleRegister} onManualLogin={handleManualLogin} onForgotPassword={() => setView('forgot-password')} />;
+  if (!state.isRegistered && showWelcome) {
+    return (
+      <WelcomeScreen
+        onRegister={() => setShowWelcome(false)}
+        onLogin={() => {
+          setLoginMode(true);
+          setShowWelcome(false);
+        }}
+      />
+    );
+  }
+
+  if (!state.isRegistered) return <RegistrationScreen onRegister={handleRegister} onManualLogin={handleManualLogin} onForgotPassword={() => setView('forgot-password')} defaultMode={loginMode ? 'login' : 'register'} />;
   if (!state.isLoggedIn) return <AuthScreen onLogin={handleLogin} onForgotPassword={(email) => { setRecoveryEmail(email); setView('forgot-password'); }} onResetBusiness={() => setState(prev => ({...prev, isRegistered: false}))} business={state.business} email={state.business.email} />;
 
   return (
