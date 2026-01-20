@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Bell, X, FileText, AlertTriangle, AlertCircle } from 'lucide-react';
 import { Transaction, Product, BusinessProfile } from '../types';
 import { CURRENCY } from '../constants';
