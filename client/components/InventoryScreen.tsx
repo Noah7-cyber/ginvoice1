@@ -15,9 +15,10 @@ interface InventoryScreenProps {
   isOwner: boolean;
   isReadOnly?: boolean;
   isOnline: boolean;
+  initialParams?: { id?: string };
 }
 
-const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdateProducts, isOwner, isReadOnly, isOnline }) => {
+const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdateProducts, isOwner, isReadOnly, isOnline, initialParams }) => {
   // Ensure Owner is NEVER Read-Only. Staff is Read-Only if they lack 'stock-management'.
   const safeReadOnly = isOwner ? false : isReadOnly;
   const { addToast } = useToast();
@@ -70,6 +71,37 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     };
     if (navigator.onLine) fetchCats();
   }, []);
+
+  // Sync with URL params
+  useEffect(() => {
+    if (initialParams?.id) {
+       const product = products.find(p => p.id === initialParams.id);
+       if (product) {
+         setEditingProductId(product.id);
+         setNewProduct({ ...product });
+         setIsModalOpen(true);
+       }
+    } else {
+       // Only close if the ACTUAL URL matches the "root" path (no ID).
+       // This prevents closing the modal when 'products' updates but we are locally deep-linked (via click)
+       // and 'initialParams' is stale (because App doesn't re-render on pushState).
+       const currentPath = window.location.pathname;
+       const hasDeepLink = currentPath.split('/').length > 2; // e.g. /inventory/123
+
+       if (isModalOpen && editingProductId && !hasDeepLink) {
+          setIsModalOpen(false);
+          setEditingProductId(null);
+       }
+    }
+  }, [initialParams, products]);
+
+  const updateUrlForProduct = (id: string | null) => {
+      if (id) {
+          window.history.pushState(null, '', `/inventory/${id}`);
+      } else {
+          window.history.pushState(null, '', `/inventory`);
+      }
+  };
 
   // Merge default categories with custom ones for display
   const allCategoryNames = categories.map(c => c.name);
@@ -226,6 +258,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
         setIsModalOpen(false);
         setNewProduct(initialProductState);
         setEditingProductId(null);
+        updateUrlForProduct(null);
     } catch (err: any) {
         console.error(err);
         if (err.message?.includes('409') || err.response?.status === 409 || err.message?.toLowerCase().includes('duplicate')) {
@@ -599,6 +632,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                                         setEditingProductId(product.id);
                                         setNewProduct({ ...product });
                                         setIsModalOpen(true);
+                                    updateUrlForProduct(product.id);
                                     }}
                                     className="p-2 text-gray-400 hover:text-primary"
                                     title="Full Edit"
@@ -682,6 +716,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                         setEditingProductId(product.id);
                         setNewProduct({ ...product });
                         setIsModalOpen(true);
+                        updateUrlForProduct(product.id);
                       }}
                       className="px-3 py-2 bg-gray-100 text-gray-600 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-gray-200"
                     >
@@ -811,7 +846,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b flex justify-between items-center bg-primary text-white">
               <h2 className="text-xl font-bold">Register New Product</h2>
-              <button onClick={() => setIsModalOpen(false)}><X size={24} /></button>
+              <button onClick={() => { setIsModalOpen(false); updateUrlForProduct(null); }}><X size={24} /></button>
             </div>
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
               <div>
@@ -970,7 +1005,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
               <div className="pt-4 flex gap-3">
                 <button
                   type="button"
-                  onClick={() => { setIsModalOpen(false); setEditingProductId(null); }}
+                  onClick={() => { setIsModalOpen(false); setEditingProductId(null); updateUrlForProduct(null); }}
                   className="flex-1 py-4 border rounded-xl font-bold text-gray-500"
                 >
                   Cancel

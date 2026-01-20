@@ -153,7 +153,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onRegister, onLogin }) =>
                   <div className="w-12 h-12 bg-white rounded-2xl shadow-sm flex items-center justify-center text-emerald-600 mx-auto border border-emerald-50">
                      <User size={24} />
                   </div>
-                  <p className="font-bold text-sm text-gray-900">Add Staff</p>
+                  <p className="font-bold text-sm text-gray-900">Supervise Staff</p>
                </div>
                <div className="text-center space-y-3">
                   <div className="w-12 h-12 bg-white rounded-2xl shadow-sm flex items-center justify-center text-orange-600 mx-auto border border-orange-50">
@@ -184,11 +184,11 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onRegister, onLogin }) =>
                   </div>
                   <div className="flex items-center gap-3">
                      <div className="bg-emerald-500/20 p-1 rounded-full text-emerald-400"><CheckCircle size={16} /></div>
-                     <span className="font-medium text-gray-300">Multi-Staff Permissions</span>
+                     <span className="font-medium text-gray-300">Supervise Staff</span>
                   </div>
                </div>
                <div className="inline-flex items-center gap-2 bg-white/10 px-4 py-2 rounded-lg text-sm font-bold text-yellow-400">
-                  <Sparkles size={16} /> 7-Day Free Trial included
+                  <Sparkles size={16} /> 30-Day Free Trial included
                </div>
             </div>
 

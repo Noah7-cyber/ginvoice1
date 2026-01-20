@@ -93,6 +93,7 @@ const App: React.FC = () => {
   });
 
   const [activeTab, setActiveTab] = useState<TabId>('sales');
+  const [deepLinkParams, setDeepLinkParams] = useState<{ id?: string }>({});
   const [isCartOpen, setIsCartOpen] = useState(window.innerWidth > 1024);
   const [view, setView] = useState<'main' | 'forgot-password'>('main');
   const [recoveryEmail, setRecoveryEmail] = useState<string | undefined>(undefined);
@@ -107,6 +108,41 @@ const App: React.FC = () => {
   const { status: wakeStatus } = useServerWakeup();
   const wakeToastShownRef = useRef(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+
+  // Routing / Deep Linking Logic
+  useEffect(() => {
+    const syncURL = () => {
+      const path = window.location.pathname;
+      const parts = path.split('/').filter(Boolean); // e.g. ['inventory', '123']
+
+      if (parts.length > 0) {
+        const tab = parts[0] as TabId;
+        // Simple check if tab is valid, or at least exists in our map
+        if (TAB_LABELS[tab] || ['sales', 'inventory', 'history', 'dashboard', 'expenditure', 'settings'].includes(tab)) {
+           setActiveTab(tab);
+
+           if (parts.length > 1) {
+             setDeepLinkParams({ id: parts[1] });
+           } else {
+             setDeepLinkParams({});
+           }
+        }
+      }
+    };
+
+    // Run on mount
+    syncURL();
+
+    // Listen for back/forward
+    window.addEventListener('popstate', syncURL);
+    return () => window.removeEventListener('popstate', syncURL);
+  }, []);
+
+  const handleTabChange = (tab: TabId) => {
+    setActiveTab(tab);
+    setDeepLinkParams({}); // Clear deep link params on tab switch
+    window.history.pushState(null, '', `/${tab}`);
+  };
 
   // Email Verification Feedback
   useEffect(() => {
@@ -694,7 +730,7 @@ const App: React.FC = () => {
         </div>
         <nav className="flex-1 px-4 py-4 space-y-1">
           {allowedTabs.map(tab => (
-            <SidebarLink key={tab} active={activeTab === tab} onClick={() => setActiveTab(tab)} icon={
+            <SidebarLink key={tab} active={activeTab === tab} onClick={() => handleTabChange(tab)} icon={
               tab === 'sales' ? <ShoppingBag /> : tab === 'inventory' ? <Package /> : tab === 'history' ? <History /> : 
               tab === 'dashboard' ? <BarChart3 /> : tab === 'expenditure' ? <Wallet /> : <Settings />
             } label={TAB_LABELS[tab] || tab.charAt(0).toUpperCase() + tab.slice(1)} />
@@ -748,6 +784,7 @@ const App: React.FC = () => {
               isOwner={state.role === 'owner'}
               isReadOnly={!canManageStock}
               isOnline={isOnline}
+              initialParams={deepLinkParams}
             />
           )}
           {activeTab === 'history' && (
@@ -768,6 +805,7 @@ const App: React.FC = () => {
               onRenewSubscription={openPaymentLink}
               isReadOnly={!canManageHistory}
               isOnline={isOnline}
+              initialParams={deepLinkParams}
             />
           )}
           {activeTab === 'dashboard' && (state.role === 'owner' || (state.business.staffPermissions as any)?.canViewDashboard) && <DashboardScreen transactions={state.transactions} products={state.products} />}
@@ -786,7 +824,7 @@ const App: React.FC = () => {
         {/* Mobile Bottom Nav */}
         <nav className="md:hidden bg-white border-t flex justify-around p-2 shrink-0 z-50">
           {allowedTabs.map(tab => (
-            <MobileNavLink key={tab} active={activeTab === tab} onClick={() => setActiveTab(tab)} icon={
+            <MobileNavLink key={tab} active={activeTab === tab} onClick={() => handleTabChange(tab)} icon={
               tab === 'sales' ? <ShoppingBag /> : tab === 'inventory' ? <Package /> : tab === 'history' ? <History /> : 
               tab === 'dashboard' ? <BarChart3 /> : tab === 'expenditure' ? <Wallet /> : <Settings />
             } label={TAB_LABELS[tab] || tab.charAt(0).toUpperCase() + tab.slice(1)} />
