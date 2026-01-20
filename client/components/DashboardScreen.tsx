@@ -13,7 +13,12 @@ import {
   Coins,
   Gem,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Bell,
+  X,
+  FileText,
+  AlertTriangle,
+  AlertCircle
 } from 'lucide-react';
 import { 
   AreaChart, 
@@ -35,6 +40,23 @@ interface DashboardScreenProps {
 }
 
 const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, products }) => {
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'transactions' | 'system'>('transactions');
+
+  // Mock Notification Data
+  const mockTransactions = [
+    { id: 1, title: 'New Sale: ₦12,500', subtext: '14 items • Cash • Sold by Admin', time: '2 mins ago' },
+    { id: 2, title: 'New Sale: ₦4,200', subtext: '3 items • Transfer • Sold by Staff', time: '15 mins ago' },
+    { id: 3, title: 'New Sale: ₦1,800', subtext: '1 item • Cash • Sold by Admin', time: '1 hour ago' },
+    { id: 4, title: 'New Sale: ₦35,000', subtext: 'Bulk Purchase • Transfer • Sold by Admin', time: '3 hours ago' },
+  ];
+
+  const mockSystem = [
+    { id: 1, title: 'Low Stock Alert', body: 'Panadol (Only 4 left)', type: 'warning' },
+    { id: 2, title: 'Backup Successful', body: 'Your data was safely backed up at 2:00 AM', type: 'info' },
+    { id: 3, title: 'Subscription Expiring', body: 'Your premium plan expires in 3 days', type: 'alert' },
+  ];
+
   const [remoteAnalytics, setRemoteAnalytics] = useState<{
     stats: {
       totalRevenue: number;
@@ -190,11 +212,95 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
   }, [transactions, remoteAnalytics]);
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Owner Dashboard</h1>
-        <p className="text-gray-500">Real-time performance overview</p>
+    <div className="max-w-7xl mx-auto space-y-8 relative">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Owner Dashboard</h1>
+          <p className="text-gray-500">Real-time performance overview</p>
+        </div>
+        <button
+          onClick={() => setIsNotificationOpen(true)}
+          className="p-3 bg-white rounded-xl shadow-sm border hover:bg-gray-50 relative group"
+        >
+           <Bell size={24} className="text-gray-600 group-hover:text-indigo-600 transition-colors" />
+           <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 rounded-full border border-white"></span>
+        </button>
       </div>
+
+      {/* Notification Modal */}
+      {isNotificationOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex justify-end">
+          <div className="w-full max-w-md bg-white h-full shadow-2xl animate-in slide-in-from-right duration-300 flex flex-col">
+             {/* Modal Header */}
+             <div className="p-4 border-b flex justify-between items-center bg-gray-50">
+               <h2 className="text-lg font-bold flex items-center gap-2">
+                 <Bell size={20} className="text-indigo-600" /> Notifications
+               </h2>
+               <button onClick={() => setIsNotificationOpen(false)} className="p-2 hover:bg-gray-200 rounded-full">
+                 <X size={24} className="text-gray-500" />
+               </button>
+             </div>
+
+             {/* Tabs */}
+             <div className="flex border-b">
+               <button
+                 onClick={() => setActiveTab('transactions')}
+                 className={`flex-1 py-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'transactions' ? 'border-indigo-600 text-indigo-600 bg-indigo-50/50' : 'border-transparent text-gray-500 hover:bg-gray-50'}`}
+               >
+                 Transactions
+               </button>
+               <button
+                 onClick={() => setActiveTab('system')}
+                 className={`flex-1 py-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'system' ? 'border-indigo-600 text-indigo-600 bg-indigo-50/50' : 'border-transparent text-gray-500 hover:bg-gray-50'}`}
+               >
+                 System
+               </button>
+             </div>
+
+             {/* Content */}
+             <div className="flex-1 overflow-y-auto p-4 space-y-3">
+               {activeTab === 'transactions' ? (
+                 mockTransactions.map((item) => (
+                   <div key={item.id} className="flex gap-3 p-3 bg-white border rounded-xl hover:bg-gray-50 transition-colors group relative">
+                      <div className="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center shrink-0">
+                         <FileText size={18} className="text-green-600" />
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="text-sm font-black text-gray-900">{item.title}</h4>
+                        <p className="text-xs text-gray-500 mt-0.5">{item.subtext}</p>
+                        <span className="absolute bottom-3 right-3 text-[10px] font-bold text-gray-400 group-hover:text-indigo-500">{item.time}</span>
+                      </div>
+                   </div>
+                 ))
+               ) : (
+                  mockSystem.map((item) => (
+                    <div key={item.id} className="flex gap-3 p-3 bg-white border rounded-xl hover:bg-gray-50 transition-colors">
+                       <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${item.type === 'warning' ? 'bg-orange-50' : item.type === 'alert' ? 'bg-red-50' : 'bg-blue-50'}`}>
+                          {item.type === 'warning' ? <AlertTriangle size={18} className="text-orange-600" /> :
+                           item.type === 'alert' ? <AlertCircle size={18} className="text-red-600" /> :
+                           <AlertCircle size={18} className="text-blue-600" />}
+                       </div>
+                       <div className="flex-1">
+                         <div className="flex justify-between items-start">
+                           <h4 className="text-sm font-black text-gray-900">{item.title}</h4>
+                           {item.type === 'warning' && <span className="text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-bold">Action</span>}
+                         </div>
+                         <p className="text-xs text-gray-500 mt-0.5">{item.body}</p>
+                       </div>
+                    </div>
+                  ))
+               )}
+             </div>
+
+             {/* Footer */}
+             <div className="p-4 border-t bg-gray-50">
+               <button className="w-full py-3 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-100 transition-colors shadow-sm">
+                 View All Notifications
+               </button>
+             </div>
+          </div>
+        </div>
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

@@ -403,7 +403,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
             onChange={(e) => setSelectedCategory(e.target.value)}
             >
             <option value="All">All Categories</option>
-            {allCategoryNames.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+            {[...allCategoryNames].sort().map(cat => <option key={cat} value={cat}>{cat}</option>)}
             </select>
 
             {/* Price Range Filters */}
@@ -833,16 +833,13 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Category</label>
-                  <input
-                    list="category-suggestions"
-                    className="w-full px-4 py-3 rounded-xl border"
+                  <select
+                    className="w-full px-4 py-3 rounded-xl border bg-white focus:ring-2 focus:ring-primary outline-none"
                     value={newProduct.category}
                     onChange={e => handleCategoryChange(e.target.value)}
-                    placeholder="Type or select..."
-                  />
-                  <datalist id="category-suggestions">
-                    {allCategoryNames.map(cat => <option key={cat} value={cat} />)}
-                  </datalist>
+                  >
+                    {[...allCategoryNames].sort().map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Sold By</label>
