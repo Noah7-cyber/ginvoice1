@@ -281,6 +281,19 @@ export const deleteExpenditure = async (id: string) => {
   });
 };
 
+export const contactSupport = async (message: string, email: string, businessName: string) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/support/contact', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ message, email, businessName })
+  });
+};
+
 export const updateExpenditure = async (expenditure: any) => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');
