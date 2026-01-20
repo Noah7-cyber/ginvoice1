@@ -79,7 +79,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
     return () => {
       active = false;
     };
-  }, [transactions.length, timeRange]);
+  }, [transactions, timeRange]);
 
   const localStats = useMemo(() => {
     // SAFE MATH IMPLEMENTATION
