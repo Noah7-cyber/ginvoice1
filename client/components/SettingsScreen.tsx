@@ -522,13 +522,13 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
           )}
       </div>
 
-      {/* Floating Save Button */}
+      {/* Docked Save Button */}
       {(activeTab === 'shop' || activeTab === 'preferences') && hasChanges && (
-         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30">
+         <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 z-50 flex justify-end shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] md:sticky md:bottom-0 md:border-none md:shadow-none md:bg-transparent md:justify-center md:pointer-events-none">
             <button
                onClick={handleSaveChanges}
                disabled={isLoading}
-               className="bg-gray-900 text-white px-8 py-4 rounded-full font-black text-lg shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-2 animate-in slide-in-from-bottom-10 fade-in duration-300"
+               className="w-full md:w-auto md:pointer-events-auto bg-gray-900 text-white px-8 py-4 rounded-xl md:rounded-full font-black text-lg shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2 animate-in slide-in-from-bottom-10 fade-in duration-300"
             >
                {isLoading ? <Loader2 className="animate-spin" /> : <Save size={20} />}
                Save Changes
