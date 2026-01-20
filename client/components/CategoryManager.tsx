@@ -107,14 +107,15 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95">
-        <div className="p-4 border-b flex justify-between items-center bg-gray-50">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md animate-in zoom-in-95 flex flex-col h-[80vh]">
+        {/* Header - Fixed */}
+        <div className="p-4 border-b flex justify-between items-center bg-gray-50 flex-none">
           <h2 className="text-lg font-bold flex items-center gap-2"><Tag size={20} /> Manage Categories</h2>
           <button onClick={onClose}><X size={24} /></button>
         </div>
 
-        <div className="p-6 space-y-6">
-          {/* Add/Edit Form */}
+        {/* Input Form - Fixed */}
+        <div className="p-4 border-b bg-white flex-none z-10 shadow-sm">
           <form onSubmit={handleAddOrUpdate} className={`space-y-3 p-4 rounded-xl border ${editingId ? 'bg-indigo-50 border-indigo-100' : 'bg-gray-50'}`}>
             <div className="flex justify-between items-center">
                <label className="text-[10px] font-bold text-gray-400 uppercase">{editingId ? 'Edit Category' : 'New Category Name'}</label>
@@ -170,14 +171,15 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
               {loading ? 'Saving...' : (editingId ? 'Update Category' : 'Add Category')}
             </button>
           </form>
+        </div>
 
-          {/* List */}
-          <div className="max-h-[40vh] overflow-y-auto space-y-2">
+        {/* List - Scrollable */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-gray-50/50">
             {categories.length === 0 ? (
                <p className="text-center text-gray-400 text-sm py-4">No custom categories yet.</p>
             ) : (
-               categories.map(cat => (
-                 <div key={cat.id} className={`flex justify-between items-center p-3 border rounded-xl hover:bg-gray-50 ${editingId === cat.id ? 'ring-2 ring-indigo-500 bg-indigo-50' : ''}`}>
+               [...categories].sort((a, b) => a.name.localeCompare(b.name)).map(cat => (
+                 <div key={cat.id} className={`flex justify-between items-center p-3 bg-white border rounded-xl hover:shadow-sm transition-shadow ${editingId === cat.id ? 'ring-2 ring-indigo-500 bg-indigo-50' : ''}`}>
                     <div>
                       <h4 className="font-bold text-gray-800">{cat.name}</h4>
                       <p className="text-[10px] text-gray-500">
@@ -195,7 +197,16 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
                  </div>
                ))
             )}
-          </div>
+        </div>
+
+        {/* Footer - Close Button */}
+        <div className="p-4 border-t bg-white flex-none">
+           <button
+             onClick={onClose}
+             className="w-full py-3 bg-gray-100 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-200 transition-colors"
+           >
+             Close Manager
+           </button>
         </div>
       </div>
     </div>

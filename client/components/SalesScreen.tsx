@@ -67,7 +67,7 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permis
             onChange={(e) => setCategoryFilter(e.target.value)}
           >
             <option value="All">All Categories</option>
-            {categories.map(c => <option key={c} value={c}>{c}</option>)}
+            {[...categories].sort().map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
       </div>
