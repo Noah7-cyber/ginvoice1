@@ -1,10 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Store, Save, LayoutGrid, MapPin, Phone, Palette, Type, ShieldAlert, CheckCircle2, RefreshCw, CloudCheck, Upload, Trash2, Image as ImageIcon, MessageSquare, HeadphonesIcon, HelpCircle, Lock, LogOut, AlertTriangle, X, Ticket, ToggleLeft, ToggleRight, Loader2 } from 'lucide-react';
-import { BusinessProfile, TabId, DiscountCode } from '../types';
+import React, { useState, useRef } from 'react';
+import { Store, Save, RefreshCw, CloudCheck, Upload, Trash2, Image as ImageIcon, MessageSquare, HeadphonesIcon, HelpCircle, Lock, AlertTriangle, X, Ticket, ToggleLeft, ToggleRight, Loader2, CreditCard, ShieldCheck, CheckCircle2, Palette } from 'lucide-react';
+import { BusinessProfile, DiscountCode } from '../types';
 import { THEME_COLORS, FONTS } from '../constants';
-import { changeBusinessPins, deleteAccount, uploadFile, updateSettings, updateBusinessProfile, generateDiscountCode } from '../services/api';
+import { changeBusinessPins, deleteAccount, uploadFile, updateSettings, generateDiscountCode, verifyPayment } from '../services/api';
 import api from '../services/api';
-import SupportBot from './SupportBot'; // Integrated SupportBot
+import SupportBot from './SupportBot';
 import { useToast } from './ToastProvider';
 
 interface SettingsScreenProps {
@@ -23,6 +23,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
   const [formData, setFormData] = useState<BusinessProfile>(business);
   const [showSaved, setShowSaved] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'shop' | 'preferences' | 'billing' | 'security' | 'help'>('shop');
 
   // Security State
   const [currentOwnerPin, setCurrentOwnerPin] = useState('');
@@ -35,7 +36,10 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
   const [confirmBusinessName, setConfirmBusinessName] = useState('');
   const [deleteError, setDeleteError] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
-  const [logoFile, setLogoFile] = useState<File | null>(null);
+
+  // Payment Verification State
+  const [paystackReference, setPaystackReference] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -47,13 +51,9 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
 
     setIsLoading(true);
     try {
-      // Direct Backend Call using api.put
       await api.put('/settings', data);
-
       addToast("Business updated successfully!", "success");
 
-      // Update local state strictly after server confirms
-      // We need to update both formData local state AND the parent App state via onUpdateBusiness
       const updatedBusiness = { ...business, ...data };
       setFormData(prev => ({ ...prev, ...data }));
       onUpdateBusiness(updatedBusiness);
@@ -68,20 +68,6 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    let dataToSubmit = { ...formData };
-
-    // Cleanup before submit
-    // Prevent saving Blob URLs to database
-    if (dataToSubmit.logo && dataToSubmit.logo.startsWith('blob:')) {
-      addToast('Logo upload in progress or failed. Please wait or try again.', 'error');
-      return;
-    }
-
-    await handleUpdateBusiness(dataToSubmit);
-  };
-
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -89,23 +75,20 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
         addToast("Image too large. Max 200KB.", "error");
         return;
       }
-
       if (!isOnline) {
         addToast('Online required for logo change', 'error');
         return;
       }
 
-      // Temporary preview
       const previewUrl = URL.createObjectURL(file);
       setFormData(prev => ({ ...prev, logo: previewUrl }));
 
-      // Upload immediately
       try {
           const url = await uploadFile(file);
           setFormData(prev => ({ ...prev, logo: url }));
+          handleUpdateBusiness({ logo: url });
       } catch (err) {
-        console.error('Logo upload failed', err);
-        addToast('Logo upload failed. Please check your connection.', 'error');
+        addToast('Logo upload failed.', 'error');
         setFormData(prev => ({ ...prev, logo: business.logo }));
       }
     }
@@ -113,7 +96,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
 
   const handleRemoveLogo = async () => {
     if (!confirm('Are you sure you want to remove the logo?')) return;
-    await handleUpdateBusiness({ logo: null as any }); // Cast as any because BusinessProfile type might be strict string | undefined
+    await handleUpdateBusiness({ logo: null as any });
   };
 
   const togglePermission = async (key: string) => {
@@ -121,24 +104,18 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
         addToast('You must be online to change permissions.', 'error');
         return;
     }
-
     const currentPerms = formData.staffPermissions as any || {};
     const newVal = !currentPerms[key];
     const newPermissions = { ...currentPerms, [key]: newVal };
 
     try {
         await updateSettings(undefined, newPermissions);
-        // Only update UI on success
-        setFormData(prev => ({
-          ...prev,
-          staffPermissions: newPermissions
-        }));
+        setFormData(prev => ({ ...prev, staffPermissions: newPermissions }));
+        onUpdateBusiness({ ...formData, staffPermissions: newPermissions });
     } catch (err) {
-        console.error('Failed to update permission', err);
-        addToast('Failed to update permission. Please try again.', 'error');
+        addToast('Failed to update permission.', 'error');
     }
   };
-
 
   const handleUpdatePins = async () => {
     if (!isOnline) return setSecurityMsg('Internet connection required');
@@ -158,19 +135,11 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
   };
 
   const handleDeleteAccount = async () => {
-    if (!isOnline) {
-      setDeleteError('Internet connection required');
-      return;
-    }
-
-    if (confirmBusinessName !== business.name) {
-      setDeleteError('Business name does not match');
-      return;
-    }
+    if (!isOnline) { setDeleteError('Internet connection required'); return; }
+    if (confirmBusinessName !== business.name) { setDeleteError('Business name does not match'); return; }
 
     setIsDeleting(true);
     setDeleteError('');
-
     try {
       await deleteAccount(confirmBusinessName);
       if (onDeleteAccount) onDeleteAccount();
@@ -180,6 +149,24 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
     }
   };
 
+  const handleVerifyPayment = async () => {
+      if (!paystackReference) return;
+      if (!isOnline) {
+          addToast('Internet connection required.', 'error');
+          return;
+      }
+      setIsVerifying(true);
+      try {
+          await verifyPayment(paystackReference);
+          addToast('Payment verified successfully! Please refresh.', 'success');
+          setPaystackReference('');
+      } catch (err: any) {
+          addToast(err.message || 'Verification failed.', 'error');
+      } finally {
+          setIsVerifying(false);
+      }
+  };
+
   // Discount Code Modal State
   const [showDiscountModal, setShowDiscountModal] = useState(false);
   const [discountForm, setDiscountForm] = useState({ type: 'fixed' as 'fixed' | 'percent', value: 0, scope: 'global' as 'global'|'product' });
@@ -187,19 +174,13 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
   const [isGenerating, setIsGenerating] = useState(false);
 
   const handleGenerateDiscount = async () => {
-    if (!isOnline) {
-      addToast('Internet connection required to generate codes.', 'error');
-      return;
-    }
+    if (!isOnline) { addToast('Internet connection required.', 'error'); return; }
     setIsGenerating(true);
     try {
       const code = await generateDiscountCode(discountForm);
       setGeneratedCode(code);
-    } catch (err) {
-      addToast('Failed to generate code', 'error');
-    } finally {
-      setIsGenerating(false);
-    }
+    } catch (err) { addToast('Failed to generate code', 'error'); }
+    finally { setIsGenerating(false); }
   };
 
   const PERMISSION_OPTIONS = [
@@ -212,245 +193,333 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
     { id: 'canViewDashboard', label: 'View Dashboard', desc: 'Access analytics and revenue data' },
   ];
 
+  const TABS = [
+      { id: 'shop', label: 'Shop', icon: Store },
+      { id: 'preferences', label: 'Preferences', icon: Palette },
+      { id: 'billing', label: 'Billing', icon: CreditCard },
+      { id: 'security', label: 'Security', icon: ShieldCheck },
+      { id: 'help', label: 'Help', icon: HelpCircle },
+  ];
+
   return (
-    <div className="max-w-4xl mx-auto space-y-8 pb-10">
-      <div className="flex justify-between items-start">
+    <div className="max-w-4xl mx-auto pb-10 flex flex-col h-full overflow-hidden">
+      {/* Header */}
+      <div className="flex justify-between items-center mb-6 shrink-0">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Store Settings</h1>
-          <p className="text-gray-500">Customize appearance and manage staff access levels</p>
+          <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+          <p className="text-gray-500 text-sm">Manage your store profile and preferences</p>
         </div>
         
-        <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-2xl flex flex-col items-end gap-2 text-right">
-          <div className="flex items-center gap-2 text-indigo-700 font-bold text-sm">
-             {isSyncing ? <RefreshCw className="animate-spin" size={16} /> : <CloudCheck size={18} />}
-             <span>Cloud Backup Active</span>
+        <div className="bg-indigo-50 border border-indigo-100 px-4 py-2 rounded-xl flex items-center gap-3">
+          <div className="flex items-center gap-2 text-indigo-700 font-bold text-xs">
+             {isSyncing ? <RefreshCw className="animate-spin" size={14} /> : <CloudCheck size={16} />}
+             <span className="hidden sm:inline">{isSyncing ? 'Syncing...' : 'Synced'}</span>
           </div>
-          <p className="text-[10px] text-indigo-400 font-medium uppercase tracking-widest">
-            Last Sync: {lastSyncedAt ? new Date(lastSyncedAt).toLocaleString() : 'Never'}
-          </p>
           <button 
-            type="button"
             onClick={onManualSync}
             disabled={isSyncing}
-            className="text-[10px] bg-indigo-600 text-white px-3 py-1 rounded-full font-black hover:bg-indigo-700 transition-colors disabled:opacity-50"
+            className="text-[10px] bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50"
           >
-            {isSyncing ? 'SYNCING...' : 'SYNC NOW'}
+            Sync Now
           </button>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Store Identity */}
-        <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
-          <h2 className="text-lg font-bold flex items-center gap-2"><Store className="text-primary" /> Shop Information</h2>
-          <div className="flex flex-col md:flex-row gap-8 items-start">
-            <div className="flex flex-col items-center gap-3">
-              {business.id && (
-                <div className="w-full mb-2">
-                  <label className="block text-xs font-bold text-gray-400 uppercase mb-1 tracking-widest text-center">Support ID</label>
-                  <div className="flex gap-2">
-                    <input
-                      readOnly
-                      value={business.id}
-                      className="w-full px-2 py-1 bg-gray-100 border rounded text-xs text-center font-mono text-gray-600"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (business.id) navigator.clipboard.writeText(business.id);
-                      }}
-                      className="px-2 py-1 bg-gray-200 rounded text-xs font-bold text-gray-600 hover:bg-gray-300"
-                    >
-                      Copy
-                    </button>
-                  </div>
-                </div>
-              )}
-              <div className="relative group">
-                <div className="w-32 h-32 rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 flex flex-col items-center justify-center overflow-hidden transition-all group-hover:border-primary">
-                  {formData.logo ? (
-                    <img src={formData.logo} alt="Business Logo" className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="flex flex-col items-center text-gray-400">
-                      <ImageIcon size={32} className="mb-2" />
-                      <span className="text-[10px] font-bold">No Logo</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-              <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleLogoUpload} />
-              <div className="flex flex-col gap-2">
-                <button type="button" onClick={() => fileInputRef.current?.click()} className="text-[10px] font-black uppercase text-primary bg-primary-bg px-4 py-2 rounded-lg flex items-center gap-2 hover:opacity-80 transition-all">
-                  <Upload size={14} /> {formData.logo ? 'Change Logo' : 'Upload Logo'}
-                </button>
-                {formData.logo && (
-                  <button type="button" onClick={handleRemoveLogo} className="text-[10px] font-black uppercase text-red-600 bg-red-50 px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-red-100 transition-all">
-                    <Trash2 size={14} /> Remove Logo
-                  </button>
-                )}
-              </div>
-            </div>
-            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
-              <div className="md:col-span-2">
-                <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Business Name</label>
-                <input type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Phone</label>
-                <input type="tel" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Address</label>
-                <input type="text" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold" />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Appearance */}
-        <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
-          <h2 className="text-lg font-bold flex items-center gap-2"><Palette className="text-primary" /> Colors & Fonts</h2>
-          <div className="flex flex-wrap gap-4">
-            {THEME_COLORS.map(color => (
-              <button key={color.value} type="button" onClick={() => setFormData({ ...formData, theme: { ...formData.theme, primaryColor: color.value }})} className={`w-12 h-12 rounded-full border-4 transition-all ${formData.theme.primaryColor === color.value ? 'border-indigo-100 scale-110' : 'border-transparent'}`} style={{ backgroundColor: color.value }}>
-                {formData.theme.primaryColor === color.value && <CheckCircle2 className="text-white" size={24} />}
-              </button>
-            ))}
-          </div>
-          <div className="mt-6 border-t border-gray-100 pt-6">
-            <label className="block text-xs font-bold text-gray-400 uppercase mb-1 tracking-widest">Typography</label>
-            <p className="text-sm text-gray-500 mb-4">Choose the font style for your receipts and app interface.</p>
-
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {FONTS.map(font => (
-                <button
-                  key={font.value}
-                  type="button"
-                  onClick={() => setFormData({ ...formData, theme: { ...formData.theme, fontFamily: font.value } })}
-                  className={`px-4 py-3 rounded-xl border-2 text-sm transition-all ${formData.theme.fontFamily === font.value ? 'border-primary bg-primary-bg text-primary font-bold shadow-sm' : 'border-gray-100 text-gray-600 hover:border-gray-200'}`}
-                  style={{ fontFamily: font.value }}
-                >
-                  {/* FIX: Use font.name, not font.label */}
-                  {font.name}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Staff Permissions */}
-        <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
-          <h2 className="text-lg font-bold flex items-center gap-2"><ShieldAlert className="text-primary" /> What Staff Can Do</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {PERMISSION_OPTIONS.map(opt => {
-              const isActive = (formData.staffPermissions as any)?.[opt.id];
-              return (
-                <div key={opt.id} className="flex items-center justify-between p-5 rounded-2xl border bg-gray-50">
-                  <div>
-                    <p className="font-bold text-gray-900">{opt.label}</p>
-                    <p className="text-xs text-gray-500 mt-1">{opt.desc}</p>
-                  </div>
-                  <button type="button" onClick={() => togglePermission(opt.id)} className={`transition-colors ${isActive ? 'text-primary' : 'text-gray-300'}`}>
-                    {isActive ? <ToggleRight size={40} /> : <ToggleLeft size={40} />}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Discount Codes */}
-        <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
-           <div className="flex justify-between items-center">
-              <h2 className="text-lg font-bold flex items-center gap-2"><Ticket className="text-pink-500" /> Discount Codes</h2>
+      {/* Tabs Navigation */}
+      <div className="flex overflow-x-auto pb-2 mb-4 gap-2 shrink-0 no-scrollbar">
+          {TABS.map(tab => (
               <button
-                type="button"
-                onClick={() => setShowDiscountModal(true)}
-                className="text-xs font-black uppercase bg-pink-50 text-pink-600 px-4 py-2 rounded-lg hover:bg-pink-100 transition-all"
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`flex items-center gap-2 px-4 py-3 rounded-xl font-bold text-sm whitespace-nowrap transition-all ${
+                    activeTab === tab.id
+                    ? 'bg-primary text-white shadow-md'
+                    : 'bg-white text-gray-500 hover:bg-gray-50 border border-transparent'
+                }`}
               >
-                + Generate Code
+                  <tab.icon size={18} />
+                  {tab.label}
               </button>
-           </div>
-           <p className="text-sm text-gray-500">Create unique codes for marketing campaigns or loyal customers.</p>
-        </div>
+          ))}
+      </div>
 
-        {/* Security / PINs */}
-        <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
-          <h2 className="text-lg font-bold flex items-center gap-2"><Lock className="text-orange-500" /> Security</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div>
-              <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Current Owner PIN *</label>
-              <input type="password" value={currentOwnerPin} onChange={e => setCurrentOwnerPin(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold text-center tracking-widest" placeholder="****" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">New Staff PIN</label>
-              <input type="text" value={newStaffPin} onChange={e => setNewStaffPin(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold text-center tracking-widest" placeholder="Optional" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">New Owner PIN</label>
-              <input type="text" value={newOwnerPin} onChange={e => setNewOwnerPin(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold text-center tracking-widest" placeholder="Optional" />
-            </div>
-          </div>
-          <div className="flex justify-between items-center">
-             <p className={`text-xs font-bold ${securityMsg.includes('success') ? 'text-green-600' : 'text-red-500'}`}>{securityMsg}</p>
-             <button type="button" onClick={handleUpdatePins} className="text-xs font-black uppercase text-white bg-gray-900 px-6 py-3 rounded-xl hover:bg-black transition-all">Update PINs</button>
-          </div>
-        </div>
+      {/* Content Area */}
+      <div className="flex-1 overflow-y-auto pr-1">
+          {/* SHOP TAB */}
+          {activeTab === 'shop' && (
+             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
+                    <h2 className="text-lg font-bold flex items-center gap-2"><Store className="text-primary" /> Business Profile</h2>
 
-        {/* Support Section */}
-        <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
-          <h2 className="text-lg font-bold flex items-center gap-2"><HelpCircle className="text-emerald-600" /> Support & Help</h2>
-          <p className="text-sm text-gray-500 font-medium">Use the support assistant below for immediate help or contact our team.</p>
-          
-          {/* SupportBot Trigger UI rendered here locally */}
-          <div className="p-4 border-2 border-indigo-50 bg-indigo-50/20 rounded-2xl">
-            <SupportBot />
-          </div>
+                    <div className="flex flex-col md:flex-row gap-8 items-start">
+                        {/* Logo Uploader */}
+                        <div className="flex flex-col items-center gap-3 w-full md:w-auto">
+                             <div className="relative group">
+                                <div className="w-32 h-32 rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 flex flex-col items-center justify-center overflow-hidden">
+                                {formData.logo ? (
+                                    <img src={formData.logo} alt="Logo" className="w-full h-full object-cover" />
+                                ) : (
+                                    <div className="flex flex-col items-center text-gray-400">
+                                    <ImageIcon size={32} className="mb-2" />
+                                    <span className="text-[10px] font-bold">No Logo</span>
+                                    </div>
+                                )}
+                                </div>
+                            </div>
+                            <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleLogoUpload} />
+                            <div className="flex gap-2">
+                                <button type="button" onClick={() => fileInputRef.current?.click()} className="text-[10px] font-black uppercase text-primary bg-indigo-50 px-3 py-2 rounded-lg hover:bg-indigo-100">
+                                <Upload size={14} /> Upload
+                                </button>
+                                {formData.logo && (
+                                <button type="button" onClick={handleRemoveLogo} className="text-[10px] font-black uppercase text-red-600 bg-red-50 px-3 py-2 rounded-lg hover:bg-red-100">
+                                    <Trash2 size={14} />
+                                </button>
+                                )}
+                            </div>
+                        </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-            <a href="https://wa.me/2348051763431" target="_blank" rel="noreferrer" className="flex items-center gap-4 p-4 border-2 border-emerald-50 bg-emerald-50/30 rounded-2xl hover:bg-emerald-50 transition-all">
-              <MessageSquare className="text-emerald-500" />
-              <div><p className="font-bold text-gray-900 text-sm">WhatsApp Support</p></div>
-            </a>
-            <a href="mailto:support@ginvoice.com.ng" className="flex items-center gap-4 p-4 border-2 border-indigo-50 bg-indigo-50/30 rounded-2xl hover:bg-indigo-50 transition-all">
-              <HeadphonesIcon className="text-indigo-600" />
-              <div><p className="font-bold text-gray-900 text-sm">Email Support</p></div>
-            </a>
-          </div>
-        </div>
+                        {/* Text Inputs */}
+                        <div className="flex-1 space-y-4 w-full">
+                            <div>
+                                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Business Name</label>
+                                <input
+                                    type="text"
+                                    value={formData.name}
+                                    onChange={e => setFormData({...formData, name: e.target.value})}
+                                    onBlur={() => handleUpdateBusiness({ name: formData.name })}
+                                    className="w-full mt-1 px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold text-gray-900"
+                                />
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Phone</label>
+                                    <input
+                                        type="tel"
+                                        value={formData.phone}
+                                        onChange={e => setFormData({...formData, phone: e.target.value})}
+                                        onBlur={() => handleUpdateBusiness({ phone: formData.phone })}
+                                        className="w-full mt-1 px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold text-gray-900"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Address</label>
+                                    <input
+                                        type="text"
+                                        value={formData.address}
+                                        onChange={e => setFormData({...formData, address: e.target.value})}
+                                        onBlur={() => handleUpdateBusiness({ address: formData.address })}
+                                        className="w-full mt-1 px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold text-gray-900"
+                                    />
+                                </div>
+                            </div>
 
-        {/* Danger Zone */}
-        <div className="bg-red-50 rounded-3xl shadow-sm border border-red-100 p-6 md:p-8 space-y-6">
-           <h2 className="text-lg font-bold flex items-center gap-2 text-red-600"><AlertTriangle className="text-red-600" /> Delete Account</h2>
-           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-             <p className="text-sm text-red-800">
-               Deleting your business account will permanently remove all data, including products, transactions, and settings. This action cannot be undone.
-             </p>
-             <button
-               type="button"
-               onClick={() => setShowDeleteModal(true)}
-               className="bg-white border-2 border-red-200 text-red-600 px-6 py-3 rounded-xl font-bold hover:bg-red-600 hover:text-white transition-all whitespace-nowrap"
-             >
-               Delete Account & Data
-             </button>
-           </div>
-        </div>
+                            {/* Support ID */}
+                            {business.id && (
+                                <div className="pt-2">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Support ID (Tap to Copy)</label>
+                                    <button
+                                        onClick={() => { navigator.clipboard.writeText(business.id); addToast('Copied ID', 'success'); }}
+                                        className="w-full mt-1 px-4 py-2 bg-gray-100 border border-dashed border-gray-300 rounded-lg text-xs font-mono text-gray-500 text-left hover:bg-gray-200 transition-colors"
+                                    >
+                                        {business.id}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+             </div>
+          )}
 
-        {/* Action Button */}
-        <div className="flex items-center justify-between bg-white p-6 rounded-3xl shadow-lg border-t-4 border-primary mt-8">
-          <div>{showSaved && <p className="text-green-600 font-bold animate-bounce">✓ Changes saved!</p>}</div>
-          <div className="flex items-center gap-4">
-             <button
-               type="submit"
-               disabled={isLoading}
-               className="bg-primary text-white px-10 py-4 rounded-2xl font-black shadow-xl hover:opacity-90 transition-all flex items-center gap-2 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-             >
-               {isLoading ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
-               {isLoading ? 'Updating...' : 'Update Business'}
-             </button>
-          </div>
-        </div>
-      </form>
+          {/* PREFERENCES TAB */}
+          {activeTab === 'preferences' && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                  {/* Colors */}
+                  <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
+                      <h2 className="text-lg font-bold flex items-center gap-2"><Palette className="text-primary" /> Appearance</h2>
+                      <div className="flex flex-wrap gap-4">
+                        {THEME_COLORS.map(color => (
+                        <button key={color.value} type="button" onClick={() => {
+                            setFormData({ ...formData, theme: { ...formData.theme, primaryColor: color.value }});
+                            handleUpdateBusiness({ theme: { ...formData.theme, primaryColor: color.value } });
+                        }} className={`w-12 h-12 rounded-full border-4 transition-all ${formData.theme.primaryColor === color.value ? 'border-indigo-100 scale-110' : 'border-transparent'}`} style={{ backgroundColor: color.value }}>
+                            {formData.theme.primaryColor === color.value && <CheckCircle2 className="text-white" size={24} />}
+                        </button>
+                        ))}
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-400 uppercase mb-3 tracking-widest">Fonts</label>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                            {FONTS.map(font => (
+                                <button
+                                key={font.value}
+                                onClick={() => {
+                                    setFormData({ ...formData, theme: { ...formData.theme, fontFamily: font.value } });
+                                    handleUpdateBusiness({ theme: { ...formData.theme, fontFamily: font.value } });
+                                }}
+                                className={`px-4 py-3 rounded-xl border-2 text-sm transition-all ${formData.theme.fontFamily === font.value ? 'border-primary bg-primary-bg text-primary font-bold shadow-sm' : 'border-gray-100 text-gray-600 hover:border-gray-200'}`}
+                                style={{ fontFamily: font.value }}
+                                >
+                                {font.name}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                  </div>
+
+                  {/* Staff Permissions */}
+                  <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
+                    <h2 className="text-lg font-bold flex items-center gap-2"><ShieldCheck className="text-primary" /> Staff Permissions</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {PERMISSION_OPTIONS.map(opt => {
+                        const isActive = (formData.staffPermissions as any)?.[opt.id];
+                        return (
+                            <div key={opt.id} className="flex items-center justify-between p-4 rounded-2xl border bg-gray-50">
+                            <div>
+                                <p className="font-bold text-sm text-gray-900">{opt.label}</p>
+                                <p className="text-[10px] text-gray-500 mt-0.5">{opt.desc}</p>
+                            </div>
+                            <button type="button" onClick={() => togglePermission(opt.id)} className={`transition-colors ${isActive ? 'text-primary' : 'text-gray-300'}`}>
+                                {isActive ? <ToggleRight size={32} /> : <ToggleLeft size={32} />}
+                            </button>
+                            </div>
+                        );
+                        })}
+                    </div>
+                  </div>
+
+                   {/* Discount Codes */}
+                    <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-4">
+                        <div className="flex justify-between items-center">
+                            <h2 className="text-lg font-bold flex items-center gap-2"><Ticket className="text-pink-500" /> Discount Codes</h2>
+                            <button
+                                type="button"
+                                onClick={() => setShowDiscountModal(true)}
+                                className="text-xs font-black uppercase bg-pink-50 text-pink-600 px-4 py-2 rounded-lg hover:bg-pink-100 transition-all"
+                            >
+                                + Create Code
+                            </button>
+                        </div>
+                        <p className="text-sm text-gray-500">Manage promo codes for your customers.</p>
+                    </div>
+              </div>
+          )}
+
+          {/* BILLING TAB */}
+          {activeTab === 'billing' && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                  <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
+                      <h2 className="text-lg font-bold flex items-center gap-2"><CreditCard className="text-emerald-600" /> Subscription Status</h2>
+
+                      <div className={`p-6 rounded-2xl border-2 ${business.isSubscribed ? 'bg-emerald-50 border-emerald-100' : 'bg-orange-50 border-orange-100'}`}>
+                          <div className="flex items-center gap-3 mb-2">
+                              {business.isSubscribed ? <CheckCircle2 className="text-emerald-600" /> : <AlertTriangle className="text-orange-500" />}
+                              <h3 className={`font-black text-lg ${business.isSubscribed ? 'text-emerald-800' : 'text-orange-800'}`}>
+                                  {business.isSubscribed ? 'Active Subscription' : 'Free Trial'}
+                              </h3>
+                          </div>
+                          <p className="text-sm text-gray-600">
+                              {business.isSubscribed
+                                ? `Your plan renews on ${new Date(business.subscriptionExpiresAt!).toDateString()}`
+                                : `Your trial expires on ${new Date(business.trialEndsAt).toDateString()}`
+                              }
+                          </p>
+                      </div>
+
+                      {/* Manual Verification */}
+                      <div className="border-t pt-6">
+                          <h3 className="font-bold text-gray-900 mb-2">Verify Payment</h3>
+                          <p className="text-sm text-gray-500 mb-4">If you paid via bank transfer or USSD and your account isn't active, verify your reference code here.</p>
+                          <div className="flex gap-2">
+                              <input
+                                  type="text"
+                                  placeholder="Enter Paystack Reference Code"
+                                  className="flex-1 px-4 py-3 bg-gray-50 border rounded-xl font-mono text-sm"
+                                  value={paystackReference}
+                                  onChange={(e) => setPaystackReference(e.target.value)}
+                              />
+                              <button
+                                  onClick={handleVerifyPayment}
+                                  disabled={isVerifying || !paystackReference}
+                                  className="px-6 py-3 bg-gray-900 text-white rounded-xl font-bold disabled:opacity-50"
+                              >
+                                  {isVerifying ? <Loader2 className="animate-spin" /> : 'Verify'}
+                              </button>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+          )}
+
+          {/* SECURITY TAB */}
+          {activeTab === 'security' && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                  <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
+                    <h2 className="text-lg font-bold flex items-center gap-2"><Lock className="text-orange-500" /> Manage PINs</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div>
+                        <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Current Owner PIN *</label>
+                        <input type="password" value={currentOwnerPin} onChange={e => setCurrentOwnerPin(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold text-center tracking-widest" placeholder="****" />
+                        </div>
+                        <div>
+                        <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">New Staff PIN</label>
+                        <input type="text" value={newStaffPin} onChange={e => setNewStaffPin(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold text-center tracking-widest" placeholder="Optional" />
+                        </div>
+                        <div>
+                        <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">New Owner PIN</label>
+                        <input type="text" value={newOwnerPin} onChange={e => setNewOwnerPin(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold text-center tracking-widest" placeholder="Optional" />
+                        </div>
+                    </div>
+                    <div className="flex justify-between items-center">
+                        <p className={`text-xs font-bold ${securityMsg.includes('success') ? 'text-green-600' : 'text-red-500'}`}>{securityMsg}</p>
+                        <button type="button" onClick={handleUpdatePins} className="text-xs font-black uppercase text-white bg-gray-900 px-6 py-3 rounded-xl hover:bg-black transition-all">Update PINs</button>
+                    </div>
+                  </div>
+
+                   <div className="bg-red-50 rounded-3xl shadow-sm border border-red-100 p-6 md:p-8 space-y-6">
+                        <h2 className="text-lg font-bold flex items-center gap-2 text-red-600"><AlertTriangle className="text-red-600" /> Delete Account</h2>
+                        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                            <p className="text-sm text-red-800">
+                            Deleting your business account will permanently remove all data, including products, transactions, and settings. This action cannot be undone.
+                            </p>
+                            <button
+                            type="button"
+                            onClick={() => setShowDeleteModal(true)}
+                            className="bg-white border-2 border-red-200 text-red-600 px-6 py-3 rounded-xl font-bold hover:bg-red-600 hover:text-white transition-all whitespace-nowrap"
+                            >
+                            Delete Account
+                            </button>
+                        </div>
+                    </div>
+              </div>
+          )}
+
+          {/* HELP TAB */}
+          {activeTab === 'help' && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                  <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
+                    <h2 className="text-lg font-bold flex items-center gap-2"><HelpCircle className="text-indigo-600" /> Support Assistant</h2>
+                    <p className="text-sm text-gray-500">Ask us anything about Ginvoice.</p>
+
+                    <div className="p-4 border-2 border-indigo-50 bg-indigo-50/20 rounded-2xl">
+                        <SupportBot embed />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                        <a href="https://wa.me/2348051763431" target="_blank" rel="noreferrer" className="flex items-center gap-4 p-4 border-2 border-emerald-50 bg-emerald-50/30 rounded-2xl hover:bg-emerald-50 transition-all">
+                        <MessageSquare className="text-emerald-500" />
+                        <div><p className="font-bold text-gray-900 text-sm">WhatsApp Support</p></div>
+                        </a>
+                        <a href="mailto:support@ginvoice.com.ng" className="flex items-center gap-4 p-4 border-2 border-indigo-50 bg-indigo-50/30 rounded-2xl hover:bg-indigo-50 transition-all">
+                        <HeadphonesIcon className="text-indigo-600" />
+                        <div><p className="font-bold text-gray-900 text-sm">Email Support</p></div>
+                        </a>
+                    </div>
+                  </div>
+              </div>
+          )}
+      </div>
 
       {/* Discount Code Modal */}
       {showDiscountModal && (

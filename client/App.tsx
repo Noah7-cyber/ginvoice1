@@ -46,7 +46,7 @@ const hasActiveAlerts = (products: Product[], business: BusinessProfile, lowStoc
    let hasTrialAlert = false;
    if (!business.isSubscribed && business.trialEndsAt) {
       const daysLeft = Math.ceil((new Date(business.trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-      if (daysLeft <= 5 && daysLeft >= 0) { // Alert in last 5 days
+      if (daysLeft <= 7 && daysLeft >= 0) { // Alert in last 7 days
           // Check if already notified today
           const lastChecked = localStorage.getItem('ginvoice_trial_notified_date');
           const today = new Date().toDateString();

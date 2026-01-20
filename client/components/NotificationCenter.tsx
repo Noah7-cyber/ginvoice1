@@ -63,33 +63,12 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
     if (!business.isSubscribed && business.trialEndsAt) {
         const daysLeft = Math.ceil((new Date(business.trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 
-        // Show if 7 days or less left
-        if (daysLeft >= 0) {
-             const lastChecked = localStorage.getItem('ginvoice_trial_notified_date');
-             const today = new Date().toDateString();
-
-             // If not checked today, we effectively "mark" it as unseen in logic elsewhere,
-             // but here we always SHOW it in the list if it exists.
-             // The "once per 24h" constraint from prompt likely refers to a TOAST or POPUP.
-             // But the prompt says: "Ensure this notification appears in the Notification Center list and triggers the red badge".
-             // It also says: "Store the 'last checked date' in local storage so this notification only appears once every 24 hours".
-             // This phrasing is slightly ambiguous. Does "appears" mean "is added to the list" or "pop up"?
-             // Usually Notification Center lists persist state.
-             // I will interpret this as: Always show in list, but update the "Last Checked" when the user OPENS the notification center
-             // to prevent the red badge from staying permanently if they've seen it today.
-             // Actually, the prompt says "trigger a local notification... Constraint: ... so this notification only appears once...".
-             // This implies a Toast/Popup.
-             // But then "Placement: Ensure this notification appears in the Notification Center list...".
-
-             // Plan:
-             // 1. Always add to this list (so it's viewable).
-             // 2. The Badge logic (in App.tsx) handles the "seen today" check to toggle the red dot.
-
+        if (daysLeft <= 7 && daysLeft >= 0) {
              alerts.unshift({
-                 id: 'trial-expiry',
-                 title: 'Free Trial Expiring',
-                 body: `You have ${daysLeft} days left in your free trial. Subscribe now to keep access.`,
-                 type: 'critical' as const
+                 id: 'trial-expiry-urgent',
+                 title: 'Subscription Expiring Soon',
+                 body: `You have ${daysLeft} days left. Verify payment to renew.`,
+                 type: 'urgent' as const
              });
         }
     }
@@ -168,15 +147,15 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
                 <p className="text-center text-gray-400 text-sm py-4">System is healthy.</p>
               ) : (
                 systemAlerts.map((item) => (
-                    <div key={item.id} className={`flex gap-3 p-3 bg-white border rounded-xl hover:bg-gray-50 transition-colors ${item.type === 'critical' ? 'border-red-200 bg-red-50/30' : ''}`}>
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${item.type === 'critical' ? 'bg-red-100' : item.type === 'warning' ? 'bg-orange-50' : 'bg-blue-50'}`}>
-                        {item.type === 'critical' ? <AlertCircle size={18} className="text-red-600" /> : <AlertTriangle size={18} className="text-orange-600" />}
+                    <div key={item.id} className={`flex gap-3 p-3 bg-white border rounded-xl hover:bg-gray-50 transition-colors ${item.type === 'urgent' ? 'border-red-200 bg-red-50/30' : ''}`}>
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${item.type === 'urgent' ? 'bg-red-100' : item.type === 'warning' ? 'bg-orange-50' : 'bg-blue-50'}`}>
+                        {item.type === 'urgent' ? <AlertCircle size={18} className="text-red-600" /> : <AlertTriangle size={18} className="text-orange-600" />}
                     </div>
                     <div className="flex-1">
                         <div className="flex justify-between items-start">
                         <h4 className="text-sm font-black text-gray-900">{item.title}</h4>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${item.type === 'critical' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
-                            {item.type === 'critical' ? 'Urgent' : 'Action'}
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${item.type === 'urgent' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
+                            {item.type === 'urgent' ? 'Urgent' : 'Action'}
                         </span>
                         </div>
                         <p className="text-xs text-gray-500 mt-0.5">{item.body}</p>

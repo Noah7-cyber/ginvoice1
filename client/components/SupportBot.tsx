@@ -8,18 +8,18 @@ const SUPPORT_WHATSAPP = 'https://wa.me/2348051763431';
 
 // Quick Actions
 const QUICK_ACTIONS = [
+  { id: 'verify', label: 'How to verify payment?' },
+  { id: 'discount', label: 'How to add discounts?' },
+  { id: 'resetpin', label: 'Reset Owner PIN' },
   { id: 'invoice', label: 'How to create an Invoice?' },
-  { id: 'inventory', label: 'Managing Inventory' },
-  { id: 'expenses', label: 'Tracking Expenses' },
-  { id: 'payment', label: 'Subscription & Payment' }
 ];
 
 // Knowledge Base
 const KNOWLEDGE_BASE: Record<string, string> = {
+  verify: "Go to Settings > Billing and enter your Paystack reference code. This will manually unlock your subscription.",
+  discount: "Go to Settings > Preferences > Discount Codes to generate new codes for your customers.",
+  resetpin: "Go to Settings > Security. You need your current PIN to change it. If you lost it, use 'Forgot Password' on the login screen.",
   invoice: "To create an invoice, go to the 'Sales' tab. Add products to the cart by tapping them. Then open the cart sidebar (right side) to enter customer details and select a payment method. Click 'Complete Sale' to generate the receipt.",
-  inventory: "Go to the 'My Stock' tab. Click 'Add New' to register products. You can also use 'Manage Categories' to organize your items. Remember, staff need specific permissions to edit stock.",
-  expenses: "Use the 'Expenses' tab to record daily costs like fuel, transport, or restock fees. This helps calculate your true profit in the Dashboard.",
-  payment: "Go to Settings > Subscription. Click 'Subscribe' to pay via Paystack. If you paid but it's not active, click 'Verify Payment' and enter your reference code."
 };
 
 const GENERIC_HELP = "I can help you with Sales, Inventory, and Expenses. Please select a topic below or contact our support team.";
@@ -104,7 +104,7 @@ const SupportBot: React.FC<{ embed?: boolean }> = ({ embed = false }) => {
   };
 
   const ChatWindow = (
-    <div className={`flex flex-col h-[500px] max-h-[80vh] w-full max-w-md bg-white rounded-2xl overflow-hidden shadow-2xl animate-in slide-in-from-bottom duration-300 border border-gray-100`}>
+    <div className={`flex flex-col h-[500px] max-h-[60vh] md:max-h-[80vh] w-full max-w-md bg-white rounded-2xl overflow-hidden shadow-2xl animate-in slide-in-from-bottom duration-300 border border-gray-100`}>
         {/* Header */}
         <div className="bg-gradient-to-r from-indigo-600 to-violet-600 p-4 text-white flex justify-between items-center shrink-0">
             <div className="flex items-center gap-3">
@@ -119,7 +119,7 @@ const SupportBot: React.FC<{ embed?: boolean }> = ({ embed = false }) => {
                     </div>
                 </div>
             </div>
-            <button onClick={() => setOpen(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+            <button onClick={() => setOpen(false)} className="p-4 md:p-2 -mr-2 hover:bg-white/10 rounded-full transition-colors">
                 <X size={20} />
             </button>
         </div>
@@ -240,14 +240,14 @@ const SupportBot: React.FC<{ embed?: boolean }> = ({ embed = false }) => {
     <>
       <button
         onClick={() => setOpen(true)}
-        className={`fixed bottom-6 right-6 z-[70] bg-gradient-to-r from-indigo-600 to-violet-600 text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center hover:scale-110 transition-transform ${open ? 'hidden' : 'flex'}`}
+        className={`fixed bottom-6 right-6 z-[100] bg-gradient-to-r from-indigo-600 to-violet-600 text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center hover:scale-110 transition-transform ${open ? 'hidden' : 'flex'}`}
         aria-label="Open support"
       >
         <MessageCircle size={24} />
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center sm:justify-end sm:pr-6 sm:pb-20 p-4 pointer-events-none">
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:justify-end sm:pr-6 sm:pb-20 p-4 pointer-events-none">
           {/* Backdrop for mobile only */}
           <div className="absolute inset-0 bg-black/20 backdrop-blur-[1px] sm:hidden pointer-events-auto" onClick={() => setOpen(false)} />
           <div className="pointer-events-auto w-full max-w-md">
