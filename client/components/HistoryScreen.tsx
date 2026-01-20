@@ -34,11 +34,12 @@ interface HistoryScreenProps {
   onRenewSubscription?: () => void;
   isReadOnly?: boolean;
   isOnline: boolean;
+  initialParams?: { id?: string };
 }
 
 type ViewMode = 'invoices' | 'debtors';
 
-const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, onDeleteTransaction, onUpdateTransaction, isSubscriptionExpired, onRenewSubscription, isReadOnly, isOnline }) => {
+const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, onDeleteTransaction, onUpdateTransaction, isSubscriptionExpired, onRenewSubscription, isReadOnly, isOnline, initialParams }) => {
   const { addToast } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>('invoices');
   const [searchTerm, setSearchTerm] = useState('');
@@ -48,6 +49,31 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
   const [editAmountPaid, setEditAmountPaid] = useState<number>(0);
   const [editCustomerName, setEditCustomerName] = useState<string>('');
   const [selectedInvoice, setSelectedInvoice] = useState<Transaction | null>(null);
+
+  // Sync with URL Params
+  useEffect(() => {
+    if (initialParams?.id) {
+       const tx = transactions.find(t => t.id === initialParams.id);
+       if (tx) {
+         setSelectedInvoice(tx);
+       }
+    } else {
+        const currentPath = window.location.pathname;
+        const hasDeepLink = currentPath.split('/').length > 2; // e.g. /history/123
+
+        if (selectedInvoice && !hasDeepLink) {
+             setSelectedInvoice(null);
+        }
+    }
+  }, [initialParams, transactions]);
+
+  const updateUrlForInvoice = (id: string | null) => {
+      if (id) {
+          window.history.pushState(null, '', `/history/${id}`);
+      } else {
+          window.history.pushState(null, '', `/history`);
+      }
+  };
 
   // Modal State for Delete
   const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null);
@@ -361,7 +387,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
                         </>
                       ) : (
                         <>
-                          <button onClick={() => setSelectedInvoice(t)} className="p-2 text-indigo-600 bg-indigo-50 rounded-lg"><FileText size={18} /></button>
+                          <button onClick={() => { setSelectedInvoice(t); updateUrlForInvoice(t.id); }} className="p-2 text-indigo-600 bg-indigo-50 rounded-lg"><FileText size={18} /></button>
                           {!isReadOnly && (
                             <>
                               <button onClick={() => handleEditClick(t)} className="p-2 text-gray-400 hover:text-indigo-600 rounded-lg"><Edit3 size={18} /></button>
@@ -444,7 +470,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
         <InvoicePreview 
           transaction={selectedInvoice} 
           business={business} 
-          onClose={() => setSelectedInvoice(null)} 
+          onClose={() => { setSelectedInvoice(null); updateUrlForInvoice(null); }}
         />
       )}
 
