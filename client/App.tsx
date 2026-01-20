@@ -38,6 +38,27 @@ import SupportBot from './components/SupportBot';
 import useServerWakeup from './services/useServerWakeup';
 import NotificationCenter from './components/NotificationCenter';
 
+// Helper to check for active alerts (duplicated from NotificationCenter to avoid circular deps or complex state lifting)
+const hasActiveAlerts = (products: Product[], business: BusinessProfile, lowStockThreshold: number) => {
+   const hasLowStock = products.some(p => p.currentStock < lowStockThreshold);
+
+   // Trial Check
+   let hasTrialAlert = false;
+   if (!business.isSubscribed && business.trialEndsAt) {
+      const daysLeft = Math.ceil((new Date(business.trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+      if (daysLeft <= 5 && daysLeft >= 0) { // Alert in last 5 days
+          // Check if already notified today
+          const lastChecked = localStorage.getItem('ginvoice_trial_notified_date');
+          const today = new Date().toDateString();
+          if (lastChecked !== today) {
+              hasTrialAlert = true;
+          }
+      }
+   }
+
+   return hasLowStock || hasTrialAlert;
+};
+
 const TAB_LABELS: Record<string, string> = {
   sales: 'Sales',
   inventory: 'My Stock',
@@ -687,8 +708,8 @@ const App: React.FC = () => {
               className="relative p-2 rounded-xl text-primary bg-indigo-50 hover:bg-indigo-100 transition-all"
             >
                <Bell size={24} />
-               {/* Show red dot if there are notifications (e.g. low stock) */}
-               {state.products.some(p => p.currentStock < (state.business.settings?.lowStockThreshold || 10)) && (
+               {/* Show red dot if there are notifications */}
+               {hasActiveAlerts(state.products, state.business, state.business.settings?.lowStockThreshold || 10) && (
                  <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 rounded-full border border-white"></span>
                )}
             </button>
@@ -759,6 +780,7 @@ const App: React.FC = () => {
         onClose={() => setIsNotificationOpen(false)}
         transactions={state.transactions}
         products={state.products}
+        business={state.business}
         lowStockThreshold={state.business.settings?.lowStockThreshold || 10}
       />
 

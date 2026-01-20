@@ -1,164 +1,262 @@
-import React, { useState } from 'react';
-import { MessageCircle, X, LifeBuoy } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { MessageCircle, X, LifeBuoy, Send, User, Bot, Mail, MessageSquare } from 'lucide-react';
 import { useToast } from './ToastProvider';
+import { contactSupport } from '../services/api';
+import { loadState } from '../services/storage';
 
 const SUPPORT_WHATSAPP = 'https://wa.me/2348051763431';
-const SUPPORT_EMAIL = 'support@ginvoice.com.ng';
 
-const FAQ: { id: string; q: string; a: string }[] = [
-  { id: 'login', q: 'I cannot log in', a: 'Check your email and PIN. If you forgot your PIN, use the Forgot PIN option on the login screen.' },
-  { id: 'sync', q: 'Sync is failing', a: 'Ensure you are online and logged in. Then wait a few seconds for auto-sync.' },
-  { id: 'payment', q: 'Payment was successful but not unlocked', a: 'Use the Verify Payment button in Settings with your Paystack reference.' },
-  { id: 'offline', q: 'Some actions do not work offline', a: 'Deletes and subscription checks require an internet connection.' },
-  { id: 'invoice', q: 'Invoice edits are not saving', a: 'Save the invoice edit, then allow auto-sync to push changes when online.' }
+// Quick Actions
+const QUICK_ACTIONS = [
+  { id: 'invoice', label: 'How to create an Invoice?' },
+  { id: 'inventory', label: 'Managing Inventory' },
+  { id: 'expenses', label: 'Tracking Expenses' },
+  { id: 'payment', label: 'Subscription & Payment' }
 ];
 
-// Added embed prop to handle the two different display modes
+// Knowledge Base
+const KNOWLEDGE_BASE: Record<string, string> = {
+  invoice: "To create an invoice, go to the 'Sales' tab. Add products to the cart by tapping them. Then open the cart sidebar (right side) to enter customer details and select a payment method. Click 'Complete Sale' to generate the receipt.",
+  inventory: "Go to the 'My Stock' tab. Click 'Add New' to register products. You can also use 'Manage Categories' to organize your items. Remember, staff need specific permissions to edit stock.",
+  expenses: "Use the 'Expenses' tab to record daily costs like fuel, transport, or restock fees. This helps calculate your true profit in the Dashboard.",
+  payment: "Go to Settings > Subscription. Click 'Subscribe' to pay via Paystack. If you paid but it's not active, click 'Verify Payment' and enter your reference code."
+};
+
+const GENERIC_HELP = "I can help you with Sales, Inventory, and Expenses. Please select a topic below or contact our support team.";
+
 const SupportBot: React.FC<{ embed?: boolean }> = ({ embed = false }) => {
   const { addToast } = useToast();
   const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState<{ from: 'bot' | 'user'; text: string }[]>([
-    { from: 'bot', text: 'Hi! Tell me what you need help with.' }
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // State
+  const [messages, setMessages] = useState<{ from: 'bot' | 'user'; text: string; isAction?: boolean }[]>([
+    { from: 'bot', text: 'Hello! I am your Ginvoice Assistant. How can I help you today?' }
   ]);
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [isSending, setIsSending] = useState(false);
+  const [contactMode, setContactMode] = useState(false);
+  const [contactMessage, setContactMessage] = useState('');
 
-  const addMessage = (from: 'bot' | 'user', text: string) => {
-    setMessages(prev => [...prev, { from, text }]);
-  };
-
-  const handleQuestion = (item: { q: string; a: string }) => {
-    addMessage('user', item.q);
-    addMessage('bot', item.a);
-  };
-
-  const handleEscalateEmail = () => {
-    if (!navigator.onLine) {
-      addToast('Please connect to the internet to contact support.', 'error');
-      return;
+  // Auto-scroll
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-    const subject = encodeURIComponent('Ginvoice Support Request');
-    const body = encodeURIComponent('Describe your issue here...');
-    window.location.href = `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`;
+  }, [messages, open]);
+
+  const addMessage = (from: 'bot' | 'user', text: string, isAction = false) => {
+    setMessages(prev => [...prev, { from, text, isAction }]);
   };
 
-  const handleEscalateWhatsapp = () => {
-    if (!navigator.onLine) {
-      addToast('Please connect to the internet to contact support.', 'error');
-      return;
-    }
-    window.open(SUPPORT_WHATSAPP, '_blank');
+  const handleQuickAction = (actionId: string, label: string) => {
+    addMessage('user', label);
+
+    // Simulate thinking
+    setTimeout(() => {
+        const response = KNOWLEDGE_BASE[actionId];
+        if (response) {
+            addMessage('bot', response);
+            setFailedAttempts(0); // Reset failure count on success
+        } else {
+            handleUnknownQuery();
+        }
+    }, 600);
   };
 
-  // --- RENDERING LOGIC ---
+  const handleUnknownQuery = () => {
+      const newFailCount = failedAttempts + 1;
+      setFailedAttempts(newFailCount);
 
-  // 1. INLINE MODE (For Settings Screen)
-  if (embed) {
-    return (
-      <div className="w-full">
-        {!open ? (
-          <button 
-            onClick={() => setOpen(true)} 
-            className="w-full py-3 bg-primary text-white rounded-xl font-black text-sm shadow-md flex items-center justify-center gap-2"
-          >
-            <LifeBuoy size={18} /> OPEN SUPPORT ASSISTANT
-          </button>
-        ) : (
-          <div className="border border-gray-100 rounded-2xl bg-white overflow-hidden shadow-inner">
-            <div className="p-3 bg-gray-50 border-b flex justify-between items-center">
-              <span className="text-xs font-black uppercase text-gray-400 tracking-widest">Support Chat</span>
-              <button onClick={() => setOpen(false)} className="text-[10px] font-bold text-red-500 uppercase">Close</button>
+      if (newFailCount >= 2) {
+          addMessage('bot', "I'm having trouble understanding. Would you like to contact a human support agent?", true);
+      } else {
+          addMessage('bot', GENERIC_HELP);
+      }
+  };
+
+  const handleSendSupportEmail = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!contactMessage.trim()) return;
+      if (!navigator.onLine) {
+          addToast('Please connect to the internet.', 'error');
+          return;
+      }
+
+      setIsSending(true);
+      try {
+          const state = loadState();
+          const email = state?.business?.email || 'unknown@ginvoice.app';
+          const businessName = state?.business?.name || 'Unknown Business';
+
+          await contactSupport(contactMessage, email, businessName);
+
+          addMessage('user', `Support Request: ${contactMessage}`);
+          addMessage('bot', 'We have received your message. A support agent will reply to your email shortly.');
+          setContactMode(false);
+          setContactMessage('');
+          setFailedAttempts(0);
+      } catch (err) {
+          addToast('Failed to send message. Try again later.', 'error');
+      } finally {
+          setIsSending(false);
+      }
+  };
+
+  const ChatWindow = (
+    <div className={`flex flex-col h-[500px] max-h-[80vh] w-full max-w-md bg-white rounded-2xl overflow-hidden shadow-2xl animate-in slide-in-from-bottom duration-300 border border-gray-100`}>
+        {/* Header */}
+        <div className="bg-gradient-to-r from-indigo-600 to-violet-600 p-4 text-white flex justify-between items-center shrink-0">
+            <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-sm">
+                    <LifeBuoy size={18} />
+                </div>
+                <div>
+                    <h3 className="font-bold text-sm">Ginvoice Support</h3>
+                    <div className="flex items-center gap-1.5 opacity-80">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                        <span className="text-[10px] font-medium uppercase tracking-wide">Online</span>
+                    </div>
+                </div>
             </div>
-            <ChatContent 
-              messages={messages} 
-              onQuestion={handleQuestion} 
-              onEmail={handleEscalateEmail} 
-              onWhatsapp={handleEscalateWhatsapp} 
-            />
+            <button onClick={() => setOpen(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                <X size={20} />
+            </button>
+        </div>
+
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50" ref={scrollRef}>
+            {messages.map((msg, i) => (
+                <div key={i} className={`flex gap-3 ${msg.from === 'user' ? 'flex-row-reverse' : ''}`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${msg.from === 'user' ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-200 text-gray-600'}`}>
+                        {msg.from === 'user' ? <User size={14} /> : <Bot size={14} />}
+                    </div>
+                    <div className={`max-w-[80%] p-3 text-sm shadow-sm ${
+                        msg.from === 'user'
+                        ? 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white rounded-2xl rounded-tr-none'
+                        : 'bg-white text-gray-700 rounded-2xl rounded-tl-none border border-gray-100'
+                    }`}>
+                        {msg.text}
+                    </div>
+                </div>
+            ))}
+
+            {/* Anti-Loop / Contact Trigger */}
+            {failedAttempts >= 2 && !contactMode && (
+                <div className="flex flex-col gap-2 pl-11">
+                    <button
+                        onClick={() => setContactMode(true)}
+                        className="bg-gray-900 text-white px-4 py-3 rounded-xl text-sm font-bold shadow-lg hover:scale-[1.02] transition-transform flex items-center gap-2 w-fit"
+                    >
+                        <Mail size={16} /> Contact Human Support
+                    </button>
+                    <a
+                        href={SUPPORT_WHATSAPP}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="bg-emerald-500 text-white px-4 py-3 rounded-xl text-sm font-bold shadow-lg hover:scale-[1.02] transition-transform flex items-center gap-2 w-fit"
+                    >
+                        <MessageSquare size={16} /> Chat on WhatsApp
+                    </a>
+                </div>
+            )}
+
+            {/* Contact Form */}
+            {contactMode && (
+                <div className="pl-11 pr-4 animate-in fade-in slide-in-from-bottom-2">
+                    <form onSubmit={handleSendSupportEmail} className="bg-white p-4 rounded-xl border shadow-sm space-y-3">
+                        <p className="text-xs font-bold text-gray-500 uppercase">Send a message to support</p>
+                        <textarea
+                            autoFocus
+                            className="w-full p-3 bg-gray-50 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+                            placeholder="Describe your issue..."
+                            rows={3}
+                            value={contactMessage}
+                            onChange={(e) => setContactMessage(e.target.value)}
+                        />
+                        <div className="flex gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setContactMode(false)}
+                                className="flex-1 py-2 text-xs font-bold text-gray-500 hover:bg-gray-100 rounded-lg"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={isSending || !contactMessage.trim()}
+                                className="flex-1 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                            >
+                                {isSending ? 'Sending...' : 'Send Message'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            )}
+        </div>
+
+        {/* Footer / Chips */}
+        <div className="p-4 bg-white border-t space-y-3">
+            {!contactMode && (
+                <>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Quick Actions</p>
+                    <div className="flex flex-wrap gap-2 justify-center">
+                        {QUICK_ACTIONS.map(action => (
+                            <button
+                                key={action.id}
+                                onClick={() => handleQuickAction(action.id, action.label)}
+                                className="px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-full text-xs font-bold border border-indigo-100 hover:bg-indigo-100 hover:border-indigo-200 transition-colors active:scale-95"
+                            >
+                                {action.label}
+                            </button>
+                        ))}
+                    </div>
+                </>
+            )}
+        </div>
+    </div>
+  );
+
+  // 1. EMBED MODE
+  if (embed) {
+      return (
+          <div className="w-full">
+              {!open ? (
+                  <button
+                      onClick={() => setOpen(true)}
+                      className="w-full py-4 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-2xl font-black text-sm shadow-lg flex items-center justify-center gap-2 hover:opacity-95 transition-opacity"
+                  >
+                      <LifeBuoy size={20} /> NEED HELP? OPEN CHAT
+                  </button>
+              ) : (
+                  <div className="mt-4">{ChatWindow}</div>
+              )}
           </div>
-        )}
-      </div>
-    );
+      );
   }
 
-  // 2. FLOATING MODE (Original)
+  // 2. FLOATING MODE
   return (
     <>
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-6 right-6 z-[70] bg-primary text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center hover:opacity-90 transition-all"
+        className={`fixed bottom-6 right-6 z-[70] bg-gradient-to-r from-indigo-600 to-violet-600 text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center hover:scale-110 transition-transform ${open ? 'hidden' : 'flex'}`}
         aria-label="Open support"
       >
         <MessageCircle size={24} />
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-[80] flex items-end md:items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setOpen(false)} />
-          <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden">
-            <div className="p-4 bg-primary text-white flex items-center justify-between">
-              <div className="flex items-center gap-2 font-bold">
-                <LifeBuoy size={18} /> Support Assistant
-              </div>
-              <button onClick={() => setOpen(false)} className="text-white/80 hover:text-white">
-                <X size={18} />
-              </button>
-            </div>
-            <ChatContent 
-              messages={messages} 
-              onQuestion={handleQuestion} 
-              onEmail={handleEscalateEmail} 
-              onWhatsapp={handleEscalateWhatsapp} 
-            />
+        <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center sm:justify-end sm:pr-6 sm:pb-20 p-4 pointer-events-none">
+          {/* Backdrop for mobile only */}
+          <div className="absolute inset-0 bg-black/20 backdrop-blur-[1px] sm:hidden pointer-events-auto" onClick={() => setOpen(false)} />
+          <div className="pointer-events-auto w-full max-w-md">
+            {ChatWindow}
           </div>
         </div>
       )}
     </>
   );
 };
-
-// Reusable Chat UI to keep the code clean
-const ChatContent: React.FC<{
-  messages: any[], 
-  onQuestion: (q: any) => void, 
-  onEmail: () => void, 
-  onWhatsapp: () => void
-}> = ({ messages, onQuestion, onEmail, onWhatsapp }) => (
-  <>
-    <div className="p-4 space-y-3 max-h-[40vh] overflow-y-auto bg-gray-50/50">
-      {messages.map((msg, idx) => (
-        <div
-          key={idx}
-          className={`text-sm p-3 rounded-2xl max-w-[85%] ${
-            msg.from === 'bot' 
-            ? 'bg-white text-gray-700 shadow-sm self-start' 
-            : 'bg-primary text-white font-bold ml-auto'
-          }`}
-        >
-          {msg.text}
-        </div>
-      ))}
-
-      <div className="pt-2 space-y-2">
-        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Quick FAQ</p>
-        {FAQ.map(item => (
-          <button
-            key={item.id}
-            onClick={() => onQuestion(item)}
-            className="w-full text-left text-xs font-bold px-3 py-2 rounded-xl border border-gray-100 bg-white hover:bg-gray-100 transition-colors"
-          >
-            {item.q}
-          </button>
-        ))}
-      </div>
-    </div>
-
-    <div className="p-4 border-t bg-white">
-      <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-2">Speak to a human</div>
-      <div className="flex gap-2">
-        <button onClick={onEmail} className="flex-1 bg-gray-900 text-white py-2 rounded-xl text-xs font-black">Email</button>
-        <button onClick={onWhatsapp} className="flex-1 bg-emerald-600 text-white py-2 rounded-xl text-xs font-black">WhatsApp</button>
-      </div>
-    </div>
-  </>
-);
 
 export default SupportBot;
