@@ -1,16 +1,39 @@
-[{
-      "relation": ["delegate_permission/common.handle_all_urls"],
-      "target": {
-        "namespace": "android_app",
-        "package_name": "app.vercel.ginvoice1.twa",
-        "sha256_cert_fingerprints": ["A4:B5:7A:A5:89:89:BB:45:77:27:A5:DF:28:39:55:03:FD:66:B2:BA:11:1E:62:4A:E3:77:67:A7:E4:DF:D8:B0"]
-      }
-    },
-    {
-      "relation": ["delegate_permission/common.handle_all_urls"],
-      "target": {
-        "namespace": "android_app",
-        "package_name": "com.ginvoice",
-        "sha256_cert_fingerprints": ["E2:A3:CE:7D:3F:C8:F6:17:98:EA:C8:F9:3D:23:54:2D:EF:1D:78:42:85:20:24:93:9C:0E:D4:BD:59:88:C6:E1"]
-      }
-    }]
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.vercel.ginvoice1.twa",
+      "sha256_cert_fingerprints": [
+        "A4:B5:7A:A5:89:89:BB:45:77:27:A5:DF:28:39:55:03:FD:66:B2:BA:11:1E:62:4A:E3:77:67:A7:E4:DF:D8:B0"
+      ]
+    }
+  },
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.ginvoice",
+      "sha256_cert_fingerprints": [
+        "E2:A3:CE:7D:3F:C8:F6:17:98:EA:C8:F9:3D:23:54:2D:EF:1D:78:42:85:20:24:93:9C:0E:D4:BD:59:88:C6:E1"
+      ]
+    }
+  },
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls",
+      "delegate_permission/common.get_login_creds"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "ng.com.ginvoice.twa",
+      "sha256_cert_fingerprints": [
+        "EC:B8:B4:A3:40:FB:0E:6A:95:EA:83:CF:8E:43:CF:DF:BE:88:F5:A6:F3:FB:44:77:06:0C:88:74:75:62:80:2D"
+      ]
+    }
+  }
+]

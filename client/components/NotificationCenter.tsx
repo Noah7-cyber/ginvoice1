@@ -1,12 +1,13 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Bell, X, FileText, AlertTriangle, AlertCircle } from 'lucide-react';
-import { Transaction, Product, BusinessProfile } from '../types';
+import { Bell, X, FileText, AlertTriangle, AlertCircle, Trash2 } from 'lucide-react';
+import { Transaction, Product, BusinessProfile, ActivityLog } from '../types';
 import { CURRENCY } from '../constants';
 
 interface NotificationCenterProps {
   isOpen: boolean;
   onClose: () => void;
-  transactions: Transaction[];
+  transactions: Transaction[]; // Kept for legacy/reference
+  activities: ActivityLog[];
   products: Product[];
   business: BusinessProfile;
   lowStockThreshold: number;
@@ -16,19 +17,20 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
   isOpen,
   onClose,
   transactions,
+  activities = [],
   products,
   business,
   lowStockThreshold
 }) => {
   const [activeTab, setActiveTab] = useState<'transactions' | 'system'>('transactions');
 
-  // Derive Recent Transactions
-  const recentTransactions = useMemo(() => {
-    return [...transactions]
-      .sort((a, b) => new Date(b.transactionDate).getTime() - new Date(a.transactionDate).getTime())
-      .slice(0, 10)
-      .map(tx => {
-        const timeDiff = Math.floor((Date.now() - new Date(tx.transactionDate).getTime()) / 60000); // minutes
+  // Derive Recent Activity
+  const recentActivity = useMemo(() => {
+    return [...activities]
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 20)
+      .map(log => {
+        const timeDiff = Math.floor((Date.now() - new Date(log.timestamp).getTime()) / 60000); // minutes
         let timeDisplay = `${timeDiff} mins ago`;
         if (timeDiff >= 60) {
             const hours = Math.floor(timeDiff / 60);
@@ -39,14 +41,24 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
             }
         }
 
+        let title = log.title;
+        let subtext = log.description;
+
+        // Enhance Sales logs
+        if (log.type === 'sale') {
+           const role = log.actor === 'owner' ? 'Owner' : 'Staff';
+           subtext = `${subtext} • Sold by ${role}`;
+        }
+
         return {
-          id: tx.id,
-          title: `New Sale: ${CURRENCY}${tx.totalAmount.toLocaleString()}`,
-          subtext: `${tx.items.length} items • ${tx.paymentMethod} • Sold by Staff`, // Simplify "Staff" for now
-          time: timeDisplay
+          id: log.id,
+          title,
+          subtext,
+          time: timeDisplay,
+          type: log.type
         };
       });
-  }, [transactions]);
+  }, [activities]);
 
   // Derive Low Stock & System Alerts
   const systemAlerts = useMemo(() => {
@@ -126,13 +138,13 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
          {/* Content */}
          <div className="flex-1 overflow-y-auto p-4 space-y-3">
            {activeTab === 'transactions' ? (
-             recentTransactions.length === 0 ? (
-                <p className="text-center text-gray-400 text-sm py-4">No recent transactions.</p>
+             recentActivity.length === 0 ? (
+                <p className="text-center text-gray-400 text-sm py-4">No recent activity.</p>
              ) : (
-                recentTransactions.map((item) => (
+                recentActivity.map((item) => (
                 <div key={item.id} className="flex gap-3 p-3 bg-white border rounded-xl hover:bg-gray-50 transition-colors group relative">
-                    <div className="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center shrink-0">
-                        <FileText size={18} className="text-green-600" />
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${item.type === 'delete' ? 'bg-red-50' : 'bg-green-50'}`}>
+                        {item.type === 'delete' ? <Trash2 size={18} className="text-red-600" /> : <FileText size={18} className="text-green-600" />}
                     </div>
                     <div className="flex-1">
                         <h4 className="text-sm font-black text-gray-900">{item.title}</h4>

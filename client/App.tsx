@@ -17,7 +17,7 @@ import {
   Loader2,
   Bell
 } from 'lucide-react';
-import { InventoryState, UserRole, Product, ProductUnit, Transaction, BusinessProfile, TabId, SaleItem, PaymentMethod, Expenditure } from './types';
+import { InventoryState, UserRole, Product, ProductUnit, Transaction, BusinessProfile, TabId, SaleItem, PaymentMethod, Expenditure, ActivityLog } from './types';
 import { INITIAL_PRODUCTS } from './constants';
 import { safeCalculate } from './utils/math';
 import { saveState, loadState, pushToBackend, getDataVersion, saveDataVersion, getLastSync, saveLastSync } from './services/storage';
@@ -178,9 +178,11 @@ const App: React.FC = () => {
         theme: { primaryColor: '#4f46e5', fontFamily: "'Inter', sans-serif" },
         staffPermissions: { canGiveDiscount: false, canViewInventory: false, canEditInventory: false, canViewHistory: false, canViewDashboard: false, canViewExpenditure: false }
       },
-      expenditures: []
+      expenditures: [],
+      activities: []
     };
     if (!base.expenditures) base.expenditures = [];
+    if (!base.activities) base.activities = [];
     return base as InventoryState;
   });
 
@@ -526,7 +528,21 @@ const App: React.FC = () => {
       // We will perform the local state update. The API call responsibility is shifting to the caller (HistoryScreen).
       // If there are other callers, they need to be updated. (Searching codebase... only HistoryScreen calls this usually).
 
-      setState(prev => ({ ...prev, transactions: prev.transactions.filter(t => t.id !== id) }));
+      // Create deletion log
+      const deleteLog: ActivityLog = {
+        id: `LOG-${Date.now()}`,
+        type: 'delete',
+        title: 'Transaction Deleted',
+        description: `Order #${id} removed by ${state.role}`,
+        actor: state.role,
+        timestamp: new Date().toISOString()
+      };
+
+      setState(prev => ({
+        ...prev,
+        transactions: prev.transactions.filter(t => t.id !== id),
+        activities: [deleteLog, ...(prev.activities || [])]
+      }));
 
       // We also verify if we need to locally restore stock (Optimistic UI)
       if (restockItems) {
@@ -606,10 +622,21 @@ const App: React.FC = () => {
       return { ...p, currentStock: Math.max(0, p.currentStock - totalDeduction) };
     });
 
+    // Create activity log
+    const saleLog: ActivityLog = {
+      id: `LOG-${Date.now()}`,
+      type: 'sale',
+      title: 'Sale Recorded',
+      description: `Invoice #${transaction.id}`,
+      actor: transaction.createdByRole || state.role, // Use role from transaction
+      timestamp: new Date().toISOString()
+    };
+
     const nextState = {
       ...state,
       products: updatedProducts,
-      transactions: [transaction, ...state.transactions]
+      transactions: [transaction, ...state.transactions],
+      activities: [saleLog, ...(state.activities || [])]
     };
 
     // 2. Update UI
@@ -836,6 +863,7 @@ const App: React.FC = () => {
         isOpen={isNotificationOpen}
         onClose={() => setIsNotificationOpen(false)}
         transactions={state.transactions}
+        activities={state.activities}
         products={state.products}
         business={state.business}
         lowStockThreshold={state.business.settings?.lowStockThreshold || 10}
