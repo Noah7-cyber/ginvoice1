@@ -98,6 +98,8 @@ export interface Transaction {
   staffId: string;
   createdAt?: string;
   updatedAt?: string;
+  createdByRole?: 'owner' | 'staff'; // New field
+  discountCode?: string;
 }
 
 /* New: Expenditure item stored locally */
@@ -115,9 +117,20 @@ export interface Expenditure {
   createdAt?: string;
 }
 
+export interface ActivityLog {
+  id: string;
+  type: 'sale' | 'delete' | 'stock_update';
+  title: string;
+  description: string;
+  actor: 'owner' | 'staff';
+  timestamp: string;
+  isUrgent?: boolean;
+}
+
 export interface InventoryState {
   products: Product[];
   transactions: Transaction[];
+  activities: ActivityLog[]; // New field
   categories?: Category[]; // Added for sync
   role: UserRole;
   isLoggedIn: boolean;
