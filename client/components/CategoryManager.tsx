@@ -21,6 +21,7 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
   const [defaultUnit, setDefaultUnit] = useState('');
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
 
   const handleAddOrUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,6 +66,7 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
       setDefaultCost('');
       setDefaultSelling('');
       setDefaultUnit('');
+      setShowForm(false);
     } catch (err) {
       addToast(editingId ? 'Failed to update' : 'Failed to create', 'error');
     } finally {
@@ -78,6 +80,7 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
     setDefaultCost(cat.defaultCostPrice);
     setDefaultSelling(cat.defaultSellingPrice);
     setDefaultUnit(cat.defaultUnit || '');
+    setShowForm(true);
   };
 
   const cancelEdit = () => {
@@ -86,6 +89,7 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
     setDefaultCost('');
     setDefaultSelling('');
     setDefaultUnit('');
+    setShowForm(false);
   };
 
   const handleDelete = async (id: string) => {
@@ -107,79 +111,24 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md animate-in zoom-in-95 flex flex-col h-[80vh]">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md animate-in zoom-in-95 flex flex-col h-[80vh] relative overflow-hidden">
         {/* Header - Fixed */}
-        <div className="p-4 border-b flex justify-between items-center bg-gray-50 flex-none">
+        <div className="p-4 border-b flex justify-between items-center bg-gray-50 flex-none z-20">
           <h2 className="text-lg font-bold flex items-center gap-2"><Tag size={20} /> Manage Categories</h2>
           <button onClick={onClose}><X size={24} /></button>
         </div>
 
-        {/* Input Form - Fixed */}
-        <div className="p-4 border-b bg-white flex-none z-10 shadow-sm">
-          <form onSubmit={handleAddOrUpdate} className={`space-y-3 p-4 rounded-xl border ${editingId ? 'bg-indigo-50 border-indigo-100' : 'bg-gray-50'}`}>
-            <div className="flex justify-between items-center">
-               <label className="text-[10px] font-bold text-gray-400 uppercase">{editingId ? 'Edit Category' : 'New Category Name'}</label>
-               {editingId && <button type="button" onClick={cancelEdit} className="text-[10px] font-bold text-red-500 uppercase">Cancel</button>}
-            </div>
-            <div>
-               <input
-                 autoFocus
-                 type="text"
-                 required
-                 className="w-full px-3 py-2 border rounded-lg text-sm font-bold"
-                 placeholder="e.g. Beverages"
-                 value={newCategoryName}
-                 onChange={e => setNewCategoryName(e.target.value)}
-               />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-               <div>
-                  <label className="text-[10px] font-bold text-gray-400 uppercase">Default Cost ({CURRENCY})</label>
-                  <input
-                    type="number"
-                    className="w-full px-3 py-2 border rounded-lg text-sm"
-                    placeholder="0"
-                    value={defaultCost || ''}
-                    onChange={e => setDefaultCost(Number(e.target.value))}
-                  />
-               </div>
-               <div>
-                  <label className="text-[10px] font-bold text-gray-400 uppercase">Default Price ({CURRENCY})</label>
-                  <input
-                    type="number"
-                    className="w-full px-3 py-2 border rounded-lg text-sm"
-                    placeholder="0"
-                    value={defaultSelling || ''}
-                    onChange={e => setDefaultSelling(Number(e.target.value))}
-                  />
-               </div>
-               <div className="col-span-1 sm:col-span-2">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase">Default Unit Type</label>
-                  <input
-                    type="text"
-                    className="w-full px-3 py-2 border rounded-lg text-sm"
-                    placeholder="e.g. Bottle, Pack, Kg"
-                    value={defaultUnit}
-                    onChange={e => setDefaultUnit(e.target.value)}
-                  />
-               </div>
-            </div>
-            <button
-              disabled={loading}
-              className={`w-full py-2 text-white rounded-lg font-bold text-sm hover:opacity-90 disabled:opacity-50 ${editingId ? 'bg-indigo-600' : 'bg-primary'}`}
-            >
-              {loading ? 'Saving...' : (editingId ? 'Update Category' : 'Add Category')}
-            </button>
-          </form>
-        </div>
-
-        {/* List - Scrollable */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-gray-50/50">
+        {/* List - Scrollable (Visible by default) */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-gray-50/50 pb-24">
             {categories.length === 0 ? (
-               <p className="text-center text-gray-400 text-sm py-4">No custom categories yet.</p>
+               <div className="flex flex-col items-center justify-center h-40 text-gray-400 text-sm">
+                 <Tag size={40} className="mb-2 opacity-20" />
+                 <p>No custom categories yet.</p>
+                 <p className="text-xs mt-1">Tap + to add one.</p>
+               </div>
             ) : (
                [...categories].sort((a, b) => a.name.localeCompare(b.name)).map(cat => (
-                 <div key={cat.id} className={`flex justify-between items-center p-3 bg-white border rounded-xl hover:shadow-sm transition-shadow ${editingId === cat.id ? 'ring-2 ring-indigo-500 bg-indigo-50' : ''}`}>
+                 <div key={cat.id} className="flex justify-between items-center p-3 bg-white border rounded-xl hover:shadow-sm transition-shadow">
                     <div>
                       <h4 className="font-bold text-gray-800">{cat.name}</h4>
                       <p className="text-[10px] text-gray-500">
@@ -199,15 +148,116 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
             )}
         </div>
 
-        {/* Footer - Close Button */}
-        <div className="p-4 border-t bg-white flex-none">
-           <button
-             onClick={onClose}
-             className="w-full py-3 bg-gray-100 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-200 transition-colors"
-           >
-             Close Manager
-           </button>
-        </div>
+        {/* Floating Add Button (Visible when form is closed) */}
+        {!showForm && (
+           <div className="absolute bottom-20 right-6 z-10">
+              <button
+                onClick={() => {
+                  setEditingId(null);
+                  setNewCategoryName('');
+                  setDefaultCost('');
+                  setDefaultSelling('');
+                  setDefaultUnit('');
+                  setShowForm(true);
+                }}
+                className="w-14 h-14 bg-indigo-600 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-indigo-700 transition-colors"
+              >
+                <Plus size={28} />
+              </button>
+           </div>
+        )}
+
+        {/* Input Form Overlay (Slide Up) */}
+        {showForm && (
+          <div className="absolute inset-0 z-30 bg-white flex flex-col animate-in slide-in-from-bottom-10">
+            <div className="p-4 border-b flex justify-between items-center bg-gray-50 flex-none">
+               <h3 className="font-bold text-gray-700">{editingId ? 'Edit Category' : 'New Category'}</h3>
+               <button onClick={cancelEdit} className="p-2 hover:bg-gray-200 rounded-full">
+                 <X size={20} />
+               </button>
+            </div>
+
+            <div className="p-6 flex-1 overflow-y-auto">
+              <form onSubmit={handleAddOrUpdate} className="space-y-4">
+                <div>
+                   <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Category Name</label>
+                   <input
+                     autoFocus
+                     type="text"
+                     required
+                     className="w-full px-4 py-3 border rounded-xl text-lg font-bold"
+                     placeholder="e.g. Beverages"
+                     value={newCategoryName}
+                     onChange={e => setNewCategoryName(e.target.value)}
+                   />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                   <div>
+                      <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Def. Cost ({CURRENCY})</label>
+                      <input
+                        type="number"
+                        className="w-full px-4 py-3 border rounded-xl"
+                        placeholder="0"
+                        value={defaultCost || ''}
+                        onChange={e => setDefaultCost(Number(e.target.value))}
+                      />
+                   </div>
+                   <div>
+                      <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Def. Price ({CURRENCY})</label>
+                      <input
+                        type="number"
+                        className="w-full px-4 py-3 border rounded-xl"
+                        placeholder="0"
+                        value={defaultSelling || ''}
+                        onChange={e => setDefaultSelling(Number(e.target.value))}
+                      />
+                   </div>
+                </div>
+
+                <div>
+                   <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Def. Unit Type</label>
+                   <input
+                     type="text"
+                     className="w-full px-4 py-3 border rounded-xl"
+                     placeholder="e.g. Bottle, Pack, Kg"
+                     value={defaultUnit}
+                     onChange={e => setDefaultUnit(e.target.value)}
+                   />
+                </div>
+
+                <div className="pt-4 flex gap-3">
+                   <button
+                     type="button"
+                     onClick={cancelEdit}
+                     className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200"
+                   >
+                     Cancel
+                   </button>
+                   <button
+                     type="submit"
+                     disabled={loading}
+                     className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200"
+                   >
+                     {loading ? 'Saving...' : (editingId ? 'Update' : 'Create')}
+                   </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Footer - Close Button (Visible when form is closed) */}
+        {!showForm && (
+          <div className="p-4 border-t bg-white flex-none">
+             <button
+               onClick={onClose}
+               className="w-full py-3 bg-gray-100 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-200 transition-colors"
+             >
+               Close Manager
+             </button>
+          </div>
+        )}
       </div>
     </div>
   );

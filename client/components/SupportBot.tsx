@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageCircle, X, LifeBuoy, Send, User, Bot, Mail, MessageSquare } from 'lucide-react';
+import { X, LifeBuoy, Send, User, Bot, Mail, MessageSquare } from 'lucide-react';
 import { useToast } from './ToastProvider';
 import { contactSupport } from '../services/api';
 import { loadState } from '../services/storage';
@@ -8,17 +8,39 @@ const SUPPORT_WHATSAPP = 'https://wa.me/2348051763431';
 
 // Quick Actions
 const QUICK_ACTIONS = [
+  { id: 'sell', label: 'How do I sell?' },
+  { id: 'stock', label: 'Add/Edit Items' },
+  { id: 'sync', label: 'Save my data' },
+  { id: 'debt', label: 'Who owes me?' },
+  { id: 'mistake', label: 'Fix a mistake' },
+  { id: 'pin', label: 'Forgot PIN' },
   { id: 'verify', label: 'How to verify payment?' },
   { id: 'discount', label: 'How to add discounts?' },
-  { id: 'resetpin', label: 'Reset Owner PIN' },
   { id: 'invoice', label: 'How to create an Invoice?' },
 ];
 
 // Knowledge Base
 const KNOWLEDGE_BASE: Record<string, string> = {
+  // Sales & Day-to-Day
+  sell: "To make a sale, tap 'Sales' at the bottom. Tap the items the customer wants, then tap the checkout button (the shopping cart icon) to finish.",
+  mistake: "Sold the wrong thing? Go to the 'History' tab. Tap the sale you want to fix, and you can delete or edit it there.",
+  debt: "The 'Dashboard' shows a red card with 'Money Owed To You'. These are your debtors. You can also see unpaid balances in the 'History' tab.",
+
+  // Inventory
+  stock: "Go to 'Inventory'. To add a new item, tap the big Plus (+) button. To change a price or quantity, just tap the item in the list.",
+  categories: "You can organize items into groups (like Drinks, Snacks). Go to 'Inventory' and look for the 'Manage Categories' button.",
+
+  // Technical / Settings
+  sync: "The app saves to the cloud automatically when you have internet. You can also force a save by going to 'Settings' and tapping the 'Sync Now' button at the top.",
+  wifi: "You don't need internet to sell! You can work offline. Just connect to the internet once a day so your data backs up safely.",
+  pin: "If you forgot your PIN, go to Settings > Security to change it. If you are locked out completely, use the 'Forgot Password' option on the login screen.",
+  discount: "Want to give a customer a deal? Go to Settings > Preferences > Discount Codes to create a special code for them.",
+
+  // Subscription
+  sub: "To check your subscription, go to Settings > Billing. It will tell you when your next payment is due.",
+
+  // Existing Features
   verify: "Go to Settings > Billing and enter your Paystack reference code. This will manually unlock your subscription.",
-  discount: "Go to Settings > Preferences > Discount Codes to generate new codes for your customers.",
-  resetpin: "Go to Settings > Security. You need your current PIN to change it. If you lost it, use 'Forgot Password' on the login screen.",
   invoice: "To create an invoice, go to the 'Sales' tab. Add products to the cart by tapping them. Then open the cart sidebar (right side) to enter customer details and select a payment method. Click 'Complete Sale' to generate the receipt.",
 };
 
@@ -217,45 +239,20 @@ const SupportBot: React.FC<{ embed?: boolean }> = ({ embed = false }) => {
     </div>
   );
 
-  // 1. EMBED MODE
-  if (embed) {
-      return (
-          <div className="w-full">
-              {!open ? (
-                  <button
-                      onClick={() => setOpen(true)}
-                      className="w-full py-4 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-2xl font-black text-sm shadow-lg flex items-center justify-center gap-2 hover:opacity-95 transition-opacity"
-                  >
-                      <LifeBuoy size={20} /> NEED HELP? OPEN CHAT
-                  </button>
-              ) : (
-                  <div className="mt-4">{ChatWindow}</div>
-              )}
-          </div>
-      );
-  }
-
-  // 2. FLOATING MODE
+  // Always render in EMBED MODE
   return (
-    <>
-      <button
-        onClick={() => setOpen(true)}
-        className={`fixed bottom-6 right-6 z-[100] bg-gradient-to-r from-indigo-600 to-violet-600 text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center hover:scale-110 transition-transform ${open ? 'hidden' : 'flex'}`}
-        aria-label="Open support"
-      >
-        <MessageCircle size={24} />
-      </button>
-
-      {open && (
-        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:justify-end sm:pr-6 sm:pb-20 p-4 pointer-events-none">
-          {/* Backdrop for mobile only */}
-          <div className="absolute inset-0 bg-black/20 backdrop-blur-[1px] sm:hidden pointer-events-auto" onClick={() => setOpen(false)} />
-          <div className="pointer-events-auto w-full max-w-md">
-            {ChatWindow}
-          </div>
-        </div>
-      )}
-    </>
+      <div className="w-full">
+          {!open ? (
+              <button
+                  onClick={() => setOpen(true)}
+                  className="w-full py-4 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-2xl font-black text-sm shadow-lg flex items-center justify-center gap-2 hover:opacity-95 transition-opacity"
+              >
+                  <LifeBuoy size={20} /> NEED HELP? OPEN CHAT
+              </button>
+          ) : (
+              <div className="mt-4">{ChatWindow}</div>
+          )}
+      </div>
   );
 };
 
