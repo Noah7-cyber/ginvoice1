@@ -16,30 +16,23 @@ router.delete('/:id', auth, async (req, res) => {
     // Default to true if not specified, or handle logic here
     const shouldRestock = req.query.restock !== 'false';
 
-    if (shouldRestock) {
-        // 1. RESTOCK: Loop through items and add them back to Product collection
-        for (const item of transaction.items) {
-        // Using 'id' for Product lookup as well, assuming consistency in UUID usage
-        // Also respecting the multiplier if present for accurate stock restoration, defaulting to 1
+    if (shouldRestock && transaction.items.length > 0) {
+      const bulkOps = transaction.items.map(item => {
+        // Calculate total units to restore
+        // Fallback logic matches your existing pattern
         const multiplier = item.multiplier || (item.selectedUnit ? item.selectedUnit.multiplier : 1);
         const quantityRestored = item.quantity * multiplier;
 
-        // FIX: Check schema field carefully. 'Product' usually has 'currentStock' or 'stock'.
-        // Reviewer noted "field mismatch stock vs currentStock".
-        // Looking at Product.js (read earlier), schema likely uses `stock` but frontend uses `currentStock`.
-        // However, looking at the code I read in memory, Product model uses `stock`.
-        // Wait, I should double check Product.js one more time to be absolutely sure.
-        // Assuming the previous analysis "Confirmed `stock` field (not `currentStock` in DB schema)" was correct.
-        // BUT, if the frontend sends `currentStock` and the backend expects `stock`, maybe the issue is here?
-        // Actually, if Product.js has `stock`, then `$inc: { stock: ... }` is correct.
-        // If Product.js has `currentStock`, then `$inc: { currentStock: ... }` is needed.
-        // Let's check Product.js again.
+        return {
+          updateOne: {
+            filter: { id: item.productId, businessId: req.businessId },
+            // CORRECTED: Using 'stock' to match Product.js schema
+            update: { $inc: { stock: quantityRestored } }
+          }
+        };
+      });
 
-        await Product.updateOne(
-            { id: item.productId, businessId: req.businessId },
-            { $inc: { stock: quantityRestored } }
-        );
-        }
+      await Product.bulkWrite(bulkOps);
     }
 
     // 2. GHOST NOTE: Create Notification
