@@ -8,6 +8,7 @@ const Transaction = require('../models/Transaction');
 const Business = require('../models/Business');
 const Expenditure = require('../models/Expenditure');
 const Category = require('../models/Category');
+const Notification = require('../models/Notification');
 
 // Middleware
 const auth = require('../middleware/auth');
@@ -38,14 +39,15 @@ router.get('/', auth, async (req, res) => {
     console.log(`[SYNC] 🚀 STARTING FETCH for Business ID: "${businessId}"`);
 
     // Fetch All Data (Simple Query)
-    const [businessData, rawProducts, rawTransactions, rawExpenditures, rawCategories] = await Promise.all([
+    const [businessData, rawProducts, rawTransactions, rawExpenditures, rawCategories, rawNotifications] = await Promise.all([
       Business.findById(businessId).lean(),
       Product.find({
         businessId: { $in: [businessId, new ObjectId(businessId)] }
       }).lean(),
       Transaction.find({ businessId }).sort({ createdAt: -1 }).limit(1000).lean(),
       Expenditure.find({ business: businessId }).lean(),
-      Category.find({ businessId }).sort({ usageCount: -1, name: 1 }).lean()
+      Category.find({ businessId }).sort({ usageCount: -1, name: 1 }).lean(),
+      Notification.find({ businessId }).sort({ timestamp: -1 }).limit(50).lean()
     ]);
 
     // --- DETECTIVE MODE: DIAGNOSE EMPTY PRODUCTS ---
@@ -119,11 +121,21 @@ router.get('/', auth, async (req, res) => {
       amount: parseDecimal(e.amount)
     }));
 
+    const notifications = (rawNotifications || []).map(n => ({
+        id: n._id.toString(),
+        message: n.message,
+        type: n.type,
+        amount: n.amount, // Keep as Number (Notification model uses Number)
+        performedBy: n.performedBy,
+        timestamp: n.timestamp
+    }));
+
     return res.json({
       categories,
       products,
       transactions,
       expenditures,
+      notifications,
       business: businessData ? {
         id: businessData._id,
         name: businessData.name,
@@ -278,20 +290,32 @@ router.delete('/transactions/:id', auth, async (req, res) => {
     const { id } = req.params;
     const businessId = new mongoose.Types.ObjectId(req.businessId); // Transactions use ObjectId
 
-    // Check if restock is requested
-    if (req.query.restock === 'true') {
-        const transaction = await Transaction.findOne({ businessId, id });
-        if (transaction && transaction.items) {
-            // Restore stock
-            for (const item of transaction.items) {
-                 await Product.updateOne(
-                    { businessId: req.businessId, id: item.productId },
-                    { $inc: { stock: item.quantity } }
-                 );
-            }
+    // 1. Find transaction first (needed for both restock and notification)
+    const transaction = await Transaction.findOne({ businessId, id });
+    if (!transaction) return res.status(404).json({ message: 'Transaction not found' });
+
+    // 2. Restock if requested
+    if (req.query.restock === 'true' && transaction.items) {
+        // Restore stock
+        for (const item of transaction.items) {
+             await Product.updateOne(
+                { businessId: req.businessId, id: item.productId },
+                { $inc: { stock: item.quantity } }
+             );
         }
     }
 
+    // 3. Create Ghost Note (Notification)
+    const performerName = req.userRole === 'owner' ? 'Owner' : 'Staff';
+    await Notification.create({
+        businessId: req.businessId,
+        message: `Sale to ${transaction.customerName || 'Customer'} deleted`,
+        amount: transaction.totalAmount || 0,
+        performedBy: performerName,
+        type: 'deletion'
+    });
+
+    // 4. Hard Delete
     await Transaction.deleteOne({ businessId, id });
     res.json({ success: true, id });
   } catch (err) {

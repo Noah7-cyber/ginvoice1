@@ -314,7 +314,9 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
                           ) : (
                             <h3 className="font-bold text-gray-900">{t.customerName}</h3>
                           )}
-                          <p className="text-xs text-gray-400">ID: {t.id} • {new Date(t.transactionDate).toLocaleDateString()}</p>
+                          <p className="text-xs text-gray-400">
+                            ID: {t.id} • {new Date(t.transactionDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })} • {new Date(t.transactionDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                          </p>
                         </div>
                       </div>
 

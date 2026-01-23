@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Transaction = require('../models/Transaction');
 const Product = require('../models/Product');
+const Notification = require('../models/Notification');
 const auth = require('../middleware/auth');
 
 // DELETE Transaction & Restock Items
@@ -41,7 +42,18 @@ router.delete('/:id', auth, async (req, res) => {
         }
     }
 
-    // 2. DELETE the transaction
+    // 2. GHOST NOTE: Create Notification
+    const performerName = req.userRole === 'owner' ? 'Owner' : 'Staff';
+    const notification = new Notification({
+      businessId: req.businessId,
+      message: `Sale to ${transaction.customerName || 'Customer'} deleted`,
+      amount: transaction.totalAmount || 0,
+      performedBy: performerName,
+      type: 'deletion'
+    });
+    await notification.save();
+
+    // 3. DELETE the transaction
     await Transaction.deleteOne({ id: req.params.id, businessId: req.businessId });
 
     res.json({ message: 'Transaction deleted and inventory restocked' });
