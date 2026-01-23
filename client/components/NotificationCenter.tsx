@@ -1,13 +1,14 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Bell, X, FileText, AlertTriangle, AlertCircle, Trash2 } from 'lucide-react';
-import { Transaction, Product, BusinessProfile, ActivityLog } from '../types';
+import { Bell, X, FileText, AlertTriangle, AlertCircle, Trash2, CheckCircle } from 'lucide-react';
+import { Transaction, Product, BusinessProfile, ActivityLog, Notification } from '../types';
 import { CURRENCY } from '../constants';
 
 interface NotificationCenterProps {
   isOpen: boolean;
   onClose: () => void;
-  transactions: Transaction[]; // Kept for legacy/reference
+  transactions: Transaction[];
   activities: ActivityLog[];
+  notifications: Notification[];
   products: Product[];
   business: BusinessProfile;
   lowStockThreshold: number;
@@ -18,47 +19,79 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
   onClose,
   transactions,
   activities = [],
+  notifications = [],
   products,
   business,
   lowStockThreshold
 }) => {
   const [activeTab, setActiveTab] = useState<'transactions' | 'system'>('transactions');
 
-  // Derive Recent Activity
+  // Derive Recent Activity (Hybrid: Sales + Deletions)
   const recentActivity = useMemo(() => {
-    return [...activities]
+    // 1. Sales (Active)
+    const sales = [...transactions]
+      .sort((a, b) => new Date(b.createdAt || b.transactionDate).getTime() - new Date(a.createdAt || a.transactionDate).getTime())
+      .slice(0, 10)
+      .map(t => ({
+        id: t.id,
+        type: 'sale',
+        amount: t.totalAmount,
+        actor: t.createdByRole || (t.staffId ? 'Staff' : 'Owner'), // Heuristic fallback
+        timestamp: t.createdAt || t.transactionDate,
+      }));
+
+    // 2. Deletions (Ghost Notes)
+    const deletions = [...notifications]
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-      .slice(0, 20)
-      .map(log => {
-        const timeDiff = Math.floor((Date.now() - new Date(log.timestamp).getTime()) / 60000); // minutes
-        let timeDisplay = `${timeDiff} mins ago`;
-        if (timeDiff >= 60) {
-            const hours = Math.floor(timeDiff / 60);
-            timeDisplay = `${hours} hour${hours > 1 ? 's' : ''} ago`;
-            if (hours >= 24) {
-                const days = Math.floor(hours / 24);
-                timeDisplay = `${days} day${days > 1 ? 's' : ''} ago`;
-            }
-        }
+      .slice(0, 10)
+      .map(n => ({
+        id: n.id,
+        type: 'deletion',
+        amount: n.amount,
+        actor: n.performedBy,
+        timestamp: n.timestamp,
+      }));
 
-        let title = log.title;
-        let subtext = log.description;
+    // 3. Merge & Sort
+    const merged = [...sales, ...deletions]
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 10);
 
-        // Enhance Sales logs
-        if (log.type === 'sale') {
-           const role = log.actor === 'owner' ? 'Owner' : 'Staff';
-           subtext = `${subtext} • Sold by ${role}`;
-        }
+    // 4. Format
+    return merged.map(item => {
+      const timeDiff = Math.floor((Date.now() - new Date(item.timestamp).getTime()) / 60000); // minutes
+      let timeDisplay = `${timeDiff} mins ago`;
+      if (timeDiff >= 60) {
+          const hours = Math.floor(timeDiff / 60);
+          timeDisplay = `${hours} hour${hours > 1 ? 's' : ''} ago`;
+          if (hours >= 24) {
+              const days = Math.floor(hours / 24);
+              timeDisplay = `${days} day${days > 1 ? 's' : ''} ago`;
+          }
+      }
 
-        return {
-          id: log.id,
-          title,
-          subtext,
-          time: timeDisplay,
-          type: log.type
-        };
-      });
-  }, [activities]);
+      const amountStr = new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(item.amount);
+      let title = '';
+      let subtext = '';
+
+      if (item.type === 'sale') {
+         title = `New Sale • ${amountStr}`;
+         const role = (item.actor || 'Staff').toLowerCase() === 'owner' ? 'Owner' : 'Staff';
+         subtext = `Sold by ${role}`;
+      } else {
+         title = `Sale Deleted • ${amountStr}`;
+         subtext = `Deleted by ${item.actor}`;
+      }
+
+      return {
+        id: item.id,
+        title,
+        subtext,
+        time: timeDisplay,
+        type: item.type
+      };
+    });
+  }, [transactions, notifications]);
 
   // Derive Low Stock & System Alerts
   const systemAlerts = useMemo(() => {
@@ -143,8 +176,8 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
              ) : (
                 recentActivity.map((item) => (
                 <div key={item.id} className="flex gap-3 p-3 bg-white border rounded-xl hover:bg-gray-50 transition-colors group relative">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${item.type === 'delete' ? 'bg-red-50' : 'bg-green-50'}`}>
-                        {item.type === 'delete' ? <Trash2 size={18} className="text-red-600" /> : <FileText size={18} className="text-green-600" />}
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${item.type === 'deletion' ? 'bg-red-50' : 'bg-green-50'}`}>
+                        {item.type === 'deletion' ? <Trash2 size={18} className="text-red-600" /> : <CheckCircle size={18} className="text-green-600" />}
                     </div>
                     <div className="flex-1">
                         <h4 className="text-sm font-black text-gray-900">{item.title}</h4>

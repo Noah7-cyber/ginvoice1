@@ -179,10 +179,12 @@ const App: React.FC = () => {
         staffPermissions: { canGiveDiscount: false, canViewInventory: false, canEditInventory: false, canViewHistory: false, canViewDashboard: false, canViewExpenditure: false }
       },
       expenditures: [],
-      activities: []
+      activities: [],
+      notifications: []
     };
     if (!base.expenditures) base.expenditures = [];
     if (!base.activities) base.activities = [];
+    if (!base.notifications) base.notifications = [];
     return base as InventoryState;
   });
 
@@ -219,7 +221,7 @@ const App: React.FC = () => {
       const response = await fetchRemoteState(true);
 
       if (response.status === 200 && response.data) {
-         const { products, transactions, categories, expenditures, business } = response.data;
+         const { products, transactions, categories, expenditures, business, notifications } = response.data;
 
          const nextState: InventoryState = {
            ...currentState,
@@ -228,6 +230,7 @@ const App: React.FC = () => {
            transactions: transactions || [],
            categories: categories || [],
            expenditures: expenditures || [],
+           notifications: notifications || [],
            business: business ? { ...currentState.business, ...business } : currentState.business,
            lastSyncedAt: new Date().toISOString(),
            isLoggedIn: true
@@ -438,7 +441,8 @@ const App: React.FC = () => {
         products: [],
         transactions: [],
         categories: [],
-        expenditures: []
+        expenditures: [],
+        notifications: []
       };
 
       setState(newState);
@@ -561,6 +565,11 @@ const App: React.FC = () => {
           });
           return { ...prev, products: updatedProducts };
         });
+      }
+
+      // Sync to get the "Ghost Note" notification
+      if (navigator.onLine) {
+         refreshData();
       }
 
     } catch (err) { addToast('Delete failed.', 'error'); }
@@ -864,6 +873,7 @@ const App: React.FC = () => {
         onClose={() => setIsNotificationOpen(false)}
         transactions={state.transactions}
         activities={state.activities}
+        notifications={state.notifications}
         products={state.products}
         business={state.business}
         lowStockThreshold={state.business.settings?.lowStockThreshold || 10}

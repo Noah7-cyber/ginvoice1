@@ -127,10 +127,20 @@ export interface ActivityLog {
   isUrgent?: boolean;
 }
 
+export interface Notification {
+  id: string;
+  message: string;
+  type: 'deletion';
+  amount: number;
+  performedBy: string;
+  timestamp: string;
+}
+
 export interface InventoryState {
   products: Product[];
   transactions: Transaction[];
   activities: ActivityLog[]; // New field
+  notifications: Notification[]; // New field for Ghost Notes
   categories?: Category[]; // Added for sync
   role: UserRole;
   isLoggedIn: boolean;
