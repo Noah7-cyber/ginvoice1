@@ -10,6 +10,11 @@ const ExpenditureSchema = new mongoose.Schema({
   title: { type: String, required: false },
   amount: { type: mongoose.Schema.Types.Decimal128, required: true }, // Using Decimal128 as per previous fixes
   category: { type: String, default: 'Other' },
+  taxCategory: {
+    type: String,
+    enum: ['OPERATING_EXPENSE', 'COST_OF_GOODS', 'CAPITAL_ASSET', 'NON_DEDUCTIBLE', 'SALARY_PENSION'],
+    default: 'OPERATING_EXPENSE'
+  },
   date: { type: Date, default: Date.now },
   description: { type: String, default: '' },
   paymentMethod: { type: String, default: 'Cash' },

@@ -22,10 +22,11 @@ router.put('/', auth, async (req, res) => {
       return res.status(403).json({ message: 'Only owner can update settings' });
     }
 
-    const { settings, staffPermissions, name, phone, address, email, logo, theme } = req.body;
+    const { settings, staffPermissions, taxSettings, name, phone, address, email, logo, theme } = req.body;
     const update = {};
     if (settings) update.settings = settings;
     if (staffPermissions) update.staffPermissions = staffPermissions;
+    if (taxSettings) update.taxSettings = taxSettings;
     if (name) update.name = name;
     if (phone) update.phone = phone;
     if (address) update.address = address;
@@ -59,6 +60,7 @@ router.put('/', auth, async (req, res) => {
     res.json({
       settings: business.settings,
       staffPermissions: business.staffPermissions,
+      taxSettings: business.taxSettings,
       name: business.name,
       phone: business.phone,
       address: business.address,

@@ -36,6 +36,13 @@ export interface BusinessProfile {
     printReceipts: boolean;
     footerText: string;
   };
+
+  taxSettings?: {
+    isEnabled: boolean;
+    jurisdiction: string;
+    taxID?: string;
+    incorporationDate?: string;
+  };
 }
 
 export interface DiscountCode {
@@ -108,6 +115,7 @@ export interface Expenditure {
   date: string;        // ISO string
   amount: number;      // in main currency units on client (e.g., Naira) but server expects integer kobo
   category?: string;
+  taxCategory?: 'OPERATING_EXPENSE' | 'COST_OF_GOODS' | 'CAPITAL_ASSET' | 'NON_DEDUCTIBLE' | 'SALARY_PENSION';
   title?: string;
   description?: string;
   paymentMethod?: string;
