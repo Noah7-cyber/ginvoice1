@@ -844,7 +844,7 @@ const App: React.FC = () => {
               initialParams={deepLinkParams}
             />
           )}
-          {activeTab === 'dashboard' && (state.role === 'owner' || (state.business.staffPermissions as any)?.canViewDashboard) && <DashboardScreen transactions={state.transactions} products={state.products} />}
+          {activeTab === 'dashboard' && (state.role === 'owner' || (state.business.staffPermissions as any)?.canViewDashboard) && <DashboardScreen transactions={state.transactions} products={state.products} business={state.business} />}
           {activeTab === 'expenditure' && (
             <ExpenditureScreen
               expenditures={state.expenditures}

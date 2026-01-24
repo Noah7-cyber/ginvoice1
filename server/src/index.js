@@ -69,6 +69,7 @@ app.use('/api/settings', settingsRouter);
 app.use('/api/support', supportRouter);
 app.use('/api/stats', statsRouter);
 app.use('/api/transactions', require('./routes/transactions'));
+app.use('/api/tax', require('./routes/tax'));
 
 const port = process.env.PORT || 4000;
 const mongoUri = process.env.MONGODB_URI || '';

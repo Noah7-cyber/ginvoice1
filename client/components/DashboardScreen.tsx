@@ -24,17 +24,22 @@ import {
   Tooltip, 
   ResponsiveContainer
 } from 'recharts';
-import { Transaction, Product } from '../types';
+import { Transaction, Product, BusinessProfile } from '../types';
 import { CURRENCY } from '../constants';
-import { getAnalytics } from '../services/api';
+import { getAnalytics, updateBusinessProfile } from '../services/api';
 import { safeCalculate, safeSum } from '../utils/math';
+import ComplianceShieldWidget from './ComplianceShieldWidget';
+import ComplianceShieldModal from './ComplianceShieldModal';
 
 interface DashboardScreenProps {
   transactions: Transaction[];
   products: Product[];
+  business?: BusinessProfile;
 }
 
-const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, products }) => {
+const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, products, business }) => {
+  const [showShieldModal, setShowShieldModal] = useState(false);
+
   const [remoteAnalytics, setRemoteAnalytics] = useState<{
     stats: {
       totalRevenue: number;
@@ -192,9 +197,46 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
   return (
     <div className="max-w-7xl mx-auto space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Owner Dashboard</h1>
-        <p className="text-gray-500">Real-time performance overview</p>
+        <div className="flex justify-between items-start">
+           <div>
+              <h1 className="text-2xl font-bold text-gray-900">Owner Dashboard</h1>
+              <p className="text-gray-500">Real-time performance overview</p>
+           </div>
+
+           {business && !business.taxSettings?.isEnabled && (
+             <button
+               onClick={() => setShowShieldModal(true)}
+               className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-xl font-bold text-sm hover:bg-indigo-100 transition-colors"
+             >
+               <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></div>
+               Activate Compliance Shield
+             </button>
+           )}
+        </div>
       </div>
+
+      {business && business.taxSettings?.isEnabled && <ComplianceShieldWidget />}
+      {showShieldModal && (
+        <ComplianceShieldModal
+           onConfirm={async () => {
+              try {
+                await updateBusinessProfile({
+                   taxSettings: {
+                      isEnabled: true,
+                      jurisdiction: 'NG',
+                      incorporationDate: new Date().toISOString()
+                   }
+                });
+                setShowShieldModal(false);
+                window.location.reload();
+              } catch (err) {
+                 console.error("Failed to enable shield", err);
+                 alert("Failed to enable. Please try again.");
+              }
+           }}
+           onCancel={() => setShowShieldModal(false)}
+        />
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

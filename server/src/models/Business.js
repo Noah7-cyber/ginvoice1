@@ -34,6 +34,13 @@ const BusinessSchema = new mongoose.Schema({
     footerText: { type: String, default: 'Thank you for your patronage!' }
   },
 
+  taxSettings: {
+    isEnabled: { type: Boolean, default: false }, // User MUST opt-in
+    jurisdiction: { type: String, default: 'NG' }, // Default to Nigeria
+    taxID: { type: String }, // Optional TIN
+    incorporationDate: { type: Date } // Important for "Pioneer Status" checks
+  },
+
   // Permissions (Can be expanded per staff if we move to User model later,
   // but for now this sets the *default* permissions for staff role)
   staffPermissions: {
