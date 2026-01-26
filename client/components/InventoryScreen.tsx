@@ -143,7 +143,8 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
   // Click Outside Handler
   const handleBackgroundClick = (e: React.MouseEvent) => {
-     if (e.target === e.currentTarget && isSelectionMode) {
+     // Do not auto-exit on mobile (width < 768) as per requirements
+     if (window.innerWidth >= 768 && e.target === e.currentTarget && isSelectionMode) {
          setIsSelectionMode(false);
          setSelectedIds(new Set());
      }
@@ -374,13 +375,46 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
             <AlphabetScrubber onScrollTo={scrollToLetter} />
         </div>
 
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2 md:mb-8 shrink-0">
+        {/* Mobile Selection Bar */}
+        {isSelectionMode && (
+          <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-white border-b shadow-lg animate-in slide-in-from-top-2 p-4 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+               <button onClick={() => { setIsSelectionMode(false); setSelectedIds(new Set()); }} className="p-2 -ml-2 rounded-full hover:bg-gray-100">
+                  <X size={24} className="text-gray-600" />
+               </button>
+               <span className="text-lg font-bold text-gray-900">{selectedIds.size} Selected</span>
+            </div>
+            <div className="flex items-center gap-2">
+               {/* Select All / Clear Toggle */}
+               <button
+                  onClick={selectAll}
+                  className="px-3 py-2 bg-gray-100 rounded-lg text-sm font-bold text-gray-700 whitespace-nowrap"
+               >
+                  {selectedIds.size === filteredProducts.length ? 'Clear All' : 'Select All'}
+               </button>
+
+               {/* Bulk Edit Trigger */}
+               {selectedIds.size > 0 && (
+                   <button
+                     onClick={() => setIsBulkEditOpen(true)}
+                     disabled={!navigator.onLine}
+                     className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                     title="Bulk Edit"
+                   >
+                      <ListTodo size={20} />
+                   </button>
+               )}
+            </div>
+          </div>
+        )}
+
+      <div className={`flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2 md:mb-8 shrink-0 ${isSelectionMode ? 'mt-16 md:mt-0' : ''}`}>
         <div className="hidden md:block">
           <h1 className="text-2xl font-bold text-gray-900">Manage Stock</h1>
           <p className="text-gray-500">Add or edit items in your shop</p>
         </div>
 
-        <div className="flex gap-2">
+        <div className={`flex gap-2 ${isSelectionMode ? 'hidden md:flex' : ''}`}>
            {!safeReadOnly && (
              <button
                onClick={() => setIsCategoryManagerOpen(true)}
@@ -1053,9 +1087,9 @@ const InventoryCard = ({ product, showHeader, headerId, firstChar, isSelectionMo
             {isSelectionMode && (
                 <input
                     type="checkbox"
-                    className="mt-1 w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary pointer-events-none" // pointer-events-none because card click handles it
+                    className="mt-1 w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary pointer-events-auto"
                     checked={isSelected}
-                    readOnly
+                    onChange={(e) => { e.stopPropagation(); onToggleSelection(); }}
                 />
             )}
             <div>
