@@ -380,20 +380,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
           <p className="text-gray-500">Add or edit items in your shop</p>
         </div>
 
-        {/* Mobile Selection Header */}
-        {isSelectionMode && (
-            <div className="hidden md:hidden flex items-center justify-between w-full bg-indigo-600 text-white p-4 -mt-2 mb-2 rounded-xl shadow-lg animate-in slide-in-from-top-5">
-                <span className="font-bold">{selectedIds.size} Selected</span>
-                <button
-                   onClick={() => { setIsSelectionMode(false); setSelectedIds(new Set()); }}
-                   className="p-2 bg-white/20 rounded-full hover:bg-white/30"
-                >
-                   <X size={20} />
-                </button>
-            </div>
-        )}
-
-        <div className={`flex gap-2 ${isSelectionMode ? 'hidden md:flex' : ''}`}>
+        <div className="flex gap-2">
            {!safeReadOnly && (
              <button
                onClick={() => setIsCategoryManagerOpen(true)}
@@ -501,23 +488,6 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                 <span className="text-sm font-bold text-gray-600">)</span>
             </div>
 
-            {/* Selection Toggle (Moved inside Collapsible Area for Compactness) */}
-            <div className="flex justify-between md:hidden w-full border-t pt-4">
-                <button
-                    onClick={() => setIsSelectionMode(!isSelectionMode)}
-                    className={`flex-1 px-4 py-2 rounded-lg text-sm font-bold ${isSelectionMode ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'}`}
-                >
-                    {isSelectionMode ? 'Done Selecting' : 'Select Items'}
-                </button>
-                {isSelectionMode && (
-                    <button
-                        onClick={selectAll}
-                        className="ml-2 px-4 py-2 bg-gray-100 rounded-lg text-sm font-bold text-gray-600"
-                    >
-                        {selectedIds.size === filteredProducts.length ? 'Deselect All' : 'Select All'}
-                    </button>
-                )}
-            </div>
         </div>
       </div>
 
@@ -1057,12 +1027,12 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 const InventoryCard = ({ product, showHeader, headerId, firstChar, isSelectionMode, isSelected, onToggleSelection, onLongPressSelection, safeReadOnly, isOnline, onEdit, onDelete, addToast }: any) => {
     const longPressProps = useLongPress(
         onLongPressSelection,
-        () => {
-            // Tap to select if in selection mode
-            if(isSelectionMode) {
+        (e) => {
+            // CRITICAL: Allow simple TAP to toggle selection when in mode
+            if (isSelectionMode) {
                 onToggleSelection();
             } else {
-                // Default click action (could be open details, or nothing for now as per previous logic)
+                // Default non-selection click behavior (e.g., nothing or view details)
             }
         }
     );
