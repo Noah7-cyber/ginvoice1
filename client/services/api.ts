@@ -39,6 +39,14 @@ const request = async (path: string, options: RequestInit = {}) => {
   if (!res.ok) {
     console.error('[API] Request returned error status:', res.status, data);
     const message = data?.message || 'Request failed';
+
+    // Global Handling for Permission/Auth Issues
+    if (res.status === 401 || res.status === 403) {
+       if (message.includes('Permissions updated') || message.includes('Session expired')) {
+           window.dispatchEvent(new CustomEvent('auth:force-reload', { detail: { message } }));
+       }
+    }
+
     const err = new Error(message) as Error & { status?: number; data?: any };
     err.status = res.status;
     err.data = data;

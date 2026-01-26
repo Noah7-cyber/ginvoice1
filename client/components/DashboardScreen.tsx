@@ -35,9 +35,10 @@ interface DashboardScreenProps {
   transactions: Transaction[];
   products: Product[];
   business?: BusinessProfile;
+  onUpdateBusiness?: (business: Partial<BusinessProfile>) => void;
 }
 
-const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, products, business }) => {
+const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, products, business, onUpdateBusiness }) => {
   const [showShieldModal, setShowShieldModal] = useState(false);
 
   const [remoteAnalytics, setRemoteAnalytics] = useState<{
@@ -228,15 +229,16 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
         <ComplianceShieldModal
            onConfirm={async () => {
               try {
-                await updateBusinessProfile({
+                const updatedSettings = {
                    taxSettings: {
                       isEnabled: true,
                       jurisdiction: 'NG',
                       incorporationDate: new Date().toISOString()
                    }
-                });
+                };
+                await updateBusinessProfile(updatedSettings);
+                if (onUpdateBusiness) onUpdateBusiness(updatedSettings);
                 setShowShieldModal(false);
-                window.location.reload();
               } catch (err) {
                  console.error("Failed to enable shield", err);
                  alert("Failed to enable. Please try again.");

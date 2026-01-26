@@ -11,9 +11,10 @@ interface CategoryManagerProps {
   categories: Category[];
   setCategories: (categories: Category[]) => void;
   isOnline?: boolean;
+  onCategoryRename?: (oldName: string, newName: string) => void;
 }
 
-const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, categories, setCategories, isOnline = true }) => {
+const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, categories, setCategories, isOnline = true, onCategoryRename }) => {
   const { addToast } = useToast();
   const [newCategoryName, setNewCategoryName] = useState('');
   const [defaultCost, setDefaultCost] = useState<number | ''>('');
@@ -34,6 +35,10 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
     setLoading(true);
     try {
       if (editingId) {
+        // Find old category name
+        const oldCat = categories.find(c => c.id === editingId);
+        const oldName = oldCat ? oldCat.name : '';
+
         // Update Logic
         await updateCategory(editingId, {
           name: newCategoryName,
@@ -41,6 +46,7 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
           defaultCostPrice: Number(defaultCost) || 0,
           defaultUnit
         });
+
         setCategories(categories.map(c => c.id === editingId ? {
           ...c,
           name: newCategoryName,
@@ -48,6 +54,12 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
           defaultCostPrice: Number(defaultCost) || 0,
           defaultUnit
         } : c));
+
+        // Trigger parent callback
+        if (oldName && oldName !== newCategoryName && onCategoryRename) {
+            onCategoryRename(oldName, newCategoryName);
+        }
+
         addToast('Category updated', 'success');
         setEditingId(null);
       } else {
