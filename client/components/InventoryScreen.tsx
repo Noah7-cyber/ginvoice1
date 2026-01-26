@@ -382,7 +382,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
         {/* Mobile Selection Header */}
         {isSelectionMode && (
-            <div className="md:hidden flex items-center justify-between w-full bg-indigo-600 text-white p-4 -mt-2 mb-2 rounded-xl shadow-lg animate-in slide-in-from-top-5">
+            <div className="hidden md:hidden flex items-center justify-between w-full bg-indigo-600 text-white p-4 -mt-2 mb-2 rounded-xl shadow-lg animate-in slide-in-from-top-5">
                 <span className="font-bold">{selectedIds.size} Selected</span>
                 <button
                    onClick={() => { setIsSelectionMode(false); setSelectedIds(new Set()); }}
@@ -1057,7 +1057,14 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 const InventoryCard = ({ product, showHeader, headerId, firstChar, isSelectionMode, isSelected, onToggleSelection, onLongPressSelection, safeReadOnly, isOnline, onEdit, onDelete, addToast }: any) => {
     const longPressProps = useLongPress(
         onLongPressSelection,
-        () => { if(isSelectionMode) onToggleSelection(); }
+        () => {
+            // Tap to select if in selection mode
+            if(isSelectionMode) {
+                onToggleSelection();
+            } else {
+                // Default click action (could be open details, or nothing for now as per previous logic)
+            }
+        }
     );
 
     return (
