@@ -8,6 +8,7 @@ import { useToast } from './ToastProvider';
 import CategoryManager from './CategoryManager';
 import AlphabetScrubber from './AlphabetScrubber';
 import { useAlphabetIndexer } from '@/hooks/useAlphabetIndexer';
+import useLongPress from '../hooks/useLongPress';
 
 interface InventoryScreenProps {
   products: Product[];
@@ -120,7 +121,8 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   const [newProduct, setNewProduct] = useState<Partial<Product>>(initialProductState);
 
   const filteredProducts = products.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const term = searchTerm.toLowerCase();
+    const matchesSearch = p.name.toLowerCase().includes(term) || (p.category && p.category.toLowerCase().includes(term));
     const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
     const matchesLowStock = !filterLowStock || p.currentStock < lowStockThreshold;
     const matchesMinPrice = minPrice === '' || p.sellingPrice >= minPrice;
@@ -137,6 +139,14 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     if (next.has(id)) next.delete(id);
     else next.add(id);
     setSelectedIds(next);
+  };
+
+  // Click Outside Handler
+  const handleBackgroundClick = (e: React.MouseEvent) => {
+     if (e.target === e.currentTarget && isSelectionMode) {
+         setIsSelectionMode(false);
+         setSelectedIds(new Set());
+     }
   };
 
   const selectAll = () => {
@@ -369,7 +379,21 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
           <h1 className="text-2xl font-bold text-gray-900">Manage Stock</h1>
           <p className="text-gray-500">Add or edit items in your shop</p>
         </div>
-        <div className="flex gap-2">
+
+        {/* Mobile Selection Header */}
+        {isSelectionMode && (
+            <div className="md:hidden flex items-center justify-between w-full bg-indigo-600 text-white p-4 -mt-2 mb-2 rounded-xl shadow-lg animate-in slide-in-from-top-5">
+                <span className="font-bold">{selectedIds.size} Selected</span>
+                <button
+                   onClick={() => { setIsSelectionMode(false); setSelectedIds(new Set()); }}
+                   className="p-2 bg-white/20 rounded-full hover:bg-white/30"
+                >
+                   <X size={20} />
+                </button>
+            </div>
+        )}
+
+        <div className={`flex gap-2 ${isSelectionMode ? 'hidden md:flex' : ''}`}>
            {!safeReadOnly && (
              <button
                onClick={() => setIsCategoryManagerOpen(true)}
@@ -498,7 +522,11 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
       </div>
 
       {/* Scrollable Content Area */}
-      <div className="flex-1 overflow-y-auto relative pb-24" ref={listRef}>
+      <div
+        className="flex-1 overflow-y-auto relative pb-24"
+        ref={listRef}
+        onClick={handleBackgroundClick} // Click outside listener
+      >
 
       {/* Desktop Table View */}
       <div className="hidden md:block bg-white rounded-2xl shadow-sm border overflow-hidden">
@@ -663,76 +691,31 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
             const headerId = `section-${isAlpha ? firstChar : '#'}`;
 
             return (
-              <React.Fragment key={product.id}>
-                {showHeader && (
-                    <div id={headerId} className="sticky top-0 z-10 bg-gray-50/95 backdrop-blur-sm py-2 px-4 -mx-4 mb-2 border-b border-gray-100 font-black text-gray-400 text-xs uppercase tracking-widest scroll-mt-0">
-                        {isAlpha ? firstChar : '#'}
-                    </div>
-                )}
-                <div
-                    className={`bg-white p-4 rounded-2xl shadow-sm border flex flex-col gap-3 transition-colors ${selectedIds.has(product.id) ? 'ring-2 ring-primary bg-indigo-50/30' : ''}`}
-                    onClick={() => isSelectionMode && toggleSelection(product.id)}
-                >
-                    <div className="flex justify-between items-start">
-                <div className="flex gap-3 items-start">
-                   {isSelectionMode && (
-                        <input
-                            type="checkbox"
-                            className="mt-1 w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
-                            checked={selectedIds.has(product.id)}
-                            onChange={(e) => { e.stopPropagation(); toggleSelection(product.id); }}
-                        />
-                   )}
-                    <div>
-                      <h3 className="font-bold text-gray-900">{product.name}</h3>
-                      <p className="text-xs text-gray-400">#{product.sku || product.id.slice(-5)}</p>
-                    </div>
-                </div>
-                <span className="px-2 py-1 bg-gray-100 rounded text-[10px] font-bold uppercase text-gray-500">
-                  {product.category}
-                </span>
-             </div>
-
-             <div className="flex justify-between items-center bg-gray-50 p-3 rounded-xl">
-                 <div className="flex flex-col">
-                    <span className="text-[10px] uppercase font-bold text-gray-400">Stock</span>
-                    <span className={`font-bold ${product.currentStock < 10 ? 'text-red-500' : 'text-gray-900'}`}>{product.currentStock} {product.baseUnit}</span>
-                 </div>
-                 <div className="flex flex-col text-right">
-                    <span className="text-[10px] uppercase font-bold text-gray-400">Price</span>
-                    <span className="font-black text-gray-900">{formatCurrency(product.sellingPrice)}</span>
-                 </div>
-             </div>
-
-             {!safeReadOnly && !isSelectionMode && (
-               <div className="flex justify-end gap-2 border-t pt-3 mt-1">
-                   <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (!isOnline) {
-                            addToast('Please connect to the internet to perform this action.', 'error');
-                            return;
-                        }
-                        setEditingProductId(product.id);
-                        setNewProduct({ ...product });
-                        setIsModalOpen(true);
-                        updateUrlForProduct(product.id);
-                      }}
-                      className="px-3 py-2 bg-gray-100 text-gray-600 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-gray-200"
-                    >
-                      <Edit3 size={14} /> Edit
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.id); }}
-                      className="px-3 py-2 bg-red-50 text-red-600 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-red-100"
-                    >
-                      <Trash2 size={14} /> Delete
-                    </button>
-               </div>
-             )}
-          </div>
-          </React.Fragment>
-        );
+              <InventoryCard
+                 key={product.id}
+                 product={product}
+                 showHeader={showHeader}
+                 headerId={headerId}
+                 firstChar={isAlpha ? firstChar : '#'}
+                 isSelectionMode={isSelectionMode}
+                 isSelected={selectedIds.has(product.id)}
+                 onToggleSelection={() => toggleSelection(product.id)}
+                 onLongPressSelection={() => {
+                     setIsSelectionMode(true);
+                     if (!selectedIds.has(product.id)) toggleSelection(product.id);
+                 }}
+                 safeReadOnly={safeReadOnly}
+                 isOnline={isOnline}
+                 onEdit={(p) => {
+                    setEditingProductId(p.id);
+                    setNewProduct({ ...p });
+                    setIsModalOpen(true);
+                    updateUrlForProduct(p.id);
+                 }}
+                 onDelete={() => handleDeleteProduct(product.id)}
+                 addToast={addToast}
+              />
+            );
       })}
       </div>
 
@@ -1059,6 +1042,83 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
       )}
     </div>
   );
+};
+
+// Extracted Card Component to support hooks usage inside map
+const InventoryCard = ({ product, showHeader, headerId, firstChar, isSelectionMode, isSelected, onToggleSelection, onLongPressSelection, safeReadOnly, isOnline, onEdit, onDelete, addToast }: any) => {
+    const longPressProps = useLongPress(
+        onLongPressSelection,
+        () => { if(isSelectionMode) onToggleSelection(); }
+    );
+
+    return (
+        <React.Fragment>
+        {showHeader && (
+            <div id={headerId} className="sticky top-0 z-10 bg-gray-50/95 backdrop-blur-sm py-2 px-4 -mx-4 mb-2 border-b border-gray-100 font-black text-gray-400 text-xs uppercase tracking-widest scroll-mt-0">
+                {firstChar}
+            </div>
+        )}
+        <div
+            className={`bg-white p-4 rounded-2xl shadow-sm border flex flex-col gap-3 transition-colors ${isSelected ? 'ring-2 ring-primary bg-indigo-50/30' : ''} select-none`}
+            {...longPressProps}
+        >
+            <div className="flex justify-between items-start">
+        <div className="flex gap-3 items-start">
+            {isSelectionMode && (
+                <input
+                    type="checkbox"
+                    className="mt-1 w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary pointer-events-none" // pointer-events-none because card click handles it
+                    checked={isSelected}
+                    readOnly
+                />
+            )}
+            <div>
+                <h3 className="font-bold text-gray-900">{product.name}</h3>
+                <p className="text-xs text-gray-400">#{product.sku || product.id.slice(-5)}</p>
+            </div>
+        </div>
+        <span className="px-2 py-1 bg-gray-100 rounded text-[10px] font-bold uppercase text-gray-500">
+            {product.category}
+        </span>
+        </div>
+
+        <div className="flex justify-between items-center bg-gray-50 p-3 rounded-xl">
+            <div className="flex flex-col">
+            <span className="text-[10px] uppercase font-bold text-gray-400">Stock</span>
+            <span className={`font-bold ${product.currentStock < 10 ? 'text-red-500' : 'text-gray-900'}`}>{product.currentStock} {product.baseUnit}</span>
+            </div>
+            <div className="flex flex-col text-right">
+            <span className="text-[10px] uppercase font-bold text-gray-400">Price</span>
+            <span className="font-black text-gray-900">{formatCurrency(product.sellingPrice)}</span>
+            </div>
+        </div>
+
+        {!safeReadOnly && !isSelectionMode && (
+        <div className="flex justify-end gap-2 border-t pt-3 mt-1">
+            <button
+                onClick={(e) => {
+                e.stopPropagation();
+                if (!isOnline) {
+                    addToast('Please connect to the internet to perform this action.', 'error');
+                    return;
+                }
+                onEdit(product);
+                }}
+                className="px-3 py-2 bg-gray-100 text-gray-600 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-gray-200"
+            >
+                <Edit3 size={14} /> Edit
+            </button>
+            <button
+                onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                className="px-3 py-2 bg-red-50 text-red-600 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-red-100"
+            >
+                <Trash2 size={14} /> Delete
+            </button>
+        </div>
+        )}
+    </div>
+    </React.Fragment>
+    );
 };
 
 export default InventoryScreen;
