@@ -165,6 +165,21 @@ const App: React.FC = () => {
     }
   }, [wakeStatus, addToast]);
 
+  // Global Auth/Permission Handler
+  useEffect(() => {
+    const handleForceReload = (e: Event) => {
+        const detail = (e as CustomEvent).detail;
+        addToast(detail?.message || 'Session expired. Refreshing...', 'error');
+        // Small delay to let toast show
+        setTimeout(() => {
+            window.location.reload();
+        }, 1500);
+    };
+
+    window.addEventListener('auth:force-reload', handleForceReload);
+    return () => window.removeEventListener('auth:force-reload', handleForceReload);
+  }, [addToast]);
+
   const [state, setState] = useState<InventoryState>(() => {
     const persisted = loadState();
     const base = persisted || {
@@ -844,7 +859,14 @@ const App: React.FC = () => {
               initialParams={deepLinkParams}
             />
           )}
-          {activeTab === 'dashboard' && (state.role === 'owner' || (state.business.staffPermissions as any)?.canViewDashboard) && <DashboardScreen transactions={state.transactions} products={state.products} business={state.business} />}
+          {activeTab === 'dashboard' && (state.role === 'owner' || (state.business.staffPermissions as any)?.canViewDashboard) && (
+            <DashboardScreen
+              transactions={state.transactions}
+              products={state.products}
+              business={state.business}
+              onUpdateBusiness={b => setState(prev => ({ ...prev, business: { ...prev.business, ...b } }))}
+            />
+          )}
           {activeTab === 'expenditure' && (
             <ExpenditureScreen
               expenditures={state.expenditures}

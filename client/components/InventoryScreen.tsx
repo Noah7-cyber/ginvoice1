@@ -1013,6 +1013,15 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
         categories={categories}
         setCategories={setCategories}
         isOnline={isOnline}
+        onCategoryRename={(oldName, newName) => {
+            const updatedProducts = products.map(p => {
+                if (p.category === oldName) {
+                    return { ...p, category: newName };
+                }
+                return p;
+            });
+            onUpdateProducts(updatedProducts);
+        }}
       />
 
       {/* Delete Confirmation Modal */}
