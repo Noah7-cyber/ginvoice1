@@ -178,12 +178,20 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
 
   // Top products
   const topProducts = useMemo(() => {
-    if (remoteAnalytics?.topProducts) return remoteAnalytics.topProducts;
-    const productSales: Record<string, { name: string, qty: number }> = {};
+    // If remote, we might need to enhance it with local categories if possible,
+    // but for now let's assume remote is simple or we fallback to local calc for better detail
+    // Actually, local calc is better if we have all transactions.
+
+    const productSales: Record<string, { name: string, qty: number, category: string }> = {};
     transactions.forEach(tx => {
       tx.items.forEach(item => {
         if (!productSales[item.productId]) {
-          productSales[item.productId] = { name: item.productName, qty: 0 };
+          const product = products.find(p => p.id === item.productId);
+          productSales[item.productId] = {
+             name: item.productName,
+             qty: 0,
+             category: product?.category || 'Uncategorized'
+          };
         }
         productSales[item.productId].qty += item.quantity;
       });
@@ -192,7 +200,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
     return Object.values(productSales)
       .sort((a, b) => b.qty - a.qty)
       .slice(0, 5);
-  }, [transactions, remoteAnalytics]);
+  }, [transactions, products]);
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
@@ -460,7 +468,10 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
               ) : (
                 topProducts.map((prod, idx) => (
                   <div key={idx} className="flex justify-between items-center p-2 hover:bg-gray-50 rounded-xl transition-colors">
-                    <span className="text-sm font-medium text-gray-700 truncate max-w-[150px]">{prod.name}</span>
+                    <div className="flex flex-col">
+                        <span className="text-sm font-bold text-gray-800 truncate max-w-[150px]">{prod.name}</span>
+                        <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">{prod.category}</span>
+                    </div>
                     <span className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-black">{prod.qty} units</span>
                   </div>
                 ))

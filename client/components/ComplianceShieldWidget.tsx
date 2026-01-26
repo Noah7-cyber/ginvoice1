@@ -41,7 +41,14 @@ const ComplianceShieldWidget: React.FC = () => {
     return () => { active = false; };
   }, []);
 
-  if (loading) return <div className="p-4 bg-white rounded-2xl shadow-sm animate-pulse h-32 mb-8"></div>;
+  if (loading) return (
+    <div className="p-4 bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl shadow-sm animate-pulse h-40 mb-8 flex flex-col justify-between">
+       <div className="h-4 bg-gray-300 rounded w-1/3"></div>
+       <div className="h-8 bg-gray-300 rounded w-1/2 self-end"></div>
+       <div className="h-2 bg-gray-300 rounded w-full mt-4"></div>
+    </div>
+  );
+
   if (error || !estimate) return null;
 
   const revenue = estimate.breakdown.revenue;

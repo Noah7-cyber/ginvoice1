@@ -2,6 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const Category = require('../models/Category');
 const Business = require('../models/Business');
+const Product = require('../models/Product');
 const auth = require('../middleware/auth');
 
 const router = express.Router();
@@ -54,8 +55,15 @@ router.put('/:id', auth, async (req, res) => {
 
     if (!name) return res.status(400).json({ message: 'Name required' });
 
-    const category = await Category.findOneAndUpdate(
-      { _id: id, businessId: req.businessId },
+    // 1. Fetch old category to check for name change
+    const oldCategory = await Category.findOne({ _id: id, businessId: req.businessId });
+    if (!oldCategory) return res.status(404).json({ message: 'Category not found' });
+
+    const oldName = oldCategory.name;
+
+    // 2. Update Category
+    const category = await Category.findByIdAndUpdate(
+      id,
       {
         name,
         defaultSellingPrice: toDecimal(defaultSellingPrice),
@@ -65,10 +73,18 @@ router.put('/:id', auth, async (req, res) => {
       { new: true }
     );
 
-    if (!category) return res.status(404).json({ message: 'Category not found' });
+    // 3. Propagate Rename to Products
+    if (oldName !== name) {
+        await Product.updateMany(
+            { businessId: req.businessId, category: oldName },
+            { $set: { category: name } }
+        );
+    }
+
     await Business.findByIdAndUpdate(req.businessId, { $inc: { dataVersion: 1 } });
     res.json(category);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Failed to update category' });
   }
 });
