@@ -2,13 +2,12 @@ const express = require('express');
 const mongoose = require('mongoose');
 
 const auth = require('../middleware/auth');
-const requireActiveSubscription = require('../middleware/subscription');
 const Transaction = require('../models/Transaction');
 const Product = require('../models/Product');
 
 const router = express.Router();
 
-router.get('/', auth, requireActiveSubscription, async (req, res) => {
+router.get('/', auth, async (req, res) => {
   try {
     const businessId = new mongoose.Types.ObjectId(req.businessId);
     const range = req.query.range || '7d'; // '7d', '30d', '1y'

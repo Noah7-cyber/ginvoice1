@@ -2,11 +2,12 @@ const express = require('express');
 const DiscountCode = require('../models/DiscountCode');
 const Product = require('../models/Product');
 const auth = require('../middleware/auth');
+const requireActiveSubscription = require('../middleware/subscription');
 
 const router = express.Router();
 
 // Generate a new code (Owner only)
-router.post('/generate', auth, async (req, res) => {
+router.post('/generate', auth, requireActiveSubscription, async (req, res) => {
   try {
     if (req.user.role !== 'owner') {
       return res.status(403).json({ message: 'Only owner can generate codes' });

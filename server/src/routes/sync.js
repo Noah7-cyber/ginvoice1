@@ -12,6 +12,7 @@ const Notification = require('../models/Notification');
 
 // Middleware
 const auth = require('../middleware/auth');
+const requireActiveSubscription = require('../middleware/subscription');
 
 const router = express.Router();
 
@@ -158,7 +159,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // 2. POST Updates (Direct-Push Mode)
-router.post('/', auth, async (req, res) => {
+router.post('/', auth, requireActiveSubscription, async (req, res) => {
   try {
     const { products = [], transactions = [], expenditures = [], business, categories = [] } = req.body || {};
     const businessId = req.businessId;
@@ -274,7 +275,7 @@ router.get('/fix-ids', auth, async (req, res) => {
 });
 
 // 3. DELETE Routes (Missing in original sync)
-router.delete('/products/:id', auth, async (req, res) => {
+router.delete('/products/:id', auth, requireActiveSubscription, async (req, res) => {
   try {
     const { id } = req.params;
     const businessId = req.businessId;
@@ -285,7 +286,7 @@ router.delete('/products/:id', auth, async (req, res) => {
   }
 });
 
-router.delete('/transactions/:id', auth, async (req, res) => {
+router.delete('/transactions/:id', auth, requireActiveSubscription, async (req, res) => {
   try {
     const { id } = req.params;
     const businessId = new mongoose.Types.ObjectId(req.businessId); // Transactions use ObjectId
@@ -324,7 +325,7 @@ router.delete('/transactions/:id', auth, async (req, res) => {
   }
 });
 
-router.delete('/expenditures/:id', auth, async (req, res) => {
+router.delete('/expenditures/:id', auth, requireActiveSubscription, async (req, res) => {
   try {
     const { id } = req.params;
     const businessId = req.businessId;

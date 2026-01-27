@@ -5,6 +5,7 @@ const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
 const sharp = require('sharp');
 const requireAuth = require('../middleware/auth');
+const requireActiveSubscription = require('../middleware/subscription');
 
 // Configure Cloudinary
 cloudinary.config({
@@ -17,7 +18,7 @@ cloudinary.config({
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
-router.post('/', requireAuth, upload.single('file'), async (req, res) => {
+router.post('/', requireAuth, requireActiveSubscription, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file provided' });

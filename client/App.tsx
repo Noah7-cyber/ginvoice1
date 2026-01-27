@@ -294,8 +294,7 @@ const App: React.FC = () => {
       if (data.plan === 'FREE' && trialExpired) {
         if (!subscriptionLocked) {
           setSubscriptionLocked(true);
-          addToast('Your subscription has expired. Session ended for security.', 'error');
-          handleLogout();
+          addToast('Your subscription has expired. Read-only mode active.', 'error');
         }
       } else if (subscriptionLocked) {
         setSubscriptionLocked(false);

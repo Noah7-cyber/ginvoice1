@@ -4,9 +4,10 @@ const Transaction = require('../models/Transaction');
 const Product = require('../models/Product');
 const Notification = require('../models/Notification');
 const auth = require('../middleware/auth');
+const requireActiveSubscription = require('../middleware/subscription');
 
 // DELETE Transaction & Restock Items
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', auth, requireActiveSubscription, async (req, res) => {
   try {
     // Note: Using 'id' (UUID) instead of '_id' (ObjectId) to match client-side generated IDs
     const transaction = await Transaction.findOne({ id: req.params.id, businessId: req.businessId });
