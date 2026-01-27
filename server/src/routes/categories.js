@@ -4,6 +4,7 @@ const Category = require('../models/Category');
 const Business = require('../models/Business');
 const Product = require('../models/Product');
 const auth = require('../middleware/auth');
+const requireActiveSubscription = require('../middleware/subscription');
 
 const router = express.Router();
 
@@ -27,7 +28,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // POST create a new category
-router.post('/', auth, async (req, res) => {
+router.post('/', auth, requireActiveSubscription, async (req, res) => {
   try {
     const { name, defaultSellingPrice, defaultCostPrice, defaultUnit } = req.body;
     if (!name) return res.status(400).json({ message: 'Category name is required' });
@@ -48,7 +49,7 @@ router.post('/', auth, async (req, res) => {
 });
 
 // PUT update a category
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', auth, requireActiveSubscription, async (req, res) => {
   try {
     const { id } = req.params;
     const { name, defaultSellingPrice, defaultCostPrice, defaultUnit } = req.body;
@@ -90,7 +91,7 @@ router.put('/:id', auth, async (req, res) => {
 });
 
 // DELETE a category
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', auth, requireActiveSubscription, async (req, res) => {
   try {
     const { id } = req.params;
     // Use _id for MongoDB ID

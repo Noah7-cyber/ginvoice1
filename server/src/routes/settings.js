@@ -1,6 +1,7 @@
 const express = require('express');
 const Business = require('../models/Business');
 const auth = require('../middleware/auth');
+const requireActiveSubscription = require('../middleware/subscription');
 
 const router = express.Router();
 
@@ -16,7 +17,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // UPDATE settings
-router.put('/', auth, async (req, res) => {
+router.put('/', auth, requireActiveSubscription, async (req, res) => {
   try {
     if (req.user.role !== 'owner') {
       return res.status(403).json({ message: 'Only owner can update settings' });

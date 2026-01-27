@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
+const requireActiveSubscription = require('../middleware/subscription');
 const Expenditure = require('../models/Expenditure');
 const Business = require('../models/Business');
 
@@ -22,7 +23,7 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-router.post('/', auth, async (req, res) => {
+router.post('/', auth, requireActiveSubscription, async (req, res) => {
   const { title, amount, category, date, description, paymentMethod, id } = req.body;
   try {
     const newExpenditure = new Expenditure({
@@ -51,7 +52,7 @@ router.post('/', auth, async (req, res) => {
   }
 });
 
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', auth, requireActiveSubscription, async (req, res) => {
   const { title, amount, category, date, description, paymentMethod } = req.body;
   try {
     const businessId = req.user.businessId || req.user.id;
@@ -79,7 +80,7 @@ router.put('/:id', auth, async (req, res) => {
   }
 });
 
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', auth, requireActiveSubscription, async (req, res) => {
   try {
     const businessId = req.user.businessId || req.user.id;
     const expenditure = await Expenditure.findOne({ id: req.params.id, business: businessId });
