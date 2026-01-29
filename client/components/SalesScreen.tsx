@@ -5,17 +5,20 @@ import { CURRENCY } from '../constants';
 import { formatCurrency } from '../utils/currency';
 import AlphabetScrubber from './AlphabetScrubber';
 import { useAlphabetIndexer } from '@/hooks/useAlphabetIndexer';
+import { useToast } from './ToastProvider';
 
 interface SalesScreenProps {
   products: Product[];
   onAddToCart: (product: Product, unit?: ProductUnit) => void;
   permissions?: any;
+  isReadOnly?: boolean;
 }
 
-const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permissions }) => {
+const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permissions, isReadOnly }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const { addToast } = useToast();
 
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -31,6 +34,10 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permis
   const { scrollToLetter } = useAlphabetIndexer(listRef, [filtered]);
 
   const handleProductClick = (p: Product) => {
+    if (isReadOnly) {
+        addToast("Subscription Expired. Cannot record sales.", "error");
+        return;
+    }
     if (p.units && p.units.length > 0) {
       setSelectedProduct(p);
     } else {
@@ -99,7 +106,9 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permis
               disabled={p.currentStock <= 0}
               className={`
                 group flex items-center gap-4 p-4 bg-white border border-gray-50 rounded-2xl shadow-sm transition-all text-left
-                ${p.currentStock <= 0 ? 'opacity-50 grayscale cursor-not-allowed' : 'hover:border-primary hover:shadow-md active:scale-[0.98]'}
+                ${p.currentStock <= 0 ? 'opacity-50 grayscale cursor-not-allowed' :
+                  isReadOnly ? 'opacity-60 grayscale cursor-not-allowed' :
+                  'hover:border-primary hover:shadow-md active:scale-[0.98]'}
               `}
             >
               <div className={`
