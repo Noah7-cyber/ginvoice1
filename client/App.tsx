@@ -290,19 +290,29 @@ const App: React.FC = () => {
       };
       setEntitlements(next);
       localStorage.setItem('ginvoice_entitlements_v1', JSON.stringify(next));
-      const trialExpired = data.trialEndsAt ? new Date(data.trialEndsAt) < new Date() : false;
-      if (data.plan === 'FREE' && trialExpired) {
-        if (!subscriptionLocked) {
-          setSubscriptionLocked(true);
-          addToast('Your subscription has expired. Read-only mode active.', 'error');
-        }
-      } else if (subscriptionLocked) {
-        setSubscriptionLocked(false);
-      }
     } catch (err) {
       console.error('Entitlements fetch failed', err);
     }
-  }, [subscriptionLocked, addToast, handleLogout]);
+  }, [addToast, handleLogout]);
+
+  // Enforce subscription lock based on entitlements
+  useEffect(() => {
+      if (entitlements) {
+          const trialEndsAt = entitlements.trialEndsAt ? new Date(entitlements.trialEndsAt) : null;
+          const trialExpired = trialEndsAt ? trialEndsAt < new Date() : false;
+          const isFree = entitlements.plan === 'FREE';
+
+          if (isFree && trialExpired) {
+              if (!subscriptionLocked) {
+                  setSubscriptionLocked(true);
+                  // We avoid toast on mount to not annoy user, but maybe needed?
+                  // addToast('Your subscription has expired. Read-only mode active.', 'error');
+              }
+          } else {
+              if (subscriptionLocked) setSubscriptionLocked(false);
+          }
+      }
+  }, [entitlements, subscriptionLocked]);
 
   useEffect(() => {
     const handleOnline = async () => {
@@ -696,8 +706,6 @@ const App: React.FC = () => {
     const trialEndDate = entitlementTrial || businessTrial;
     const trialActive = trialEndDate ? trialEndDate >= new Date() : false;
 
-    if (!hasPro && !trialActive) return ['history'] as TabId[];
-    
     const PAGE_IDS: TabId[] = ['sales', 'inventory', 'history', 'expenditure', 'dashboard', 'settings'];
     const ownerTabs = PAGE_IDS;
 
@@ -832,7 +840,7 @@ const App: React.FC = () => {
               products={state.products}
               onUpdateProducts={handleUpdateProducts}
               isOwner={state.role === 'owner'}
-              isReadOnly={!canManageStock}
+              isReadOnly={!canManageStock || subscriptionLocked}
               isOnline={isOnline}
               initialParams={deepLinkParams}
             />
@@ -853,7 +861,7 @@ const App: React.FC = () => {
               }}
               isSubscriptionExpired={subscriptionLocked}
               onRenewSubscription={openPaymentLink}
-              isReadOnly={!canManageHistory}
+              isReadOnly={!canManageHistory || subscriptionLocked}
               isOnline={isOnline}
               initialParams={deepLinkParams}
             />

@@ -20,8 +20,9 @@ interface InventoryScreenProps {
 }
 
 const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdateProducts, isOwner, isReadOnly, isOnline, initialParams }) => {
-  // Ensure Owner is NEVER Read-Only. Staff is Read-Only if they lack 'stock-management'.
-  const safeReadOnly = isOwner ? false : isReadOnly;
+  // Ensure safeReadOnly respects the passed prop (for subscription lock), falling back to permissions logic if needed
+  // App.tsx handles the permission logic in the passed isReadOnly prop.
+  const safeReadOnly = isReadOnly;
   const { addToast } = useToast();
 
   // Ref for scroll container
