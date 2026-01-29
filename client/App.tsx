@@ -15,7 +15,8 @@ import {
   PanelRightOpen,
   Wallet,
   Loader2,
-  Bell
+  Bell,
+  AlertCircle
 } from 'lucide-react';
 import { InventoryState, UserRole, Product, ProductUnit, Transaction, BusinessProfile, TabId, SaleItem, PaymentMethod, Expenditure, ActivityLog } from './types';
 import { INITIAL_PRODUCTS } from './constants';
@@ -833,8 +834,19 @@ const App: React.FC = () => {
           </div>
         </header>
         
+        {subscriptionLocked && activeTab !== 'settings' && (
+          <div className="bg-red-50 border-b border-red-100 p-3 flex justify-between items-center text-sm shrink-0 animate-in slide-in-from-top-2">
+              <span className="font-bold text-red-700 flex items-center gap-2">
+                 <AlertCircle size={16} /> Subscription Expired. Read-Only Mode.
+              </span>
+              <button onClick={openPaymentLink} className="text-red-700 underline font-bold text-xs bg-white px-3 py-1.5 rounded-lg border border-red-100 hover:bg-red-50">
+                 Renew Now
+              </button>
+          </div>
+        )}
+
         <div className="flex-1 overflow-y-auto p-4 md:p-8">
-          {activeTab === 'sales' && <SalesScreen products={state.products} onAddToCart={addToCart} />}
+          {activeTab === 'sales' && <SalesScreen products={state.products} onAddToCart={addToCart} isReadOnly={subscriptionLocked} />}
           {activeTab === 'inventory' && (
             <InventoryScreen
               products={state.products}
@@ -881,6 +893,7 @@ const App: React.FC = () => {
               onDeleteExpenditure={handleDeleteExpenditure}
               onEditExpenditure={handleEditExpenditure}
               isOnline={isOnline}
+              isReadOnly={subscriptionLocked}
             />
           )}
           {activeTab === 'settings' && state.role === 'owner' && (

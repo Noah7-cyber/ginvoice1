@@ -181,17 +181,6 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      {isSubscriptionExpired && (
-        <div className="bg-red-50 border border-red-100 p-3 flex justify-between items-center text-sm rounded-xl">
-            <span className="font-bold text-red-700 flex items-center gap-2">
-                <AlertCircle size={16} /> Subscription Expired. View-Only Mode.
-            </span>
-             <button onClick={onRenewSubscription} className="text-red-700 underline font-bold text-xs">
-                Renew Now
-             </button>
-        </div>
-      )}
-
       {/* Header & View Toggle */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>

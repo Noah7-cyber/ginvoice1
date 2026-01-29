@@ -20,9 +20,10 @@ interface ExpenditureScreenProps {
   onDeleteExpenditure: (id: string) => void;
   onEditExpenditure: (item: Expenditure) => void;
   isOnline: boolean;
+  isReadOnly?: boolean;
 }
 
-const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onAddExpenditure, onDeleteExpenditure, onEditExpenditure, isOnline }) => {
+const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onAddExpenditure, onDeleteExpenditure, onEditExpenditure, isOnline, isReadOnly }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const { addToast } = useToast();
@@ -164,13 +165,15 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
               )}
            </div>
 
-           <button
-             onClick={() => setShowAddModal(true)}
-             className="flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-bold shadow-lg shadow-blue-100"
-           >
-             <Plus className="w-5 h-5 mr-2" />
-             Add Expense
-           </button>
+           {!isReadOnly && (
+             <button
+               onClick={() => setShowAddModal(true)}
+               className="flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-bold shadow-lg shadow-blue-100"
+             >
+               <Plus className="w-5 h-5 mr-2" />
+               Add Expense
+             </button>
+           )}
         </div>
       </div>
 
@@ -225,41 +228,47 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
                       -{new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(exp.amount || 0)}
                     </td>
                     <td className="px-6 py-4 text-sm text-right flex justify-end gap-2">
-                      <button
-                        onClick={() => {
-                          if (!isOnline) {
-                            addToast('Please connect to the internet to perform this action.', 'error');
-                            return;
-                          }
-                          setFormData({
-                            title: exp.title,
-                            amount: exp.amount.toString(),
-                            category: exp.category,
-                            date: exp.date ? new Date(exp.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-                            description: exp.description || '',
-                            paymentMethod: exp.paymentMethod || 'Cash'
-                          });
-                          setEditingId(exp.id);
-                          setShowAddModal(true);
-                        }}
-                        className="text-blue-500 hover:text-blue-700"
-                      >
-                        <Pencil size={16} />
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (!isOnline) {
-                            addToast('Please connect to the internet to perform this action.', 'error');
-                            return;
-                          }
-                          if (window.confirm('Are you sure you want to delete this expenditure?')) {
-                            onDeleteExpenditure(exp.id);
-                          }
-                        }}
-                        className="text-gray-400 hover:text-red-500"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                      {isReadOnly ? (
+                        <span className="text-gray-400 italic text-xs">Locked</span>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => {
+                              if (!isOnline) {
+                                addToast('Please connect to the internet to perform this action.', 'error');
+                                return;
+                              }
+                              setFormData({
+                                title: exp.title,
+                                amount: exp.amount.toString(),
+                                category: exp.category,
+                                date: exp.date ? new Date(exp.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+                                description: exp.description || '',
+                                paymentMethod: exp.paymentMethod || 'Cash'
+                              });
+                              setEditingId(exp.id);
+                              setShowAddModal(true);
+                            }}
+                            className="text-blue-500 hover:text-blue-700"
+                          >
+                            <Pencil size={16} />
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (!isOnline) {
+                                addToast('Please connect to the internet to perform this action.', 'error');
+                                return;
+                              }
+                              if (window.confirm('Are you sure you want to delete this expenditure?')) {
+                                onDeleteExpenditure(exp.id);
+                              }
+                            }}
+                            className="text-gray-400 hover:text-red-500"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))
