@@ -10,10 +10,11 @@ const requireActiveSubscription = async (req, res, next) => {
     const subscriptionEndsAt = business.subscriptionExpiresAt ? new Date(business.subscriptionExpiresAt) : null;
     const hasAccess = (subscriptionEndsAt && subscriptionEndsAt >= now) || (trialEndsAt && trialEndsAt >= now);
 
-    if (!hasAccess) {
+    if (!hasAccess && req.method !== 'GET') {
       return res.status(402).json({ message: 'Subscription required', trialEndsAt: business.trialEndsAt, isSubscribed: business.isSubscribed, subscriptionExpiresAt: business.subscriptionExpiresAt });
     }
 
+    req.plan = hasAccess ? 'premium' : 'free';
     req.business = business;
     return next();
   } catch (err) {

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Sparkles, ShieldCheck, Box, User, Receipt, CheckCircle, ArrowRight, Star, Globe, Lock, Play, Layers, WifiOff, Cloud, Database } from 'lucide-react';
+import { Sparkles, ShieldCheck, Box, User, Receipt, CheckCircle, ArrowRight, Star, Globe, Lock, Play, Layers, WifiOff, Cloud, Database, MessageCircle } from 'lucide-react';
 import { getBusinessCount } from '../services/api';
 
 interface WelcomeScreenProps {
@@ -298,6 +298,16 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onRegister, onLogin }) =>
           animation: float 6s ease-in-out infinite;
         }
       `}</style>
+
+      {/* Floating WhatsApp Button */}
+      <a
+        href="https://wa.me/2348051763431"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="fixed bottom-6 right-6 z-50 p-4 bg-green-500 text-white rounded-full shadow-lg hover:bg-green-600 transition-all hover:scale-110"
+      >
+        <MessageCircle size={24} />
+      </a>
     </div>
   );
 };
