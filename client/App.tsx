@@ -883,7 +883,18 @@ const App: React.FC = () => {
               isOnline={isOnline}
             />
           )}
-          {activeTab === 'settings' && state.role === 'owner' && <SettingsScreen business={state.business} onUpdateBusiness={b => setState(prev => ({ ...prev, business: b }))} onManualSync={() => refreshData()} lastSyncedAt={state.lastSyncedAt} onLogout={handleLogout} onDeleteAccount={handleDeleteAccount} isOnline={isOnline} />}
+          {activeTab === 'settings' && state.role === 'owner' && (
+            <SettingsScreen
+              business={state.business}
+              onUpdateBusiness={b => setState(prev => ({ ...prev, business: b }))}
+              onManualSync={() => refreshData()}
+              lastSyncedAt={state.lastSyncedAt}
+              onLogout={handleLogout}
+              onDeleteAccount={handleDeleteAccount}
+              isOnline={isOnline}
+              onSubscribe={openPaymentLink}
+            />
+          )}
         </div>
 
         {/* Mobile Bottom Nav */}

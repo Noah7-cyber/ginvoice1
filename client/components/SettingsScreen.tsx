@@ -16,9 +16,10 @@ interface SettingsScreenProps {
   onLogout?: () => void;
   onDeleteAccount?: () => void;
   isOnline: boolean;
+  onSubscribe?: () => void;
 }
 
-const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusiness, onManualSync, lastSyncedAt, isSyncing, onLogout, onDeleteAccount, isOnline }) => {
+const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusiness, onManualSync, lastSyncedAt, isSyncing, onLogout, onDeleteAccount, isOnline, onSubscribe }) => {
   const { addToast } = useToast();
   const [formData, setFormData] = useState<BusinessProfile>(business);
   const [showSaved, setShowSaved] = useState(false);
@@ -413,20 +414,55 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                   <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
                       <h2 className="text-lg font-bold flex items-center gap-2"><CreditCard className="text-emerald-600" /> Subscription Status</h2>
 
-                      <div className={`p-6 rounded-2xl border-2 ${business.isSubscribed ? 'bg-emerald-50 border-emerald-100' : 'bg-orange-50 border-orange-100'}`}>
-                          <div className="flex items-center gap-3 mb-2">
-                              {business.isSubscribed ? <CheckCircle2 className="text-emerald-600" /> : <AlertTriangle className="text-orange-500" />}
-                              <h3 className={`font-black text-lg ${business.isSubscribed ? 'text-emerald-800' : 'text-orange-800'}`}>
-                                  {business.isSubscribed ? 'Active Subscription' : 'Free Trial'}
-                              </h3>
-                          </div>
-                          <p className="text-sm text-gray-600">
-                              {business.isSubscribed
-                                ? `Your plan renews on ${new Date(business.subscriptionExpiresAt!).toDateString()}`
-                                : `Your trial expires on ${new Date(business.trialEndsAt).toDateString()}`
-                              }
-                          </p>
-                      </div>
+                      {(() => {
+                          const isTrial = !business.isSubscribed && new Date(business.trialEndsAt) > new Date();
+                          const isFreePlan = !business.isSubscribed && !isTrial;
+
+                          if (isFreePlan) {
+                              return (
+                                  <div className="p-6 rounded-2xl border-2 bg-slate-50 border-slate-200">
+                                      <div className="flex items-center gap-3 mb-2">
+                                          <Lock className="text-slate-500" />
+                                          <h3 className="font-black text-lg text-slate-800">Free Plan (Restricted)</h3>
+                                      </div>
+                                      <p className="text-sm text-slate-600 mb-4">
+                                          Your trial has ended. You are on the read-only free plan. Upgrade to regain full access.
+                                      </p>
+                                      <button
+                                        onClick={onSubscribe}
+                                        className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold shadow-lg hover:bg-black transition-all"
+                                      >
+                                          Upgrade to Pro (₦2,000/mo)
+                                      </button>
+                                  </div>
+                              );
+                          }
+
+                          return (
+                              <div className={`p-6 rounded-2xl border-2 ${business.isSubscribed ? 'bg-emerald-50 border-emerald-100' : 'bg-orange-50 border-orange-100'}`}>
+                                  <div className="flex items-center gap-3 mb-2">
+                                      {business.isSubscribed ? <CheckCircle2 className="text-emerald-600" /> : <AlertTriangle className="text-orange-500" />}
+                                      <h3 className={`font-black text-lg ${business.isSubscribed ? 'text-emerald-800' : 'text-orange-800'}`}>
+                                          {business.isSubscribed ? 'Active Subscription' : 'Free Trial'}
+                                      </h3>
+                                  </div>
+                                  <p className="text-sm text-gray-600 mb-4">
+                                      {business.isSubscribed
+                                          ? `Your plan renews on ${new Date(business.subscriptionExpiresAt!).toDateString()}`
+                                          : `Your trial expires on ${new Date(business.trialEndsAt).toDateString()}`
+                                      }
+                                  </p>
+                                  {isTrial && (
+                                      <button
+                                        onClick={onSubscribe}
+                                        className="text-xs font-bold bg-orange-100 text-orange-700 px-4 py-2 rounded-lg hover:bg-orange-200 transition-colors"
+                                      >
+                                          Subscribe Early
+                                      </button>
+                                  )}
+                              </div>
+                          );
+                      })()}
 
                       {/* Payment Troubleshooting */}
                       <div className="border-t pt-6">
