@@ -27,13 +27,20 @@ class NigeriaSmallBusinessStrategy {
     let taxBand = 'EXEMPT'; // Default
     let message = 'Small Company Exempt (Turnover <= ₦100m)';
 
-    // IF Revenue <= 100,000,000: Tax is 0% (Small Company Exempt).
-    if (revenue <= 100000000) {
+    // Tier 1 (Small): Revenue <= 50m -> 0% Tax
+    if (revenue <= 50000000) {
       estimatedTax = 0;
       taxBand = 'EXEMPT';
-      message = 'Small Company Exempt (Turnover <= ₦100m)';
-    } else {
-      // IF Revenue > 100,000,000: Tax is 30% of Assessable Profit.
+      message = 'Small Company Exempt (Turnover <= ₦50m)';
+    }
+    // Tier 2 (Medium): 50m < Revenue <= 100m -> 25% Tax
+    else if (revenue <= 100000000) {
+      estimatedTax = assessableProfit * 0.25;
+      taxBand = 'MEDIUM_COMPANY';
+      message = 'Medium Company CIT Rate (25%)';
+    }
+    // Tier 3 (Large): Revenue > 100m -> 30% Tax
+    else {
       estimatedTax = assessableProfit * 0.30;
       taxBand = 'LARGE_COMPANY';
       message = 'Large Company CIT Rate (30%)';
@@ -67,7 +74,7 @@ class NigeriaSmallBusinessStrategy {
         totalDeductible: operatingExpenses,
         whtCredit: whtCreditSum,
         personalRent: personalRentSum,
-        taxRate: revenue > 100000000 ? '30%' : '0%'
+        taxRate: revenue > 100000000 ? '30%' : (revenue > 50000000 ? '25%' : '0%')
       },
       personalTip
     };
