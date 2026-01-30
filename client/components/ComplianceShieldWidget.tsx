@@ -52,14 +52,14 @@ const ComplianceShieldWidget: React.FC = () => {
   if (error || !estimate) return null;
 
   const revenue = estimate.breakdown.revenue;
-  const threshold = 100000000;
+  const threshold = 50000000;
   const vatThreshold = 25000000;
   // Calculate visual progress, capped at 100%
   const progress = Math.min(100, (revenue / threshold) * 100);
   const vatPosition = (vatThreshold / threshold) * 100;
 
   const isExempt = estimate.taxBand === 'EXEMPT';
-  const isApproaching = isExempt && revenue > 90000000;
+  const isApproaching = isExempt && revenue > 45000000;
 
   return (
     <div className="bg-gradient-to-br from-indigo-900 to-slate-900 rounded-2xl p-6 text-white shadow-xl relative overflow-hidden mb-8">
@@ -85,7 +85,7 @@ const ComplianceShieldWidget: React.FC = () => {
        <div className="mt-6 relative z-10">
           <div className="flex justify-between text-xs font-bold mb-1">
              <span className={isExempt ? 'text-emerald-400' : 'text-red-400'}>
-                {isExempt ? 'Tax Exempt Status' : 'Taxable Threshold Exceeded'}
+                {isExempt ? 'Tax Exempt Limit (₦50m)' : 'Taxable Threshold Exceeded'}
              </span>
              <span className="text-indigo-300">{CURRENCY}{revenue.toLocaleString()} / {CURRENCY}{threshold.toLocaleString()}</span>
           </div>

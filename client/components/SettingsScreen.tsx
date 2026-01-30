@@ -370,6 +370,29 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                     </div>
                   </div>
 
+                  {/* Tax Compliance Toggle */}
+                  <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
+                      <h2 className="text-lg font-bold flex items-center gap-2"><ShieldCheck className="text-primary" /> Tax Compliance</h2>
+                      <div className="flex items-center justify-between p-4 rounded-2xl border bg-gray-50">
+                          <div>
+                              <p className="font-bold text-sm text-gray-900">Enable Tax Compliance Shield</p>
+                              <p className="text-[10px] text-gray-500 mt-0.5">Show tax estimates and exemption limits on dashboard</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                                // Initialize if undefined
+                                const currentSettings = formData.taxSettings || { isEnabled: false, jurisdiction: 'NG', incorporationDate: new Date().toISOString() };
+                                const newSettings = { ...currentSettings, isEnabled: !currentSettings.isEnabled };
+                                setFormData({ ...formData, taxSettings: newSettings });
+                            }}
+                            className={`transition-colors ${formData.taxSettings?.isEnabled ? 'text-primary' : 'text-gray-300'}`}
+                          >
+                              {formData.taxSettings?.isEnabled ? <ToggleRight size={32} /> : <ToggleLeft size={32} />}
+                          </button>
+                      </div>
+                  </div>
+
                   {/* Staff Permissions */}
                   <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
                     <h2 className="text-lg font-bold flex items-center gap-2"><ShieldCheck className="text-primary" /> Staff Permissions</h2>

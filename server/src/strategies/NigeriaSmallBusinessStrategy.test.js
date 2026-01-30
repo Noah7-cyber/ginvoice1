@@ -1,8 +1,8 @@
 const strategy = require('./NigeriaSmallBusinessStrategy');
 
 describe('NigeriaSmallBusinessStrategy', () => {
-  it('should exempt companies with revenue <= 100m', () => {
-    const revenue = 50000000;
+  it('should exempt companies with revenue <= 50m (Tier 1)', () => {
+    const revenue = 45000000;
     const expenses = [];
     const result = strategy.calculate(revenue, expenses, {});
 
@@ -10,7 +10,19 @@ describe('NigeriaSmallBusinessStrategy', () => {
     expect(result.taxBand).toBe('EXEMPT');
   });
 
-  it('should tax companies with revenue > 100m at 30%', () => {
+  it('should tax companies with revenue between 50m and 100m at 25% (Tier 2)', () => {
+    // Revenue = 80m. Operating Expenses = 0.
+    // Assessable Profit = 80m.
+    // Tax = 25% of 80m = 20m.
+    const revenue = 80000000;
+    const expenses = [];
+    const result = strategy.calculate(revenue, expenses, {});
+
+    expect(result.estimatedTax).toBe(20000000);
+    expect(result.taxBand).toBe('MEDIUM_COMPANY');
+  });
+
+  it('should tax companies with revenue > 100m at 30% (Tier 3)', () => {
     const revenue = 150000000;
     const expenses = []; // No expenses
     // Assessable Profit = 150m. Tax = 30% of 150m = 45m.
