@@ -213,18 +213,18 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
            </div>
 
            {business && !business.taxSettings?.isEnabled && (
-             /* <button
+             <button
                onClick={() => setShowShieldModal(true)}
                className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-xl font-bold text-sm hover:bg-indigo-100 transition-colors"
              >
                <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></div>
                Activate Compliance Shield
-             </button> */ null
+             </button>
            )}
         </div>
       </div>
 
-      {/* {business && business.taxSettings?.isEnabled && <ComplianceShieldWidget />} */}
+      {business && business.taxSettings?.isEnabled && <ComplianceShieldWidget />}
       {showShieldModal && (
         <ComplianceShieldModal
            onConfirm={async () => {

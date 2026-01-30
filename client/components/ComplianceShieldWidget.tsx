@@ -52,12 +52,14 @@ const ComplianceShieldWidget: React.FC = () => {
   if (error || !estimate) return null;
 
   const revenue = estimate.breakdown.revenue;
-  const threshold = 25000000;
+  const threshold = 100000000;
+  const vatThreshold = 25000000;
   // Calculate visual progress, capped at 100%
   const progress = Math.min(100, (revenue / threshold) * 100);
+  const vatPosition = (vatThreshold / threshold) * 100;
 
   const isExempt = estimate.taxBand === 'EXEMPT';
-  const isApproaching = isExempt && revenue > 24000000;
+  const isApproaching = isExempt && revenue > 90000000;
 
   return (
     <div className="bg-gradient-to-br from-indigo-900 to-slate-900 rounded-2xl p-6 text-white shadow-xl relative overflow-hidden mb-8">
@@ -87,11 +89,21 @@ const ComplianceShieldWidget: React.FC = () => {
              </span>
              <span className="text-indigo-300">{CURRENCY}{revenue.toLocaleString()} / {CURRENCY}{threshold.toLocaleString()}</span>
           </div>
-          <div className="h-3 bg-white/10 rounded-full overflow-hidden">
+          <div className="relative h-3 bg-white/10 rounded-full overflow-hidden">
              <div
                className={`h-full rounded-full transition-all duration-1000 ${isExempt ? (isApproaching ? 'bg-yellow-400' : 'bg-emerald-500') : 'bg-red-500'}`}
                style={{ width: `${progress}%` }}
              ></div>
+             {/* VAT Threshold Marker */}
+             <div
+               className="absolute top-0 bottom-0 w-0.5 bg-indigo-300/50"
+               style={{ left: `${vatPosition}%` }}
+             ></div>
+          </div>
+          <div className="relative mt-1 h-4">
+             <div className="absolute text-[10px] text-indigo-300 font-medium transform -translate-x-1/2" style={{ left: `${vatPosition}%` }}>
+               VAT Threshold (25m)
+             </div>
           </div>
        </div>
 
