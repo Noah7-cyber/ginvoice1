@@ -293,7 +293,15 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
                   <input name="date" type="date" required value={formData.date} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
                </div>
                <div className="grid grid-cols-2 gap-4">
-                 <select name="category" value={formData.category} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg outline-none"><option value="">Category...</option><option value="Rent">Rent</option><option value="Utilities">Utilities</option><option value="Inventory">Inventory</option><option value="Other">Other</option></select>
+                 <select name="category" value={formData.category} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg outline-none">
+                    <option value="">Category...</option>
+                    <option value="Rent">Rent</option>
+                    <option value="Personal Home Rent">Personal Home Rent</option>
+                    <option value="Utilities">Utilities</option>
+                    <option value="Inventory">Inventory</option>
+                    <option value="Withholding Tax (WHT)">Withholding Tax (WHT)</option>
+                    <option value="Other">Other</option>
+                 </select>
                  <select name="paymentMethod" value={formData.paymentMethod} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg outline-none"><option value="Cash">Cash</option><option value="Bank Transfer">Bank Transfer</option></select>
                </div>
                <div className="pt-4 flex gap-3">

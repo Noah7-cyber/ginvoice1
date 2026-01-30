@@ -12,7 +12,7 @@ const ExpenditureSchema = new mongoose.Schema({
   category: { type: String, default: 'Other' },
   taxCategory: {
     type: String,
-    enum: ['OPERATING_EXPENSE', 'COST_OF_GOODS', 'CAPITAL_ASSET', 'NON_DEDUCTIBLE', 'SALARY_PENSION'],
+    enum: ['OPERATING_EXPENSE', 'COST_OF_GOODS', 'CAPITAL_ASSET', 'NON_DEDUCTIBLE', 'SALARY_PENSION', 'PERSONAL_HOME_RENT', 'WHT_CREDIT'],
     default: 'OPERATING_EXPENSE'
   },
   date: { type: Date, default: Date.now },
