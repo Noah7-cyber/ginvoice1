@@ -1,7 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Shield, CheckCircle } from 'lucide-react';
+import { Shield, CheckCircle, X } from 'lucide-react';
 import api from '../services/api';
 import { CURRENCY } from '../constants';
+
+interface ComplianceShieldWidgetProps {
+    onClose?: () => void;
+}
 
 interface TaxEstimate {
   estimatedTax: number;
@@ -17,7 +21,7 @@ interface TaxEstimate {
   };
 }
 
-const ComplianceShieldWidget: React.FC = () => {
+const ComplianceShieldWidget: React.FC<ComplianceShieldWidgetProps> = ({ onClose }) => {
   const [estimate, setEstimate] = useState<TaxEstimate | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -66,7 +70,17 @@ const ComplianceShieldWidget: React.FC = () => {
        {/* Background Decoration */}
        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
 
-       <div className="flex justify-between items-start relative z-10">
+       {/* Close Button */}
+       {onClose && (
+           <button
+             onClick={onClose}
+             className="absolute top-4 right-4 z-20 text-indigo-300 hover:text-white transition-colors"
+           >
+             <X size={20} />
+           </button>
+       )}
+
+       <div className="flex justify-between items-start relative z-10 pr-8">
           <div>
             <div className="flex items-center gap-2 mb-2">
                <Shield className="text-emerald-400" size={24} />

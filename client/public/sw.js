@@ -61,64 +61,49 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const requestUrl = new URL(event.request.url);
 
-  // ADD THIS BLOCK: Ignore API calls so they are never cached
-  if (requestUrl.pathname.startsWith('/api/')) {
-    return;
-  }
+  if (requestUrl.protocol === 'chrome-extension:') return;
 
-  if (requestUrl.protocol === 'chrome-extension:') {
-    return;
-  }
-
-  // 1. Critical Backend/Sync Routes: Network Only
-  if (shouldBypass(requestUrl, event.request)) {
+  // 1. Navigation: App Shell First (Offline Stability)
+  // We bypass network check for navigation to ensure the UI loads instantly,
+  // preventing the "white screen" or JSON error if the network is flaky.
+  if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request).catch((err) => {
-        console.error('[SW] Bypass Fetch Failed (likely CORS or Offline):', err, event.request.url);
-        return jsonOfflineResponse();
+      caches.match('/index.html').then((cached) => {
+        return cached || fetch(event.request).catch(() => caches.match('/index.html'));
       })
     );
     return;
   }
 
-  // 2. Navigation: Network First, Fallback to index.html (for Offline)
-  if (event.request.mode === 'navigate') {
+  // 2. Static Assets: Cache First, Then Network
+  const isAsset = requestUrl.pathname.match(/\.(js|css|png|jpg|jpeg|svg|woff2)$/);
+  if (isAsset) {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match('/index.html'))
+      caches.match(event.request).then((cachedResponse) => {
+        if (cachedResponse) return cachedResponse;
+        return fetch(event.request).then((response) => {
+          // Cache internal or valid CORS assets
+          if (!response || response.status !== 200) return response;
+          const isInternal = requestUrl.origin === location.origin;
+          if (isInternal || response.type === 'cors') {
+            const responseToCache = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseToCache));
+          }
+          return response;
+        });
+      })
     );
     return;
   }
 
-  // 3. Static Assets: Cache First, then Network
-  // We specifically ensure that JS/CSS assets from our origin are cached for offline usage
-  event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) return cachedResponse;
-
-      return fetch(event.request).then((response) => {
-        // Only cache valid internal assets
-        // We ensure we cache bundled assets (.js, .css)
-        const isAsset = requestUrl.pathname.match(/\.(js|css|png|jpg|jpeg|svg|woff2)$/);
-        const isInternal = requestUrl.origin === location.origin;
-
-        if (!response || response.status !== 200 || response.type !== 'basic') {
-             // If it's an external asset (like fonts), we might still want to cache if 'cors'
-             if (response && response.status === 200 && response.type === 'cors' && isAsset) {
-                 // cache font
-             } else {
-                 return response;
-             }
-        }
-
-        // Cache internal assets aggressively for offline support
-        if (isInternal || (response.type === 'cors' && isAsset)) {
-            const responseToCache = response.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
-            });
-        }
-        return response;
-      });
-    })
-  );
+  // 3. API/Backend: Network Only (with Offline Fallback)
+  if (shouldBypass(requestUrl, event.request) || requestUrl.pathname.startsWith('/api/')) {
+    event.respondWith(
+      fetch(event.request).catch((err) => {
+        console.error('[SW] API Fetch Failed:', err);
+        return jsonOfflineResponse();
+      })
+    );
+    return;
+  }
 });
