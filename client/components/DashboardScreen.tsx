@@ -224,7 +224,27 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
         </div>
       </div>
 
-      {business && business.taxSettings?.isEnabled && <ComplianceShieldWidget />}
+      {business && business.taxSettings?.isEnabled && (
+        <ComplianceShieldWidget
+           onClose={async () => {
+               if (confirm('Hide the Compliance Shield? You can re-enable it in Settings.')) {
+                  try {
+                    const updatedSettings = {
+                       taxSettings: {
+                          ...business.taxSettings,
+                          isEnabled: false
+                       }
+                    };
+                    await updateBusinessProfile(updatedSettings);
+                    if (onUpdateBusiness) onUpdateBusiness(updatedSettings);
+                  } catch (err) {
+                     console.error("Failed to disable shield", err);
+                     alert("Failed to disable. Please try again.");
+                  }
+               }
+           }}
+        />
+      )}
       {showShieldModal && (
         <ComplianceShieldModal
            onConfirm={async () => {
