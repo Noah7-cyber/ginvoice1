@@ -94,6 +94,9 @@ const App: React.FC = () => {
   });
 
   const [activeTab, setActiveTab] = useState<TabId>('sales');
+  // Lazy Keep-Alive Tabs: Track which tabs have been visited
+  const [visitedTabs, setVisitedTabs] = useState<Set<TabId>>(new Set(['sales']));
+
   const [deepLinkParams, setDeepLinkParams] = useState<{ id?: string }>({});
   const [isCartOpen, setIsCartOpen] = useState(window.innerWidth > 1024);
   const [view, setView] = useState<'main' | 'forgot-password'>('main');
@@ -121,6 +124,7 @@ const App: React.FC = () => {
         // Simple check if tab is valid, or at least exists in our map
         if (TAB_LABELS[tab] || ['sales', 'inventory', 'history', 'dashboard', 'expenditure', 'settings'].includes(tab)) {
            setActiveTab(tab);
+           setVisitedTabs(prev => new Set(prev).add(tab));
 
            if (parts.length > 1) {
              setDeepLinkParams({ id: parts[1] });
@@ -141,6 +145,7 @@ const App: React.FC = () => {
 
   const handleTabChange = (tab: TabId) => {
     setActiveTab(tab);
+    setVisitedTabs(prev => new Set(prev).add(tab));
     setDeepLinkParams({}); // Clear deep link params on tab switch
     window.history.pushState(null, '', `/${tab}`);
   };
@@ -856,69 +861,111 @@ const App: React.FC = () => {
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-8">
-          {activeTab === 'sales' && <SalesScreen products={state.products} onAddToCart={addToCart} isReadOnly={subscriptionLocked} />}
-          {activeTab === 'inventory' && (
-            <InventoryScreen
-              products={state.products}
-              onUpdateProducts={handleUpdateProducts}
-              isOwner={state.role === 'owner'}
-              isReadOnly={!canManageStock || subscriptionLocked}
-              isOnline={isOnline}
-              initialParams={deepLinkParams}
-            />
+        {/* Content Area - Independent Scrolling for Performance */}
+        <div className="flex-1 relative overflow-hidden">
+
+          {visitedTabs.has('sales') && (
+            <div
+               className="absolute inset-0 overflow-y-auto p-4 md:p-8"
+               style={{ display: activeTab === 'sales' ? 'block' : 'none' }}
+            >
+               <SalesScreen products={state.products} onAddToCart={addToCart} isReadOnly={subscriptionLocked} />
+            </div>
           )}
-          {activeTab === 'history' && (
-            <HistoryScreen
-              transactions={state.transactions}
-              business={state.business}
-              onDeleteTransaction={handleDeleteTransaction}
-              onUpdateTransaction={t => {
-                setState(prev => ({
-                  ...prev,
-                  transactions: prev.transactions.map(tx => tx.id === t.id ? { ...t, updatedAt: new Date().toISOString() } : tx)
-                }));
-                if (navigator.onLine) {
-                  pushToBackend({ transactions: [t] }).catch(err => console.error("Failed to sync edit", err));
-                }
-              }}
-              isSubscriptionExpired={subscriptionLocked}
-              onRenewSubscription={openPaymentLink}
-              isReadOnly={!canManageHistory || subscriptionLocked}
-              isOnline={isOnline}
-              initialParams={deepLinkParams}
-            />
+
+          {visitedTabs.has('inventory') && (
+            <div
+               className="absolute inset-0 overflow-y-auto p-4 md:p-8"
+               style={{ display: activeTab === 'inventory' ? 'block' : 'none' }}
+            >
+               <InventoryScreen
+                products={state.products}
+                onUpdateProducts={handleUpdateProducts}
+                isOwner={state.role === 'owner'}
+                isReadOnly={!canManageStock || subscriptionLocked}
+                isOnline={isOnline}
+                initialParams={deepLinkParams}
+              />
+            </div>
           )}
-          {activeTab === 'dashboard' && (state.role === 'owner' || (state.business.staffPermissions as any)?.canViewDashboard) && (
-            <DashboardScreen
-              transactions={state.transactions}
-              products={state.products}
-              business={state.business}
-              onUpdateBusiness={b => setState(prev => ({ ...prev, business: { ...prev.business, ...b } }))}
-            />
+
+          {visitedTabs.has('history') && (
+            <div
+               className="absolute inset-0 overflow-y-auto p-4 md:p-8"
+               style={{ display: activeTab === 'history' ? 'block' : 'none' }}
+            >
+               <HistoryScreen
+                transactions={state.transactions}
+                business={state.business}
+                onDeleteTransaction={handleDeleteTransaction}
+                onUpdateTransaction={t => {
+                  setState(prev => ({
+                    ...prev,
+                    transactions: prev.transactions.map(tx => tx.id === t.id ? { ...t, updatedAt: new Date().toISOString() } : tx)
+                  }));
+                  if (navigator.onLine) {
+                    pushToBackend({ transactions: [t] }).catch(err => console.error("Failed to sync edit", err));
+                  }
+                }}
+                isSubscriptionExpired={subscriptionLocked}
+                onRenewSubscription={openPaymentLink}
+                isReadOnly={!canManageHistory || subscriptionLocked}
+                isOnline={isOnline}
+                initialParams={deepLinkParams}
+              />
+            </div>
           )}
-          {activeTab === 'expenditure' && (
-            <ExpenditureScreen
-              expenditures={state.expenditures}
-              onAddExpenditure={handleAddExpenditure}
-              onDeleteExpenditure={handleDeleteExpenditure}
-              onEditExpenditure={handleEditExpenditure}
-              isOnline={isOnline}
-              isReadOnly={subscriptionLocked}
-            />
+
+          {visitedTabs.has('dashboard') && (
+             (state.role === 'owner' || (state.business.staffPermissions as any)?.canViewDashboard) ? (
+                <div
+                   className="absolute inset-0 overflow-y-auto p-4 md:p-8"
+                   style={{ display: activeTab === 'dashboard' ? 'block' : 'none' }}
+                >
+                   <DashboardScreen
+                    transactions={state.transactions}
+                    products={state.products}
+                    business={state.business}
+                    onUpdateBusiness={b => setState(prev => ({ ...prev, business: { ...prev.business, ...b } }))}
+                  />
+                </div>
+             ) : null
           )}
-          {activeTab === 'settings' && state.role === 'owner' && (
-            <SettingsScreen
-              business={state.business}
-              onUpdateBusiness={b => setState(prev => ({ ...prev, business: b }))}
-              onManualSync={() => refreshData()}
-              lastSyncedAt={state.lastSyncedAt}
-              onLogout={handleLogout}
-              onDeleteAccount={handleDeleteAccount}
-              isOnline={isOnline}
-              onSubscribe={openPaymentLink}
-            />
+
+          {visitedTabs.has('expenditure') && (
+             <div
+               className="absolute inset-0 overflow-y-auto p-4 md:p-8"
+               style={{ display: activeTab === 'expenditure' ? 'block' : 'none' }}
+            >
+               <ExpenditureScreen
+                expenditures={state.expenditures}
+                onAddExpenditure={handleAddExpenditure}
+                onDeleteExpenditure={handleDeleteExpenditure}
+                onEditExpenditure={handleEditExpenditure}
+                isOnline={isOnline}
+                isReadOnly={subscriptionLocked}
+              />
+            </div>
           )}
+
+          {visitedTabs.has('settings') && state.role === 'owner' && (
+             <div
+               className="absolute inset-0 overflow-y-auto p-4 md:p-8"
+               style={{ display: activeTab === 'settings' ? 'block' : 'none' }}
+            >
+               <SettingsScreen
+                business={state.business}
+                onUpdateBusiness={b => setState(prev => ({ ...prev, business: b }))}
+                onManualSync={() => refreshData()}
+                lastSyncedAt={state.lastSyncedAt}
+                onLogout={handleLogout}
+                onDeleteAccount={handleDeleteAccount}
+                isOnline={isOnline}
+                onSubscribe={openPaymentLink}
+              />
+            </div>
+          )}
+
         </div>
 
         {/* Mobile Bottom Nav */}
