@@ -31,6 +31,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   // States
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [visibleCount, setVisibleCount] = useState(50); // Performance Pagination
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -132,8 +133,18 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     return matchesSearch && matchesCategory && matchesLowStock && matchesMinPrice && matchesMaxPrice;
   }).sort((a, b) => a.name.localeCompare(b.name));
 
+  // Reset pagination on filter change
+  useEffect(() => {
+      setVisibleCount(50);
+  }, [searchTerm, selectedCategory, filterLowStock, minPrice, maxPrice]);
+
   // Initialize Indexer Hook
-  const { scrollToLetter } = useAlphabetIndexer(listRef, [filteredProducts]);
+  const { scrollToLetter } = useAlphabetIndexer(listRef, [filteredProducts], (index) => {
+      // If target index is beyond visible range, expand range
+      if (index >= visibleCount) {
+          setVisibleCount(index + 50);
+      }
+  });
 
   const toggleSelection = (id: string) => {
     const next = new Set(selectedIds);
@@ -573,7 +584,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
               </tr>
             </thead>
             <tbody className="divide-y">
-              {filteredProducts.map(product => (
+              {filteredProducts.slice(0, visibleCount).map(product => (
                 <tr key={product.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(product.id) ? 'bg-indigo-50/50' : ''}`}>
                   <td className="px-6 py-4">
                     {isSelectionMode && (
@@ -683,11 +694,19 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
             </tbody>
           </table>
         </div>
+        {/* Desktop Load More Sentinel */}
+        {visibleCount < filteredProducts.length && (
+            <div className="p-4 text-center">
+                <button onClick={() => setVisibleCount(prev => prev + 50)} className="text-primary font-bold text-sm hover:underline">
+                    Load More Items...
+                </button>
+            </div>
+        )}
       </div>
 
       {/* Mobile Card View */}
       <div className="md:hidden space-y-3 pb-10">
-        {filteredProducts.map((product, index) => {
+        {filteredProducts.slice(0, visibleCount).map((product, index) => {
             // Check if this is the first item starting with this letter
             const firstChar = product.name.charAt(0).toUpperCase();
             const prevChar = index > 0 ? filteredProducts[index - 1].name.charAt(0).toUpperCase() : null;
@@ -722,6 +741,14 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
               />
             );
       })}
+        {/* Mobile Load More Sentinel */}
+        {visibleCount < filteredProducts.length && (
+            <div className="p-4 text-center pb-20">
+                <button onClick={() => setVisibleCount(prev => prev + 50)} className="text-primary font-bold text-sm bg-indigo-50 px-4 py-2 rounded-lg">
+                    Tap to Load More
+                </button>
+            </div>
+        )}
       </div>
 
       </div> {/* End of Scrollable Content */}

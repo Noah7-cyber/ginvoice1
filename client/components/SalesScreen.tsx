@@ -17,6 +17,7 @@ interface SalesScreenProps {
 const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permissions, isReadOnly }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All');
+  const [visibleCount, setVisibleCount] = useState(50); // Performance Pagination
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const { addToast } = useToast();
 
@@ -31,7 +32,16 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permis
     return matchesSearch && matchesCat;
   });
 
-  const { scrollToLetter } = useAlphabetIndexer(listRef, [filtered]);
+  // Reset pagination on filter change
+  useEffect(() => {
+      setVisibleCount(50);
+  }, [searchTerm, categoryFilter]);
+
+  const { scrollToLetter } = useAlphabetIndexer(listRef, [filtered], (index) => {
+      if (index >= visibleCount) {
+          setVisibleCount(index + 50);
+      }
+  });
 
   const handleProductClick = (p: Product) => {
     if (isReadOnly) {
@@ -87,7 +97,7 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permis
             <p className="font-bold">No products found</p>
           </div>
         ) : (
-          filtered.sort((a, b) => a.name.localeCompare(b.name)).map((p, index, arr) => {
+          filtered.sort((a, b) => a.name.localeCompare(b.name)).slice(0, visibleCount).map((p, index, arr) => {
             const firstChar = p.name.charAt(0).toUpperCase();
             const prevChar = index > 0 ? arr[index - 1].name.charAt(0).toUpperCase() : null;
             const showHeader = firstChar !== prevChar;
@@ -143,6 +153,13 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permis
             </React.Fragment>
           );
          })
+        )}
+        {visibleCount < filtered.length && (
+            <div className="col-span-full p-4 text-center">
+                <button onClick={() => setVisibleCount(prev => prev + 50)} className="text-primary font-bold text-sm bg-indigo-50 px-4 py-2 rounded-lg">
+                    Load More Items
+                </button>
+            </div>
         )}
       </div>
       </div>
