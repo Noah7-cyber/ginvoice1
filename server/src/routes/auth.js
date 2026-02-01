@@ -279,7 +279,7 @@ router.get('/verify-link', async (req, res) => {
       });
     }
 
-    return res.redirect(`${frontendUrl}?verified=true`);
+    return res.redirect(`${frontendUrl}?verified=true&email=${encodeURIComponent(business.email)}`);
   } catch (err) {
     console.error('Email verification error:', err);
     return res.redirect(`${frontendUrl}?error=server_error`);

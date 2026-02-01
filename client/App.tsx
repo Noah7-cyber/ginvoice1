@@ -150,6 +150,17 @@ const App: React.FC = () => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('verified') === 'true') {
       addToast('Email verified successfully! You can now login.', 'success');
+
+      const email = params.get('email');
+      if (email) {
+          setState(prev => ({
+              ...prev,
+              isRegistered: true,
+              isLoggedIn: false,
+              business: { ...prev.business, email: decodeURIComponent(email) }
+          }));
+      }
+
       window.history.replaceState({}, document.title, window.location.pathname);
     } else if (params.get('error') === 'invalid_token') {
       addToast('Verification link invalid or expired.', 'error');
