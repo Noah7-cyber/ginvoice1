@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect  } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Search, Plus, Package, ShoppingCart } from 'lucide-react';
 import { Product, ProductUnit } from '../types';
 import { CURRENCY } from '../constants';
@@ -23,14 +23,14 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permis
 
   const listRef = useRef<HTMLDivElement>(null);
 
-  const categories = Array.from(new Set(products.map(p => p.category)));
+  const categories = useMemo(() => Array.from(new Set(products.map(p => p.category))), [products]);
 
-  const filtered = products.filter(p => {
+  const filtered = useMemo(() => products.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           p.category.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCat = categoryFilter === 'All' || p.category === categoryFilter;
     return matchesSearch && matchesCat;
-  });
+  }), [products, searchTerm, categoryFilter]);
 
   // Reset pagination on filter change
   useEffect(() => {
@@ -111,47 +111,13 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permis
                         {isAlpha ? firstChar : '#'}
                     </div>
                  )}
-            <button
-              onClick={() => handleProductClick(p)}
-              disabled={p.currentStock <= 0}
-              className={`
-                group flex items-center gap-4 p-4 bg-white border border-gray-50 rounded-2xl shadow-sm transition-all text-left
-                ${p.currentStock <= 0 ? 'opacity-50 grayscale cursor-not-allowed' :
-                  isReadOnly ? 'opacity-60 grayscale cursor-not-allowed' :
-                  'hover:border-primary hover:shadow-md active:scale-[0.98]'}
-              `}
-            >
-              <div className={`
-                w-12 h-12 rounded-xl flex items-center justify-center shrink-0
-                ${p.currentStock < 10 ? 'bg-red-50 text-red-600' : 'bg-indigo-50 text-indigo-600'}
-              `}>
-                <ShoppingCart size={24} />
-              </div>
-              
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest truncate">{p.category}</p>
-                <div className="mb-1">
-                    <h3 className="font-bold text-gray-900 truncate leading-tight">{p.name}</h3>
-                    {(p.sku || p.id) && (
-                        <p className="text-[10px] text-gray-400 font-medium font-mono">#{p.sku || p.id.slice(-5)}</p>
-                    )}
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-black text-primary">{formatCurrency(p.sellingPrice)}</span>
-                  <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
-                    p.currentStock < 10 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'
-                  }`}>
-                    {p.currentStock} {p.baseUnit}s
-                  </span>
-                </div>
-              </div>
-              
-              <div className="w-8 h-8 rounded-full bg-primary/5 text-primary flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <Plus size={18} />
-              </div>
-            </button>
-            </React.Fragment>
-          );
+                 <ProductItem
+                    p={p}
+                    isReadOnly={isReadOnly}
+                    onClick={handleProductClick}
+                 />
+              </React.Fragment>
+            );
          })
         )}
         {visibleCount < filtered.length && (
@@ -210,4 +176,48 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permis
   );
 };
 
-export default SalesScreen;
+const ProductItem = React.memo(({ p, isReadOnly, onClick }: { p: Product, isReadOnly?: boolean, onClick: (p: Product) => void }) => {
+    return (
+        <button
+            onClick={() => onClick(p)}
+            disabled={p.currentStock <= 0}
+            className={`
+            group flex items-center gap-4 p-4 bg-white border border-gray-50 rounded-2xl shadow-sm transition-all text-left
+            ${p.currentStock <= 0 ? 'opacity-50 grayscale cursor-not-allowed' :
+                isReadOnly ? 'opacity-60 grayscale cursor-not-allowed' :
+                'hover:border-primary hover:shadow-md active:scale-[0.98]'}
+            `}
+        >
+            <div className={`
+            w-12 h-12 rounded-xl flex items-center justify-center shrink-0
+            ${p.currentStock < 10 ? 'bg-red-50 text-red-600' : 'bg-indigo-50 text-indigo-600'}
+            `}>
+            <ShoppingCart size={24} />
+            </div>
+
+            <div className="flex-1 min-w-0">
+            <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest truncate">{p.category}</p>
+            <div className="mb-1">
+                <h3 className="font-bold text-gray-900 truncate leading-tight">{p.name}</h3>
+                {(p.sku || p.id) && (
+                    <p className="text-[10px] text-gray-400 font-medium font-mono">#{p.sku || p.id.slice(-5)}</p>
+                )}
+            </div>
+            <div className="flex justify-between items-center">
+                <span className="text-sm font-black text-primary">{formatCurrency(p.sellingPrice)}</span>
+                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
+                p.currentStock < 10 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'
+                }`}>
+                {p.currentStock} {p.baseUnit}s
+                </span>
+            </div>
+            </div>
+
+            <div className="w-8 h-8 rounded-full bg-primary/5 text-primary flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+            <Plus size={18} />
+            </div>
+        </button>
+    );
+});
+
+export default React.memo(SalesScreen);

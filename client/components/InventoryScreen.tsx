@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Search, Edit3, Trash2, CheckCircle2, X, ListTodo, Layers, Tag, DollarSign, ArrowUp, Maximize2, Save, Loader2, Calculator, SlidersHorizontal } from 'lucide-react';
 import { Product, Category } from '../types';
 import { CURRENCY } from '../constants';
@@ -122,7 +122,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
   const [newProduct, setNewProduct] = useState<Partial<Product>>(initialProductState);
 
-  const filteredProducts = products.filter(p => {
+  const filteredProducts = useMemo(() => products.filter(p => {
     const term = searchTerm.toLowerCase();
     const matchesSearch = p.name.toLowerCase().includes(term) || (p.category && p.category.toLowerCase().includes(term));
     const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
@@ -131,7 +131,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     const matchesMaxPrice = maxPrice === '' || p.sellingPrice <= maxPrice;
 
     return matchesSearch && matchesCategory && matchesLowStock && matchesMinPrice && matchesMaxPrice;
-  }).sort((a, b) => a.name.localeCompare(b.name));
+  }).sort((a, b) => a.name.localeCompare(b.name)), [products, searchTerm, selectedCategory, filterLowStock, lowStockThreshold, minPrice, maxPrice]);
 
   // Reset pagination on filter change
   useEffect(() => {
@@ -1086,7 +1086,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 };
 
 // Extracted Card Component to support hooks usage inside map
-const InventoryCard = ({ product, showHeader, headerId, firstChar, isSelectionMode, isSelected, onToggleSelection, onLongPressSelection, safeReadOnly, isOnline, onEdit, onDelete, addToast }: any) => {
+const InventoryCard = React.memo(({ product, showHeader, headerId, firstChar, isSelectionMode, isSelected, onToggleSelection, onLongPressSelection, safeReadOnly, isOnline, onEdit, onDelete, addToast }: any) => {
     const longPressProps = useLongPress(
         onLongPressSelection,
         (e) => {
@@ -1167,6 +1167,6 @@ const InventoryCard = ({ product, showHeader, headerId, firstChar, isSelectionMo
     </div>
     </React.Fragment>
     );
-};
+});
 
-export default InventoryScreen;
+export default React.memo(InventoryScreen);
