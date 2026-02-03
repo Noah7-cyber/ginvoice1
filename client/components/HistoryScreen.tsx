@@ -25,7 +25,7 @@ import { Transaction, BusinessProfile, Product, SaleItem, ProductUnit } from '..
 import { CURRENCY } from '../constants';
 import InvoicePreview from './InvoicePreview';
 import { useToast } from './ToastProvider';
-import api from '../services/api';
+import api, { settleTransaction } from '../services/api';
 import { formatCurrency } from '../utils/currency';
 
 interface HistoryScreenProps {
@@ -186,6 +186,25 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
     }
   };
 
+  const handleSettle = async (t: Transaction) => {
+      if (!isOnline) {
+          addToast('Online connection required to settle debt.', 'error');
+          return;
+      }
+
+      // Optimistic Update
+      const updatedTx = { ...t, balance: 0, amountPaid: t.totalAmount, paymentStatus: 'paid' as const };
+      onUpdateTransaction(updatedTx);
+      addToast('Debt marked as paid!', 'success');
+
+      try {
+          await settleTransaction(t.id);
+      } catch (err) {
+          console.error(err);
+          addToast('Failed to sync payment status.', 'error');
+      }
+  };
+
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       {/* Header & View Toggle */}
@@ -336,6 +355,15 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
                       <button onClick={() => { setSelectedInvoice(t); updateUrlForInvoice(t.id); }} className="p-2 text-indigo-600 bg-indigo-50 rounded-lg"><FileText size={18} /></button>
                       {!isReadOnly && (
                         <>
+                          {t.balance > 0 && (
+                            <button
+                              onClick={() => handleSettle(t)}
+                              className="p-2 text-green-600 bg-green-50 rounded-lg hover:bg-green-100 transition-colors"
+                              title="Mark as Paid"
+                            >
+                              <CheckCircle2 size={18} />
+                            </button>
+                          )}
                           <button onClick={() => handleEditClick(t)} className="p-2 text-gray-400 hover:text-indigo-600 rounded-lg"><Edit3 size={18} /></button>
                           <button onClick={() => handleDeleteRequest(t)} className="p-2 text-gray-400 hover:text-red-600 rounded-lg"><Trash2 size={18} /></button>
                         </>

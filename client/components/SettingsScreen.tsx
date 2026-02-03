@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Store, Save, RefreshCw, CloudCheck, Upload, Trash2, Image as ImageIcon, MessageSquare, HeadphonesIcon, HelpCircle, Lock, AlertTriangle, X, Ticket, ToggleLeft, ToggleRight, Loader2, CreditCard, ShieldCheck, CheckCircle2, Palette } from 'lucide-react';
 import { BusinessProfile, DiscountCode } from '../types';
 import { THEME_COLORS, FONTS } from '../constants';
-import { changeBusinessPins, deleteAccount, uploadFile, updateSettings, generateDiscountCode, verifyPayment } from '../services/api';
+import { changeBusinessPins, deleteAccount, uploadFile, updateSettings, generateDiscountCode, verifyPayment, getEntitlements } from '../services/api';
 import api from '../services/api';
 import SupportBot from './SupportBot';
 import { useToast } from './ToastProvider';
@@ -41,6 +41,45 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
   // Payment Verification State
   const [paystackReference, setPaystackReference] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
+
+  // Polling for Subscription Status (Hot Reload)
+  const [isPollingSubscription, setIsPollingSubscription] = useState(false);
+  const pollCountRef = useRef(0);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isPollingSubscription) {
+      pollCountRef.current = 0;
+      interval = setInterval(async () => {
+        pollCountRef.current += 1;
+        if (pollCountRef.current > 15) { // 30 seconds timeout
+            setIsPollingSubscription(false);
+            return;
+        }
+
+        try {
+            const data = await getEntitlements();
+            if (data.plan === 'PRO') {
+                setIsPollingSubscription(false);
+                addToast("Welcome to Pro! Subscription active.", "success");
+
+                // Update local business state to reflect change immediately
+                const newBusiness = { ...business, isSubscribed: true, subscriptionExpiresAt: data.subscriptionExpiresAt };
+                onUpdateBusiness(newBusiness);
+                setFormData(prev => ({ ...prev, ...newBusiness }));
+            }
+        } catch (err) {
+            // ignore errors during polling
+        }
+      }, 2000);
+    }
+    return () => clearInterval(interval);
+  }, [isPollingSubscription, addToast, business, onUpdateBusiness]);
+
+  const handleSubscribe = () => {
+      if (onSubscribe) onSubscribe();
+      setIsPollingSubscription(true);
+  };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -452,10 +491,10 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                                           Your trial has ended. You are on the read-only free plan. Upgrade to regain full access.
                                       </p>
                                       <button
-                                        onClick={onSubscribe}
+                                        onClick={handleSubscribe}
                                         className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold shadow-lg hover:bg-black transition-all"
                                       >
-                                          Upgrade to Pro (₦2,000/mo)
+                                          {isPollingSubscription ? <span className="flex items-center justify-center gap-2"><Loader2 className="animate-spin" size={18}/> Checking Payment...</span> : 'Upgrade to Pro (₦2,000/mo)'}
                                       </button>
                                   </div>
                               );

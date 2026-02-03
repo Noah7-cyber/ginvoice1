@@ -24,6 +24,7 @@ const TransactionSchema = new mongoose.Schema({
   paymentMethod: { type: String, enum: ['cash', 'transfer', 'pos', 'bank', 'credit'], default: 'cash' },
   amountPaid: { type: Number, default: 0 },
   balance: { type: Number, default: 0 },
+  paymentStatus: { type: String, enum: ['paid', 'credit'], default: 'paid' },
   signature: { type: String },
   isSignatureLocked: { type: Boolean, default: false },
   staffId: { type: String }
