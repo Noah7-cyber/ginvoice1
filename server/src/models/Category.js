@@ -6,8 +6,7 @@ const CategorySchema = new mongoose.Schema({
   defaultSellingPrice: { type: mongoose.Decimal128, default: 0 },
   defaultCostPrice: { type: mongoose.Decimal128, default: 0 },
   defaultUnit: { type: String, default: '' },
-  usageCount: { type: Number, default: 0 },
-  expenseType: { type: String, enum: ['business', 'personal'], default: 'business' }
+  usageCount: { type: Number, default: 0 }
 }, { timestamps: true });
 
 // Ensure virtuals are included in toJSON

@@ -14,6 +14,7 @@ interface Expenditure {
   date: string;
   description: string;
   paymentMethod: string;
+  expenseType?: 'business' | 'personal';
 }
 
 interface ExpenditureScreenProps {
@@ -52,7 +53,8 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
     category: '',
     date: new Date().toISOString().split('T')[0],
     description: '',
-    paymentMethod: 'Cash'
+    paymentMethod: 'Cash',
+    expenseType: 'business' as 'business' | 'personal'
   });
 
   // Date Filters
@@ -119,7 +121,8 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
           category: formData.category,
           date: formData.date,
           description: formData.description,
-          paymentMethod: formData.paymentMethod
+          paymentMethod: formData.paymentMethod,
+          expenseType: formData.expenseType
         };
         onEditExpenditure(updatedExpenditure);
         addToast('Expenditure updated', 'success');
@@ -132,7 +135,8 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
           category: formData.category,
           date: formData.date,
           description: formData.description,
-          paymentMethod: formData.paymentMethod
+          paymentMethod: formData.paymentMethod,
+          expenseType: formData.expenseType
         };
         onAddExpenditure(newExpenditure);
         addToast('Expenditure saved', 'success');
@@ -146,7 +150,8 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
         category: '',
         date: new Date().toISOString().split('T')[0],
         description: '',
-        paymentMethod: 'Cash'
+        paymentMethod: 'Cash',
+        expenseType: 'business'
       });
 
     } catch (error) {
@@ -262,7 +267,8 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
                                 category: exp.category,
                                 date: exp.date ? new Date(exp.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
                                 description: exp.description || '',
-                                paymentMethod: exp.paymentMethod || 'Cash'
+                                paymentMethod: exp.paymentMethod || 'Cash',
+                                expenseType: exp.expenseType || 'business'
                               });
                               setEditingId(exp.id);
                               setShowAddModal(true);
@@ -310,6 +316,27 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
                   <input name="amount" type="number" placeholder="Amount" required value={formData.amount} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
                   <input name="date" type="date" required value={formData.date} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
                </div>
+
+               <div>
+                   <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Expense Type</label>
+                   <div className="flex bg-gray-100 p-1 rounded-xl">
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, expenseType: 'business' })}
+                        className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${formData.expenseType === 'business' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                      >
+                        Business (Tax Deductible)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, expenseType: 'personal' })}
+                        className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${formData.expenseType === 'personal' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                      >
+                        Personal (Not Deductible)
+                      </button>
+                   </div>
+               </div>
+
                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                  <div className="flex gap-2">
                     <select name="category" value={formData.category} onChange={handleInputChange} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg outline-none">

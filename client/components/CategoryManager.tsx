@@ -21,7 +21,6 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
   const [defaultCost, setDefaultCost] = useState<number | ''>('');
   const [defaultSelling, setDefaultSelling] = useState<number | ''>('');
   const [defaultUnit, setDefaultUnit] = useState('');
-  const [expenseType, setExpenseType] = useState<'business' | 'personal'>('business');
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -46,8 +45,7 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
           name: newCategoryName,
           defaultSellingPrice: Number(defaultSelling) || 0,
           defaultCostPrice: Number(defaultCost) || 0,
-          defaultUnit,
-          expenseType
+          defaultUnit
         });
 
         setCategories(categories.map(c => c.id === editingId ? {
@@ -55,8 +53,7 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
           name: newCategoryName,
           defaultSellingPrice: Number(defaultSelling) || 0,
           defaultCostPrice: Number(defaultCost) || 0,
-          defaultUnit,
-          expenseType
+          defaultUnit
         } : c));
 
         // Trigger parent callback
@@ -72,8 +69,7 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
           name: newCategoryName,
           defaultSellingPrice: Number(defaultSelling) || 0,
           defaultCostPrice: Number(defaultCost) || 0,
-          defaultUnit,
-          expenseType
+          defaultUnit
         });
         setCategories([...categories, newCat]);
         addToast('Category created', 'success');
@@ -83,7 +79,6 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
       setDefaultCost('');
       setDefaultSelling('');
       setDefaultUnit('');
-      setExpenseType('business');
       setShowForm(false);
     } catch (err) {
       addToast(editingId ? 'Failed to update' : 'Failed to create', 'error');
@@ -98,7 +93,6 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
     setDefaultCost(cat.defaultCostPrice);
     setDefaultSelling(cat.defaultSellingPrice);
     setDefaultUnit(cat.defaultUnit || '');
-    setExpenseType(cat.expenseType || 'business');
     setShowForm(true);
   };
 
@@ -108,7 +102,6 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
     setDefaultCost('');
     setDefaultSelling('');
     setDefaultUnit('');
-    setExpenseType('business');
     setShowForm(false);
   };
 
@@ -212,27 +205,6 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
                    />
                 </div>
 
-                {mode === 'expense' && (
-                  <div>
-                     <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Expense Type</label>
-                     <div className="flex bg-gray-100 p-1 rounded-xl">
-                        <button
-                          type="button"
-                          onClick={() => setExpenseType('business')}
-                          className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${expenseType === 'business' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                        >
-                          Business (Tax Deductible)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setExpenseType('personal')}
-                          className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${expenseType === 'personal' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                        >
-                          Personal (Not Deductible)
-                        </button>
-                     </div>
-                  </div>
-                )}
 
                 {mode === 'inventory' && (
                   <>
