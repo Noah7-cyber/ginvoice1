@@ -41,8 +41,12 @@ class NigeriaSmallBusinessStrategy {
     });
 
     // 2. Tax Calculation (New 2026 Law)
-    // Assessable Profit = Revenue - Deductible Operating Expenses.
-    const assessableProfit = Math.max(0, revenue - operatingExpenses);
+    // CRA 20% Rule: Allowed Personal Rent Deduction = Min(Actual Rent, 20% of Revenue)
+    const rentCap = revenue * 0.20;
+    const allowedRentDeduction = Math.min(personalRentSum, rentCap);
+
+    // Assessable Profit = Revenue - Business Expenses - Allowed Rent Deduction
+    const assessableProfit = Math.max(0, revenue - operatingExpenses - allowedRentDeduction);
 
     let estimatedTax = 0;
     let taxBand = 'EXEMPT'; // Default
@@ -73,26 +77,10 @@ class NigeriaSmallBusinessStrategy {
     const finalTaxPayable = Math.max(0, estimatedTax - whtCreditSum);
 
     // 4. Personal Hint
-    // Return a personalTip object that calculates min(personalRentSum * 0.20, 500000)
-    const personalRelief = Math.min(personalRentSum * 0.20, 500000);
     const personalTip = {
-      reliefAmount: personalRelief,
-      message: `You can claim up to ₦${personalRelief.toLocaleString()} as tax relief on your personal rent.`
+      reliefAmount: allowedRentDeduction,
+      message: `You claimed ₦${allowedRentDeduction.toLocaleString()} as tax relief on your personal rent (Capped at 20% of Revenue).`
     };
-
-    // Safe to Spend (Net Profit - Final Tax)
-    // Note: realNetProfit should account for ALL money out (including personal items paid from business)
-    // to show what is actually left in the bank?
-    // "Safe to Spend" usually means "After Tax Profit".
-    // If I spent money on Personal items, that money is GONE from the business account (assuming mixed wallet).
-    // So 'Total Expenses' for cash flow purposes should include personalRentSum (and other personal expenses).
-    // However, personalRentSum variable currently only tracks Rent.
-    // Let's iterate again or just track totalPersonal?
-    // For simplicity, I will stick to the previous logic structure but note that 'safeToSpend'
-    // might not subtract other personal expenses if I don't track them.
-    // Given the scope, I will leave 'totalExpenses' as is (Revenue - (OpEx + WHT + PersonalRent)).
-    // If there are other personal expenses, they are currently ignored in 'Safe To Spend' which might be slightly inaccurate for cash flow,
-    // but the request was about Tax Liability.
 
     const totalExpenses = operatingExpenses + personalRentSum + whtCreditSum;
     const realNetProfit = revenue - totalExpenses;
@@ -106,7 +94,7 @@ class NigeriaSmallBusinessStrategy {
       breakdown: {
         revenue,
         assessableProfit,
-        totalDeductible: operatingExpenses,
+        totalDeductible: operatingExpenses + allowedRentDeduction, // Include Rent Relief in total deductible
         whtCredit: whtCreditSum,
         personalRent: personalRentSum,
         taxRate: revenue > 100000000 ? '30%' : (revenue > 50000000 ? '25%' : '0%')

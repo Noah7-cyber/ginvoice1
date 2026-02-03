@@ -189,13 +189,22 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
            </div>
 
            {!isReadOnly && (
-             <button
-               onClick={() => setShowAddModal(true)}
-               className="flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-bold shadow-lg shadow-blue-100"
-             >
-               <Plus className="w-5 h-5 mr-2" />
-               Add Expense
-             </button>
+             <>
+                <button
+                    onClick={() => setIsCategoryManagerOpen(true)}
+                    className="flex items-center justify-center px-4 py-2 bg-white text-gray-700 border rounded-lg hover:bg-gray-50 transition-colors font-bold"
+                >
+                    <Tag className="w-5 h-5 mr-2" />
+                    Manage Categories
+                </button>
+                <button
+                    onClick={() => setShowAddModal(true)}
+                    className="flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-bold shadow-lg shadow-blue-100"
+                >
+                    <Plus className="w-5 h-5 mr-2" />
+                    Add Expense
+                </button>
+             </>
            )}
         </div>
       </div>
@@ -341,9 +350,9 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
                  <div className="flex gap-2">
                     <select name="category" value={formData.category} onChange={handleInputChange} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg outline-none">
                         <option value="">Category...</option>
-                        {categories.map(cat => <option key={cat.id} value={cat.name}>{cat.name}</option>)}
+                        {categories.filter(c => c.type === 'expense').map(cat => <option key={cat.id} value={cat.name}>{cat.name}</option>)}
                         {!categories.some(c => c.name === 'Rent') && <option value="Rent">Rent</option>}
-                        {!categories.some(c => c.name === 'Personal Home Rent') && <option value="Personal Home Rent">Personal Home Rent</option>}
+                        {/* Removed Personal Home Rent as per new Tax Logic */}
                         {!categories.some(c => c.name === 'Utilities') && <option value="Utilities">Utilities</option>}
                         {!categories.some(c => c.name === 'Inventory') && <option value="Inventory">Inventory</option>}
                         {!categories.some(c => c.name === 'Withholding Tax (WHT)') && <option value="Withholding Tax (WHT)">Withholding Tax (WHT)</option>}

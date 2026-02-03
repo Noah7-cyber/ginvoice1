@@ -107,7 +107,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   };
 
   // Merge default categories with custom ones for display
-  const allCategoryNames = categories.map(c => c.name);
+  const allCategoryNames = categories.filter(c => !c.type || c.type === 'inventory').map(c => c.name);
 
   const initialProductState: Partial<Product> = {
     name: '',

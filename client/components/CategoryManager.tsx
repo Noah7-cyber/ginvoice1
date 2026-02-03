@@ -69,7 +69,8 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
           name: newCategoryName,
           defaultSellingPrice: Number(defaultSelling) || 0,
           defaultCostPrice: Number(defaultCost) || 0,
-          defaultUnit
+          defaultUnit,
+          type: mode // Pass the mode as type
         });
         setCategories([...categories, newCat]);
         addToast('Category created', 'success');
@@ -133,20 +134,22 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
 
         {/* List - Scrollable (Visible by default) */}
         <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-gray-50/50 pb-24">
-            {categories.length === 0 ? (
+            {categories.filter(c => (c.type || 'inventory') === mode).length === 0 ? (
                <div className="flex flex-col items-center justify-center h-40 text-gray-400 text-sm">
                  <Tag size={40} className="mb-2 opacity-20" />
-                 <p>No custom categories yet.</p>
+                 <p>No {mode} categories yet.</p>
                  <p className="text-xs mt-1">Tap + to add one.</p>
                </div>
             ) : (
-               [...categories].sort((a, b) => a.name.localeCompare(b.name)).map(cat => (
+               [...categories].filter(c => (c.type || 'inventory') === mode).sort((a, b) => a.name.localeCompare(b.name)).map(cat => (
                  <div key={cat.id} className="flex justify-between items-center p-3 bg-white border rounded-xl hover:shadow-sm transition-shadow">
                     <div>
                       <h4 className="font-bold text-gray-800">{cat.name}</h4>
-                      <p className="text-[10px] text-gray-500">
-                        Def: {CURRENCY}{cat.defaultSellingPrice} / {CURRENCY}{cat.defaultCostPrice} (Cost)
-                      </p>
+                      {mode === 'inventory' && (
+                        <p className="text-[10px] text-gray-500">
+                          Def: {CURRENCY}{cat.defaultSellingPrice} / {CURRENCY}{cat.defaultCostPrice} (Cost)
+                        </p>
+                      )}
                     </div>
                     <div className="flex gap-1">
                       <button onClick={() => startEdit(cat)} className="text-gray-400 hover:text-indigo-600 p-2">

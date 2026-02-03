@@ -6,6 +6,7 @@ const CategorySchema = new mongoose.Schema({
   defaultSellingPrice: { type: mongoose.Decimal128, default: 0 },
   defaultCostPrice: { type: mongoose.Decimal128, default: 0 },
   defaultUnit: { type: String, default: '' },
+  type: { type: String, enum: ['inventory', 'expense'], default: 'inventory' },
   usageCount: { type: Number, default: 0 }
 }, { timestamps: true });
 
