@@ -24,7 +24,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 router.post('/', auth, requireActiveSubscription, async (req, res) => {
-  const { title, amount, category, date, description, paymentMethod, id } = req.body;
+  const { title, amount, category, date, description, paymentMethod, id, expenseType } = req.body;
   try {
     const newExpenditure = new Expenditure({
       id: id || require('crypto').randomUUID(), // Ensure id is present
@@ -34,6 +34,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
       date,
       description,
       paymentMethod,
+      expenseType: expenseType || 'business', // Default to business
       // FIX: Add fallback to req.user.id to match the GET route logic
       business: req.user.businessId || req.user.id,
       user: req.user.id
@@ -53,7 +54,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
 });
 
 router.put('/:id', auth, requireActiveSubscription, async (req, res) => {
-  const { title, amount, category, date, description, paymentMethod } = req.body;
+  const { title, amount, category, date, description, paymentMethod, expenseType } = req.body;
   try {
     const businessId = req.user.businessId || req.user.id;
     let expenditure = await Expenditure.findOne({ id: req.params.id, business: businessId });
@@ -65,6 +66,7 @@ router.put('/:id', auth, requireActiveSubscription, async (req, res) => {
     expenditure.date = date;
     expenditure.description = description;
     expenditure.paymentMethod = paymentMethod;
+    if (expenseType) expenditure.expenseType = expenseType;
 
     await expenditure.save();
 

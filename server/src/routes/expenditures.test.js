@@ -2,6 +2,7 @@ const request = require('supertest');
 const app = require('../index'); // Assuming app is exported from index.js for testing
 const mongoose = require('mongoose');
 const Expenditure = require('../models/Expenditure');
+const Business = require('../models/Business');
 const jwt = require('jsonwebtoken');
 
 describe('Expenditures API', () => {
@@ -25,6 +26,18 @@ describe('Expenditures API', () => {
     if (!process.env.JWT_SECRET) {
       process.env.JWT_SECRET = 'a-test-secret-that-is-long-enough';
     }
+
+    // Create Business for Subscription Check
+    await Business.create({
+      _id: businessId,
+      name: 'Test Business',
+      isSubscribed: true,
+      trialEndsAt: new Date(Date.now() + 86400000), // 1 day future
+      phone: '08000000000',
+      ownerPin: '1234',
+      staffPin: '0000'
+    });
+
     // Update token to include fields needed by auth middleware population
     token = jwt.sign({ userId, businessId, role: 'owner', id: userId }, process.env.JWT_SECRET);
   });

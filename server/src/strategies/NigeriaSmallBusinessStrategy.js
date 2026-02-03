@@ -4,40 +4,30 @@ class NigeriaSmallBusinessStrategy {
     let whtCreditSum = 0;
     let operatingExpenses = 0;
 
-    // Create a lookup for category types
-    // Map: Name -> ExpenseType
-    const categoryTypeMap = {};
-    if (categories && Array.isArray(categories)) {
-        categories.forEach(c => {
-            categoryTypeMap[c.name] = c.expenseType || 'business';
-        });
-    }
-
     // 1. Category Mapping
     expenses.forEach(exp => {
       const amount = parseFloat(exp.amount.toString());
       const categoryName = exp.category; // String from frontend
 
-      // Determine Type (Personal vs Business)
-      let type = categoryTypeMap[categoryName] || 'business';
-      if (categoryName === 'Personal Home Rent') type = 'personal';
+      // Check Tax Category (if present) - Prioritize explicit tax logic
+      const taxCat = exp.taxCategory;
+      if (taxCat === 'NON_DEDUCTIBLE' || taxCat === 'CAPITAL_ASSET') {
+          return;
+      }
 
       // Special Handling for WHT
-      if (categoryName === 'Withholding Tax (WHT)') {
+      if (categoryName === 'Withholding Tax (WHT)' || taxCat === 'WHT_CREDIT') {
         whtCreditSum += amount;
         return;
       }
 
-      // Check Tax Category (if present)
-      // If explicit taxCategory is provided, use it to filter non-deductibles
-      const taxCat = exp.taxCategory;
-      if (taxCat === 'NON_DEDUCTIBLE' || taxCat === 'CAPITAL_ASSET') {
-          // Capital Assets have different rules (Allowance), ignoring for simple OpEx deduction
-          // Non-deductible is ignored
-          return;
-      }
+      // Determine Type (Personal vs Business)
+      // Use the transaction-level flag if available, fallback to legacy checks
+      let type = exp.expenseType || 'business';
 
-      // Check Personal vs Business
+      // Legacy Fallback for 'Personal Home Rent' if expenseType wasn't set
+      if (!exp.expenseType && categoryName === 'Personal Home Rent') type = 'personal';
+
       if (type === 'personal') {
           // It is a personal expense, so it is NOT deductible
           if (categoryName.toLowerCase().includes('rent')) {
