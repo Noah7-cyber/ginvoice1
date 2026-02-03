@@ -25,39 +25,59 @@ class NigeriaSmallBusinessStrategy {
     // Formula: 200,000 + (Revenue * 0.20)
     const cra = 200000 + (revenue * 0.20);
 
-    // 3. Taxable Income
+    // 3. Threshold Check (The "Stop" Sign)
+    // Prevents app from running PIT bands on exempt revenue
+    if (revenue <= 50000000) {
+        return {
+            revenue,
+            deductibleExpenses: businessExpenses,
+            personalRelief: cra,
+            taxableIncome: 0, // Force 0
+            taxPayable: 0,    // Force 0
+
+            // Widget Compatibility Fields
+            estimatedTax: 0,
+            taxBand: 'EXEMPT',
+            message: 'Small Company Exempt (Turnover <= ₦50m)',
+            status: 'Small Company (Tax Exempt)',
+            currency: 'NGN',
+            safeToSpend: Math.max(0, revenue - totalCashExpenses),
+            breakdown: {
+                revenue,
+                assessableProfit: Math.max(0, revenue - businessExpenses),
+                totalDeductible: businessExpenses,
+                personalRelief: cra,
+                taxRate: '0%'
+            }
+        };
+    }
+
+    // 4. Taxable Income
     // AssessableProfit = Revenue - BusinessExpenses
     const assessableProfit = Math.max(0, revenue - businessExpenses);
 
     // FinalTaxable = AssessableProfit - CRA
     const finalTaxable = Math.max(0, assessableProfit - cra);
 
-    // 4. Calculate Tax & Status
+    // 5. Calculate Tax & Status
     let estimatedTax = 0;
     let taxBand = 'EXEMPT';
     let message = 'Small Company Exempt (Turnover <= ₦50m)';
     let status = 'Small Company (Exempt)';
 
-    if (revenue <= 50000000) {
-      estimatedTax = 0;
-      taxBand = 'EXEMPT';
-      message = 'Small Company Exempt (Turnover <= ₦50m)';
-      status = 'Small Company (Exempt)';
+    status = 'Taxable';
+    // Apply CIT rates to Final Taxable Income
+    if (revenue <= 100000000) {
+      estimatedTax = finalTaxable * 0.25;
+      taxBand = 'MEDIUM_COMPANY';
+      message = 'Medium Company CIT Rate (25%) on Taxable Income';
     } else {
-      status = 'Taxable';
-      // Apply CIT rates to Final Taxable Income
-      if (revenue <= 100000000) {
-        estimatedTax = finalTaxable * 0.25;
-        taxBand = 'MEDIUM_COMPANY';
-        message = 'Medium Company CIT Rate (25%) on Taxable Income';
-      } else {
-        estimatedTax = finalTaxable * 0.30;
-        taxBand = 'LARGE_COMPANY';
-        message = 'Large Company CIT Rate (30%) on Taxable Income';
-      }
+      estimatedTax = finalTaxable * 0.30;
+      taxBand = 'LARGE_COMPANY';
+      message = 'Large Company CIT Rate (30%) on Taxable Income';
     }
 
-    // 5. Safe to Spend
+    // 6. Safe to Spend
     // Cash Flow: Revenue - Total Actual Expenses - Tax
     const safeToSpend = Math.max(0, revenue - totalCashExpenses - estimatedTax);
 
