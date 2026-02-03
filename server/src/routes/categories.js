@@ -30,7 +30,7 @@ router.get('/', auth, async (req, res) => {
 // POST create a new category
 router.post('/', auth, requireActiveSubscription, async (req, res) => {
   try {
-    const { name, defaultSellingPrice, defaultCostPrice, defaultUnit } = req.body;
+    const { name, defaultSellingPrice, defaultCostPrice, defaultUnit, type } = req.body;
     if (!name) return res.status(400).json({ message: 'Category name is required' });
 
     const category = await Category.create({
@@ -38,7 +38,8 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
       name,
       defaultSellingPrice: toDecimal(defaultSellingPrice),
       defaultCostPrice: toDecimal(defaultCostPrice),
-      defaultUnit: defaultUnit || ''
+      defaultUnit: defaultUnit || '',
+      type: type || 'inventory'
     });
 
     await Business.findByIdAndUpdate(req.businessId, { $inc: { dataVersion: 1 } });

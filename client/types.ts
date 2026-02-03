@@ -116,6 +116,7 @@ export interface Expenditure {
   amount: number;      // in main currency units on client (e.g., Naira) but server expects integer kobo
   category?: string;
   taxCategory?: 'OPERATING_EXPENSE' | 'COST_OF_GOODS' | 'CAPITAL_ASSET' | 'NON_DEDUCTIBLE' | 'SALARY_PENSION';
+  expenseType?: 'business' | 'personal';
   title?: string;
   description?: string;
   paymentMethod?: string;
@@ -164,7 +165,8 @@ export interface Category {
   defaultSellingPrice: number;
   defaultCostPrice: number;
   defaultUnit?: string;
-  expenseType?: 'business' | 'personal';
+  type?: 'inventory' | 'expense';
+  expenseType?: 'business' | 'personal'; // Legacy/Optional
 }
 
 export interface CartState {
