@@ -1045,6 +1045,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
         categories={categories}
         setCategories={setCategories}
         isOnline={isOnline}
+        mode="inventory"
         onCategoryRename={(oldName, newName) => {
             const updatedProducts = products.map(p => {
                 if (p.category === oldName) {

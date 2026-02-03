@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
-import { Plus, X, Save, Calendar, DollarSign, Tag, FileText, CreditCard, Pencil, Trash2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, X, Save, Calendar, DollarSign, Tag, FileText, CreditCard, Pencil, Trash2, Settings } from 'lucide-react';
 import { useToast } from '../components/ToastProvider';
-// Remove 'api' import - we don't need it anymore!
+import { getCategories } from '../services/api';
+import CategoryManager from './CategoryManager';
+import { Category } from '../types';
 
 // Update Interface to match your types.ts
 interface Expenditure {
@@ -27,6 +29,22 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const { addToast } = useToast();
+
+  // Categories
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
+
+  useEffect(() => {
+    const fetchCats = async () => {
+      try {
+        const cats = await getCategories();
+        setCategories(cats);
+      } catch (err) {
+        console.error('Failed to fetch categories');
+      }
+    };
+    if (isOnline) fetchCats();
+  }, [isOnline]);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -292,16 +310,27 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
                   <input name="amount" type="number" placeholder="Amount" required value={formData.amount} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
                   <input name="date" type="date" required value={formData.date} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
                </div>
-               <div className="grid grid-cols-2 gap-4">
-                 <select name="category" value={formData.category} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg outline-none">
-                    <option value="">Category...</option>
-                    <option value="Rent">Rent</option>
-                    <option value="Personal Home Rent">Personal Home Rent</option>
-                    <option value="Utilities">Utilities</option>
-                    <option value="Inventory">Inventory</option>
-                    <option value="Withholding Tax (WHT)">Withholding Tax (WHT)</option>
-                    <option value="Other">Other</option>
-                 </select>
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                 <div className="flex gap-2">
+                    <select name="category" value={formData.category} onChange={handleInputChange} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg outline-none">
+                        <option value="">Category...</option>
+                        {categories.map(cat => <option key={cat.id} value={cat.name}>{cat.name}</option>)}
+                        {!categories.some(c => c.name === 'Rent') && <option value="Rent">Rent</option>}
+                        {!categories.some(c => c.name === 'Personal Home Rent') && <option value="Personal Home Rent">Personal Home Rent</option>}
+                        {!categories.some(c => c.name === 'Utilities') && <option value="Utilities">Utilities</option>}
+                        {!categories.some(c => c.name === 'Inventory') && <option value="Inventory">Inventory</option>}
+                        {!categories.some(c => c.name === 'Withholding Tax (WHT)') && <option value="Withholding Tax (WHT)">Withholding Tax (WHT)</option>}
+                        {!categories.some(c => c.name === 'Other') && <option value="Other">Other</option>}
+                    </select>
+                    <button
+                        type="button"
+                        onClick={() => setIsCategoryManagerOpen(true)}
+                        className="p-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200"
+                        title="Manage Categories"
+                    >
+                        <Settings size={18} />
+                    </button>
+                 </div>
                  <select name="paymentMethod" value={formData.paymentMethod} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg outline-none"><option value="Cash">Cash</option><option value="Bank Transfer">Bank Transfer</option></select>
                </div>
                <div className="pt-4 flex gap-3">
@@ -312,6 +341,16 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
           </div>
         </div>
       )}
+
+      {/* Category Manager */}
+      <CategoryManager
+        isOpen={isCategoryManagerOpen}
+        onClose={() => setIsCategoryManagerOpen(false)}
+        categories={categories}
+        setCategories={setCategories}
+        isOnline={isOnline}
+        mode="expense"
+      />
     </div>
   );
 };

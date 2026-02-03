@@ -12,9 +12,10 @@ interface CategoryManagerProps {
   setCategories: (categories: Category[]) => void;
   isOnline?: boolean;
   onCategoryRename?: (oldName: string, newName: string) => void;
+  mode?: 'inventory' | 'expense';
 }
 
-const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, categories, setCategories, isOnline = true, onCategoryRename }) => {
+const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, categories, setCategories, isOnline = true, onCategoryRename, mode = 'inventory' }) => {
   const { addToast } = useToast();
   const [newCategoryName, setNewCategoryName] = useState('');
   const [defaultCost, setDefaultCost] = useState<number | ''>('');
@@ -205,65 +206,71 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose, cate
                      type="text"
                      required
                      className="w-full px-4 py-3 border rounded-xl text-lg font-bold"
-                     placeholder="e.g. Beverages"
+                     placeholder={mode === 'inventory' ? "e.g. Beverages" : "e.g. Utilities"}
                      value={newCategoryName}
                      onChange={e => setNewCategoryName(e.target.value)}
                    />
                 </div>
 
-                <div>
-                   <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Expense Type</label>
-                   <div className="flex bg-gray-100 p-1 rounded-xl">
-                      <button
-                        type="button"
-                        onClick={() => setExpenseType('business')}
-                        className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${expenseType === 'business' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                      >
-                        Business (Tax Deductible)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setExpenseType('personal')}
-                        className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${expenseType === 'personal' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                      >
-                        Personal (Not Deductible)
-                      </button>
-                   </div>
-                </div>
+                {mode === 'expense' && (
+                  <div>
+                     <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Expense Type</label>
+                     <div className="flex bg-gray-100 p-1 rounded-xl">
+                        <button
+                          type="button"
+                          onClick={() => setExpenseType('business')}
+                          className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${expenseType === 'business' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                        >
+                          Business (Tax Deductible)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setExpenseType('personal')}
+                          className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${expenseType === 'personal' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                        >
+                          Personal (Not Deductible)
+                        </button>
+                     </div>
+                  </div>
+                )}
 
-                <div className="grid grid-cols-2 gap-4">
-                   <div>
-                      <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Def. Cost ({CURRENCY})</label>
-                      <input
-                        type="number"
-                        className="w-full px-4 py-3 border rounded-xl"
-                        placeholder="0"
-                        value={defaultCost || ''}
-                        onChange={e => setDefaultCost(Number(e.target.value))}
-                      />
-                   </div>
-                   <div>
-                      <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Def. Price ({CURRENCY})</label>
-                      <input
-                        type="number"
-                        className="w-full px-4 py-3 border rounded-xl"
-                        placeholder="0"
-                        value={defaultSelling || ''}
-                        onChange={e => setDefaultSelling(Number(e.target.value))}
-                      />
-                   </div>
-                </div>
+                {mode === 'inventory' && (
+                  <>
+                    <div className="grid grid-cols-2 gap-4">
+                       <div>
+                          <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Def. Cost ({CURRENCY})</label>
+                          <input
+                            type="number"
+                            className="w-full px-4 py-3 border rounded-xl"
+                            placeholder="0"
+                            value={defaultCost || ''}
+                            onChange={e => setDefaultCost(Number(e.target.value))}
+                          />
+                       </div>
+                       <div>
+                          <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Def. Price ({CURRENCY})</label>
+                          <input
+                            type="number"
+                            className="w-full px-4 py-3 border rounded-xl"
+                            placeholder="0"
+                            value={defaultSelling || ''}
+                            onChange={e => setDefaultSelling(Number(e.target.value))}
+                          />
+                       </div>
+                    </div>
 
-                <div>
-                   <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Def. Unit Type</label>
-                   <input
-                     type="text"
-                     className="w-full px-4 py-3 border rounded-xl"
-                     placeholder="e.g. Bottle, Pack, Kg"
-                     value={defaultUnit}
-                     onChange={e => setDefaultUnit(e.target.value)}
-                   />
-                </div>
+                    <div>
+                       <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Def. Unit Type</label>
+                       <input
+                         type="text"
+                         className="w-full px-4 py-3 border rounded-xl"
+                         placeholder="e.g. Bottle, Pack, Kg"
+                         value={defaultUnit}
+                         onChange={e => setDefaultUnit(e.target.value)}
+                       />
+                    </div>
+                  </>
+                )}
 
                 <div className="pt-4 flex gap-3">
                    <button
