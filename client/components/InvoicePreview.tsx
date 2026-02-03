@@ -1,12 +1,9 @@
-
-import React from 'react';
+import React, { useState } from 'react';
 import { Transaction, BusinessProfile } from '../types';
 import { CURRENCY } from '../constants';
-import { ShoppingBag, Printer, Share2, X, Download, Tag } from 'lucide-react';
+import { ShoppingBag, Printer, Share2, X, Download, Tag, Loader2 } from 'lucide-react';
 import { useToast } from './ToastProvider';
-import { sharePdfBlob } from '../services/pdf';
-// @ts-ignore
-import html2pdf from 'html2pdf.js';
+import { sharePdfBlob, generateInvoicePDF } from '../services/pdf';
 
 interface InvoicePreviewProps {
   transaction: Transaction;
@@ -16,24 +13,21 @@ interface InvoicePreviewProps {
 
 const InvoicePreview: React.FC<InvoicePreviewProps> = ({ transaction, business, onClose }) => {
   const { addToast } = useToast();
+  const [isGenerating, setIsGenerating] = useState(false);
+
   const handlePrint = () => {
     window.print();
   };
 
   const handleShare = async () => {
-    try {
-      const element = document.getElementById('invoice-content');
-      const opt = {
-        margin: 10,
-        filename: `invoice-${transaction.id}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2 },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-      };
+    if (isGenerating) return;
+    setIsGenerating(true);
 
-      // Generate and Share
-      const blob = await html2pdf().set(opt).from(element).output('blob');
-      await sharePdfBlob(blob, opt.filename);
+    try {
+      // Use Drawing Method (robust for mobile)
+      const blob = await generateInvoicePDF(transaction, business);
+      const filename = `invoice-${transaction.id}.pdf`;
+      await sharePdfBlob(blob, filename);
     } catch (error) {
       console.error('PDF Share Error:', error);
       addToast('Failed to generate/share PDF. Trying clipboard...', 'error');
@@ -42,6 +36,8 @@ const InvoicePreview: React.FC<InvoicePreviewProps> = ({ transaction, business, 
       const shareText = `Invoice from ${business.name}\nCustomer: ${transaction.customerName}\nTotal: ${CURRENCY}${transaction.totalAmount.toLocaleString()}\nID: ${transaction.id}`;
       navigator.clipboard.writeText(shareText);
       addToast('Invoice details copied to clipboard!', 'success');
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -62,9 +58,11 @@ const InvoicePreview: React.FC<InvoicePreviewProps> = ({ transaction, business, 
             </button>
             <button 
               onClick={handleShare}
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-50 transition-all"
+              disabled={isGenerating}
+              className={`flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-50 transition-all ${isGenerating ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-              <Share2 size={16} /> Share
+              {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <Share2 size={16} />}
+              {isGenerating ? 'Generating...' : 'Share'}
             </button>
           </div>
           <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded-full transition-all">

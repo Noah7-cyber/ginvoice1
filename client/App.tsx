@@ -896,6 +896,7 @@ const App: React.FC = () => {
             >
                <HistoryScreen
                 transactions={state.transactions}
+                products={state.products}
                 business={state.business}
                 onDeleteTransaction={handleDeleteTransaction}
                 onUpdateTransaction={t => {

@@ -163,6 +163,8 @@ export interface Category {
   name: string;
   defaultSellingPrice: number;
   defaultCostPrice: number;
+  defaultUnit?: string;
+  expenseType?: 'business' | 'personal';
 }
 
 export interface CartState {

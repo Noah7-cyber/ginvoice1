@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const NotificationSchema = new mongoose.Schema({
   businessId: { type: mongoose.Schema.Types.ObjectId, ref: 'Business', required: true, index: true },
   message: { type: String, required: true },
-  type: { type: String, enum: ['deletion'], required: true },
+  type: { type: String, enum: ['deletion', 'modification'], required: true },
   amount: { type: Number, required: true },
   performedBy: { type: String, required: true },
   timestamp: { type: Date, default: Date.now }
