@@ -58,8 +58,11 @@ export default function useServerWakeup() {
   };
 
   useEffect(() => {
-    // Run once on mount
-    wake();
+    // Logic: Wrap the wake() call in a setTimeout of 3000ms.
+    // This ensures the App Shell renders completely from cache before any network request occurs.
+    const timer = setTimeout(() => {
+      wake();
+    }, 3000);
 
     // When connection is restored later, try waking again
     const onOnline = () => {
@@ -68,6 +71,7 @@ export default function useServerWakeup() {
     window.addEventListener('online', onOnline);
 
     return () => {
+      clearTimeout(timer);
       window.removeEventListener('online', onOnline);
       if (controllerRef.current) {
         try { controllerRef.current.abort(); } catch {}
