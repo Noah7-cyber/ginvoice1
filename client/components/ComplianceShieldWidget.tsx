@@ -65,7 +65,7 @@ const ComplianceShieldWidget: React.FC<ComplianceShieldWidgetProps> = ({ onClose
   const progress = Math.min(100, (revenue / threshold) * 100);
   const vatPosition = (vatThreshold / threshold) * 100;
 
-  const isExempt = estimate.taxBand === 'EXEMPT';
+  const isExempt = revenue <= 50000000;
   const isApproaching = isExempt && revenue > 45000000;
 
   return (
@@ -94,7 +94,9 @@ const ComplianceShieldWidget: React.FC<ComplianceShieldWidgetProps> = ({ onClose
 
           <div className="text-right">
              <p className="text-xs text-indigo-300 font-bold uppercase tracking-widest">Est. Tax Due</p>
-             <h2 className="text-3xl font-black text-white">{CURRENCY}{estimate.estimatedTax.toLocaleString()}</h2>
+             <h2 className="text-3xl font-black text-white">
+                {estimate.estimatedTax === 0 ? `${CURRENCY}0.00 (Exempt)` : `${CURRENCY}${estimate.estimatedTax.toLocaleString()}`}
+             </h2>
           </div>
        </div>
 
