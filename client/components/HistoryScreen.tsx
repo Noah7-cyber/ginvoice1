@@ -205,6 +205,32 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
       }
   };
 
+  const handleSettleDebtor = async (debtorTransactions: Transaction[]) => {
+      if (!isOnline) {
+          addToast('Online connection required to settle debt.', 'error');
+          return;
+      }
+
+      if (!confirm(`Mark all debts for this customer as paid?`)) return;
+
+      // Optimistic Update Loop
+      debtorTransactions.forEach(t => {
+         const updatedTx = { ...t, balance: 0, amountPaid: t.totalAmount, paymentStatus: 'paid' as const };
+         onUpdateTransaction(updatedTx);
+      });
+      addToast('All debts marked as paid!', 'success');
+
+      try {
+          // Sequential Settle (to avoid race conditions or complex bulk API)
+          for (const t of debtorTransactions) {
+             await settleTransaction(t.id);
+          }
+      } catch (err) {
+          console.error(err);
+          addToast('Failed to sync some payments.', 'error');
+      }
+  };
+
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       {/* Header & View Toggle */}
@@ -355,15 +381,6 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
                       <button onClick={() => { setSelectedInvoice(t); updateUrlForInvoice(t.id); }} className="p-2 text-indigo-600 bg-indigo-50 rounded-lg"><FileText size={18} /></button>
                       {!isReadOnly && (
                         <>
-                          {t.balance > 0 && (
-                            <button
-                              onClick={() => handleSettle(t)}
-                              className="p-2 text-green-600 bg-green-50 rounded-lg hover:bg-green-100 transition-colors"
-                              title="Mark as Paid"
-                            >
-                              <CheckCircle2 size={18} />
-                            </button>
-                          )}
                           <button onClick={() => handleEditClick(t)} className="p-2 text-gray-400 hover:text-indigo-600 rounded-lg"><Edit3 size={18} /></button>
                           <button onClick={() => handleDeleteRequest(t)} className="p-2 text-gray-400 hover:text-red-600 rounded-lg"><Trash2 size={18} /></button>
                         </>
@@ -409,6 +426,15 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
                   </div>
 
                   <div className="flex gap-2 w-full md:w-auto">
+                     {!isReadOnly && (
+                        <button
+                          onClick={() => handleSettleDebtor(debtor.transactions)}
+                          className="p-3 text-green-600 bg-green-50 rounded-xl hover:bg-green-100 transition-all border border-green-100"
+                          title="Mark All Paid"
+                        >
+                           <CheckCircle2 size={20} />
+                        </button>
+                     )}
                     <button 
                       onClick={() => {
                         setSearchTerm(debtor.name);
