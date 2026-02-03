@@ -12,11 +12,14 @@ interface TaxEstimate {
   taxBand: string;
   message: string;
   safeToSpend: number;
+  deductibleExpenses?: number;
+  personalRelief?: number;
+  taxableIncome?: number;
   breakdown: {
     revenue: number;
     assessableProfit: number;
     totalDeductible: number;
-    capitalAllowance: number;
+    personalRelief?: number;
     taxRate: string;
   };
 }
@@ -93,6 +96,24 @@ const ComplianceShieldWidget: React.FC<ComplianceShieldWidgetProps> = ({ onClose
              <p className="text-xs text-indigo-300 font-bold uppercase tracking-widest">Est. Tax Due</p>
              <h2 className="text-3xl font-black text-white">{CURRENCY}{estimate.estimatedTax.toLocaleString()}</h2>
           </div>
+       </div>
+
+       {/* Deductions & Relief Stats */}
+       <div className="grid grid-cols-2 gap-4 mt-6 relative z-10">
+          <div className="bg-white/10 p-3 rounded-xl backdrop-blur-sm">
+             <p className="text-[10px] text-indigo-300 font-bold uppercase mb-1">Biz Deductions</p>
+             <p className="font-bold text-white text-lg">{CURRENCY}{(estimate.deductibleExpenses || 0).toLocaleString()}</p>
+          </div>
+          <div className="bg-white/10 p-3 rounded-xl backdrop-blur-sm">
+             <p className="text-[10px] text-indigo-300 font-bold uppercase mb-1">Personal Relief (CRA)</p>
+             <p className="font-bold text-white text-lg">{CURRENCY}{(estimate.personalRelief || 0).toLocaleString()}</p>
+          </div>
+       </div>
+
+       {/* Taxable Income */}
+       <div className="mt-4 relative z-10 flex justify-between items-center bg-white/5 px-3 py-2 rounded-lg">
+           <span className="text-xs font-bold text-indigo-200">Taxable Income</span>
+           <span className="text-sm font-bold text-white">{CURRENCY}{(estimate.taxableIncome || 0).toLocaleString()}</span>
        </div>
 
        {/* Progress Bar for Exemption */}

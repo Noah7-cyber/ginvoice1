@@ -1,105 +1,86 @@
 class NigeriaSmallBusinessStrategy {
   calculate(revenue, expenses, businessProfile, categories = []) {
-    let personalRentSum = 0;
-    let whtCreditSum = 0;
-    let operatingExpenses = 0;
+    // 1. Calculate Business Expenses (100% Deductible)
+    let businessExpenses = 0;
+    let totalCashExpenses = 0;
 
-    // 1. Category Mapping
     expenses.forEach(exp => {
       const amount = parseFloat(exp.amount.toString());
-      const categoryName = exp.category; // String from frontend
+      totalCashExpenses += amount;
 
-      // Check Tax Category (if present) - Prioritize explicit tax logic
+      const type = exp.expenseType || 'business';
       const taxCat = exp.taxCategory;
-      if (taxCat === 'NON_DEDUCTIBLE' || taxCat === 'CAPITAL_ASSET') {
-          return;
-      }
 
-      // Special Handling for WHT
-      if (categoryName === 'Withholding Tax (WHT)' || taxCat === 'WHT_CREDIT') {
-        whtCreditSum += amount;
-        return;
-      }
+      // Skip explicitly non-deductible items from business expenses
+      // (Though user said "Sum of all expenditures where expenseType === 'business'")
+      // I'll assume standard 'business' expenses are deductible.
+      if (taxCat === 'NON_DEDUCTIBLE') return;
 
-      // Determine Type (Personal vs Business)
-      // Use the transaction-level flag if available, fallback to legacy checks
-      let type = exp.expenseType || 'business';
-
-      // Legacy Fallback for 'Personal Home Rent' if expenseType wasn't set
-      if (!exp.expenseType && categoryName === 'Personal Home Rent') type = 'personal';
-
-      if (type === 'personal') {
-          // It is a personal expense, so it is NOT deductible
-          if (categoryName.toLowerCase().includes('rent')) {
-              personalRentSum += amount;
-          }
-      }
-      else {
-        // Business Operating Expense
-        operatingExpenses += amount;
+      if (type === 'business') {
+        businessExpenses += amount;
       }
     });
 
-    // 2. Tax Calculation (New 2026 Law)
-    // CRA 20% Rule: Allowed Personal Rent Deduction = Min(Actual Rent, 20% of Revenue)
-    const rentCap = revenue * 0.20;
-    const allowedRentDeduction = Math.min(personalRentSum, rentCap);
+    // 2. Consolidated Relief Allowance (CRA)
+    // Formula: 200,000 + (Revenue * 0.20)
+    const cra = 200000 + (revenue * 0.20);
 
-    // Assessable Profit = Revenue - Business Expenses - Allowed Rent Deduction
-    const assessableProfit = Math.max(0, revenue - operatingExpenses - allowedRentDeduction);
+    // 3. Taxable Income
+    // AssessableProfit = Revenue - BusinessExpenses
+    const assessableProfit = Math.max(0, revenue - businessExpenses);
 
+    // FinalTaxable = AssessableProfit - CRA
+    const finalTaxable = Math.max(0, assessableProfit - cra);
+
+    // 4. Calculate Tax & Status
     let estimatedTax = 0;
-    let taxBand = 'EXEMPT'; // Default
+    let taxBand = 'EXEMPT';
     let message = 'Small Company Exempt (Turnover <= ₦50m)';
+    let status = 'Small Company (Exempt)';
 
-    // Tier 1 (Small): Revenue <= 50m -> 0% Tax
-    // UPDATED CHECK: User specifically mentioned 50m.
     if (revenue <= 50000000) {
       estimatedTax = 0;
       taxBand = 'EXEMPT';
       message = 'Small Company Exempt (Turnover <= ₦50m)';
-    }
-    // Tier 2 (Medium): 50m < Revenue <= 100m -> 25% Tax
-    else if (revenue <= 100000000) {
-      estimatedTax = assessableProfit * 0.25;
-      taxBand = 'MEDIUM_COMPANY';
-      message = 'Medium Company CIT Rate (25%)';
-    }
-    // Tier 3 (Large): Revenue > 100m -> 30% Tax
-    else {
-      estimatedTax = assessableProfit * 0.30;
-      taxBand = 'LARGE_COMPANY';
-      message = 'Large Company CIT Rate (30%)';
+      status = 'Small Company (Exempt)';
+    } else {
+      status = 'Taxable';
+      // Apply CIT rates to Final Taxable Income
+      if (revenue <= 100000000) {
+        estimatedTax = finalTaxable * 0.25;
+        taxBand = 'MEDIUM_COMPANY';
+        message = 'Medium Company CIT Rate (25%) on Taxable Income';
+      } else {
+        estimatedTax = finalTaxable * 0.30;
+        taxBand = 'LARGE_COMPANY';
+        message = 'Large Company CIT Rate (30%) on Taxable Income';
+      }
     }
 
-    // 3. Final Tax Bill
-    // Final Tax Payable = Estimated Tax - whtCreditSum.
-    const finalTaxPayable = Math.max(0, estimatedTax - whtCreditSum);
-
-    // 4. Personal Hint
-    const personalTip = {
-      reliefAmount: allowedRentDeduction,
-      message: `You claimed ₦${allowedRentDeduction.toLocaleString()} as tax relief on your personal rent (Capped at 20% of Revenue).`
-    };
-
-    const totalExpenses = operatingExpenses + personalRentSum + whtCreditSum;
-    const realNetProfit = revenue - totalExpenses;
-    const safeToSpend = Math.max(0, realNetProfit - finalTaxPayable);
+    // 5. Safe to Spend
+    // Cash Flow: Revenue - Total Actual Expenses - Tax
+    const safeToSpend = Math.max(0, revenue - totalCashExpenses - estimatedTax);
 
     return {
-      estimatedTax: finalTaxPayable,
+      revenue,
+      deductibleExpenses: businessExpenses,
+      personalRelief: cra,
+      taxableIncome: finalTaxable,
+      status,
+      currency: 'NGN',
+
+      // Widget Compatibility Fields
+      estimatedTax,
       taxBand,
       message,
       safeToSpend,
       breakdown: {
         revenue,
         assessableProfit,
-        totalDeductible: operatingExpenses + allowedRentDeduction, // Include Rent Relief in total deductible
-        whtCredit: whtCreditSum,
-        personalRent: personalRentSum,
+        totalDeductible: businessExpenses,
+        personalRelief: cra,
         taxRate: revenue > 100000000 ? '30%' : (revenue > 50000000 ? '25%' : '0%')
-      },
-      personalTip
+      }
     };
   }
 }
