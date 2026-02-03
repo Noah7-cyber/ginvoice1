@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Search, 
@@ -17,16 +16,21 @@ import {
   Receipt,
   Phone,
   AlertCircle,
-  CheckCircle2
+  CheckCircle2,
+  Plus,
+  Minus,
+  ShoppingBag
 } from 'lucide-react';
-import { Transaction, BusinessProfile } from '../types';
+import { Transaction, BusinessProfile, Product, SaleItem, ProductUnit } from '../types';
 import { CURRENCY } from '../constants';
 import InvoicePreview from './InvoicePreview';
 import { useToast } from './ToastProvider';
 import api from '../services/api';
+import { formatCurrency } from '../utils/currency';
 
 interface HistoryScreenProps {
   transactions: Transaction[];
+  products: Product[];
   business: BusinessProfile;
   onDeleteTransaction: (id: string, restockItems: boolean) => void;
   onUpdateTransaction: (transaction: Transaction) => void;
@@ -39,15 +43,16 @@ interface HistoryScreenProps {
 
 type ViewMode = 'invoices' | 'debtors';
 
-const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, onDeleteTransaction, onUpdateTransaction, isSubscriptionExpired, onRenewSubscription, isReadOnly, isOnline, initialParams }) => {
+const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, business, onDeleteTransaction, onUpdateTransaction, isSubscriptionExpired, onRenewSubscription, isReadOnly, isOnline, initialParams }) => {
   const { addToast } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>('invoices');
   const [searchTerm, setSearchTerm] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editAmountPaid, setEditAmountPaid] = useState<number>(0);
-  const [editCustomerName, setEditCustomerName] = useState<string>('');
+
+  // Edit State
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+
   const [selectedInvoice, setSelectedInvoice] = useState<Transaction | null>(null);
 
   // Sync with URL Params
@@ -59,7 +64,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
        }
     } else {
         const currentPath = window.location.pathname;
-        const hasDeepLink = currentPath.split('/').length > 2; // e.g. /history/123
+        const hasDeepLink = currentPath.split('/').length > 2;
 
         if (selectedInvoice && !hasDeepLink) {
              setSelectedInvoice(null);
@@ -127,23 +132,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
       addToast('Please connect to the internet to perform this action.', 'error');
       return;
     }
-    setEditingId(t.id);
-    setEditAmountPaid(t.amountPaid);
-    setEditCustomerName(t.customerName);
-  };
-
-  const handleSaveEdit = (t: Transaction) => {
-    if (!isOnline) {
-      addToast('Please connect to the internet to perform this action.', 'error');
-      return;
-    }
-    onUpdateTransaction({
-      ...t,
-      customerName: editCustomerName,
-      amountPaid: editAmountPaid,
-      balance: Math.max(0, t.totalAmount - editAmountPaid)
-    });
-    setEditingId(null);
+    setEditingTransaction(t);
   };
 
   const handleDeleteRequest = (t: Transaction) => {
@@ -152,7 +141,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
       return;
     }
     setTransactionToDelete(t);
-    setShouldRestock(true); // Default to true
+    setShouldRestock(true);
   };
 
   const confirmDelete = async () => {
@@ -160,14 +149,9 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
 
     setIsDeleting(true);
     try {
-      // Call Backend to Delete (Pass restock param)
       // @ts-ignore
       await api.delete(`/transactions/${transactionToDelete.id}?restock=${shouldRestock}`);
-
-      // Update local state to remove it from UI immediately
-      // Passing shouldRestock to trigger the optimistic stock update in App.tsx if needed
       onDeleteTransaction(transactionToDelete.id, shouldRestock);
-
       const msg = shouldRestock ? 'Transaction deleted and stock restored' : 'Transaction deleted (Stock NOT restored)';
       addToast(msg, 'success');
       setTransactionToDelete(null);
@@ -176,6 +160,29 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
       addToast('Failed to delete. You might be offline.', 'error');
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleSaveEdit = async (updatedTx: Transaction) => {
+    // Optimistic Update handled by parent logic via onUpdateTransaction
+    // But we should probably call API here first?
+    // The parent onUpdateTransaction does: pushToBackend({ transactions: [t] })
+    // We should call the PUT endpoint specifically for the "Smart Edit" logic (restock/destock).
+    // The generic pushToBackend might simply overwrite.
+    // So we must use api.put directly.
+
+    try {
+       // @ts-ignore
+       const res = await api.put(`/transactions/${updatedTx.id}`, updatedTx);
+       // Result should be the updated transaction from backend (with recalculated totals)
+       if (res) {
+          onUpdateTransaction(res); // Update local state
+          addToast('Transaction updated successfully', 'success');
+          setEditingTransaction(null);
+       }
+    } catch (error) {
+       console.error("Edit failed", error);
+       addToast("Failed to update transaction", "error");
     }
   };
 
@@ -267,16 +274,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
                           {t.customerName[0].toUpperCase()}
                         </div>
                         <div>
-                          {editingId === t.id ? (
-                            <input
-                              type="text"
-                              className="w-full px-2 py-1 bg-gray-50 border rounded text-sm font-bold focus:ring-1 focus:ring-indigo-500 outline-none"
-                              value={editCustomerName}
-                              onChange={(e) => setEditCustomerName(e.target.value)}
-                            />
-                          ) : (
-                            <h3 className="font-bold text-gray-900">{t.customerName}</h3>
-                          )}
+                          <h3 className="font-bold text-gray-900">{t.customerName}</h3>
                           <p className="text-xs text-gray-400">
                             ID: {t.id} • {new Date(t.transactionDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })} • {new Date(t.transactionDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
                           </p>
@@ -324,41 +322,22 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
                     <div className="space-y-2">
                       <div className="flex justify-between items-center text-sm">
                         <span className="text-gray-500 font-medium">Paid:</span>
-                        {editingId === t.id ? (
-                          <input 
-                            type="number"
-                            autoFocus
-                            className="w-24 px-2 py-1 bg-gray-50 border rounded text-right font-bold focus:ring-1 focus:ring-indigo-500 outline-none"
-                            value={editAmountPaid}
-                            onChange={(e) => setEditAmountPaid(Number(e.target.value))}
-                          />
-                        ) : (
-                          <span className="font-bold text-green-600">{CURRENCY}{t.amountPaid.toLocaleString()}</span>
-                        )}
+                        <span className="font-bold text-green-600">{CURRENCY}{t.amountPaid.toLocaleString()}</span>
                       </div>
                       <div className="flex justify-between items-center text-sm">
                         <span className="text-gray-500 font-medium">Balance:</span>
                         <span className={`font-black ${t.balance > 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                          {CURRENCY}{(editingId === t.id ? Math.max(0, t.totalAmount - editAmountPaid) : t.balance).toLocaleString()}
+                          {CURRENCY}{t.balance.toLocaleString()}
                         </span>
                       </div>
                     </div>
 
                     <div className="flex gap-2 justify-end">
-                      {editingId === t.id ? (
+                      <button onClick={() => { setSelectedInvoice(t); updateUrlForInvoice(t.id); }} className="p-2 text-indigo-600 bg-indigo-50 rounded-lg"><FileText size={18} /></button>
+                      {!isReadOnly && (
                         <>
-                          <button onClick={() => handleSaveEdit(t)} className="p-2 bg-green-600 text-white rounded-lg font-bold"><Save size={16} /></button>
-                          <button onClick={() => setEditingId(null)} className="p-2 bg-gray-100 text-gray-600 rounded-lg"><X size={16} /></button>
-                        </>
-                      ) : (
-                        <>
-                          <button onClick={() => { setSelectedInvoice(t); updateUrlForInvoice(t.id); }} className="p-2 text-indigo-600 bg-indigo-50 rounded-lg"><FileText size={18} /></button>
-                          {!isReadOnly && (
-                            <>
-                              <button onClick={() => handleEditClick(t)} className="p-2 text-gray-400 hover:text-indigo-600 rounded-lg"><Edit3 size={18} /></button>
-                              <button onClick={() => handleDeleteRequest(t)} className="p-2 text-gray-400 hover:text-red-600 rounded-lg"><Trash2 size={18} /></button>
-                            </>
-                          )}
+                          <button onClick={() => handleEditClick(t)} className="p-2 text-gray-400 hover:text-indigo-600 rounded-lg"><Edit3 size={18} /></button>
+                          <button onClick={() => handleDeleteRequest(t)} className="p-2 text-gray-400 hover:text-red-600 rounded-lg"><Trash2 size={18} /></button>
                         </>
                       )}
                     </div>
@@ -442,7 +421,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
       {/* Delete Confirmation Modal */}
       {transactionToDelete && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm scale-100 transform transition-all">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
             <div className="flex justify-between items-start mb-4">
                <div className="bg-red-50 p-3 rounded-full">
                   <AlertCircle size={24} className="text-red-600" />
@@ -455,7 +434,6 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
               This action cannot be undone.
             </p>
 
-             {/* Restock Checkbox */}
              <div className="flex items-center gap-3 bg-gray-50 p-3 rounded-xl mb-6">
                 <input
                   type="checkbox"
@@ -488,8 +466,228 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, business, o
         </div>
       )}
 
+      {/* EDIT MODAL */}
+      {editingTransaction && (
+         <EditTransactionModal
+            transaction={editingTransaction}
+            products={products}
+            onClose={() => setEditingTransaction(null)}
+            onSave={handleSaveEdit}
+         />
+      )}
+
     </div>
   );
+};
+
+// --- Subcomponent: Edit Modal ---
+interface EditModalProps {
+   transaction: Transaction;
+   products: Product[];
+   onClose: () => void;
+   onSave: (t: Transaction) => void;
+}
+
+const EditTransactionModal: React.FC<EditModalProps> = ({ transaction, products, onClose, onSave }) => {
+   const [items, setItems] = useState<SaleItem[]>([...transaction.items]);
+   const [customerName, setCustomerName] = useState(transaction.customerName);
+   const [amountPaid, setAmountPaid] = useState(transaction.amountPaid);
+   const [globalDiscount, setGlobalDiscount] = useState(transaction.globalDiscount || 0);
+   const [isSubmitting, setIsSubmitting] = useState(false);
+
+   // Product Search State
+   const [isAddingItem, setIsAddingItem] = useState(false);
+   const [searchTerm, setSearchTerm] = useState('');
+
+   // Recalculate Totals
+   const subtotal = items.reduce((sum, item) => sum + item.total, 0);
+   const totalAmount = Math.max(0, subtotal - globalDiscount);
+   const balance = Math.max(0, totalAmount - amountPaid);
+
+   const updateQuantity = (index: number, delta: number) => {
+      setItems(prev => {
+         const newItems = [...prev];
+         const item = newItems[index];
+         const newQty = Math.max(1, item.quantity + delta);
+         newItems[index] = { ...item, quantity: newQty, total: (newQty * item.unitPrice) - item.discount };
+         return newItems;
+      });
+   };
+
+   const removeItem = (index: number) => {
+      setItems(prev => prev.filter((_, i) => i !== index));
+   };
+
+   const addItem = (p: Product) => {
+      const newItem: SaleItem = {
+         cartId: crypto.randomUUID(),
+         productId: p.id,
+         productName: p.name,
+         quantity: 1,
+         unitPrice: p.sellingPrice,
+         discount: 0,
+         total: p.sellingPrice
+      };
+      setItems(prev => [...prev, newItem]);
+      setIsAddingItem(false);
+      setSearchTerm('');
+   };
+
+   const handleSave = () => {
+      setIsSubmitting(true);
+      const updated: Transaction = {
+         ...transaction,
+         items,
+         customerName,
+         amountPaid,
+         globalDiscount,
+         subtotal,
+         totalAmount,
+         balance
+      };
+      onSave(updated);
+   };
+
+   const filteredProducts = products.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase())).slice(0, 10);
+
+   return (
+      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+         <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="p-4 border-b bg-gray-50 flex justify-between items-center shrink-0">
+               <h2 className="text-lg font-black flex items-center gap-2">
+                  <Edit3 size={18} className="text-primary"/> Edit Sale #{transaction.id.slice(-4)}
+               </h2>
+               <button onClick={onClose} className="p-2 text-gray-400 hover:bg-gray-200 rounded-full"><X size={20}/></button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+               {/* Customer Info */}
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                     <label className="text-xs font-bold text-gray-500 uppercase">Customer Name</label>
+                     <input
+                        type="text"
+                        value={customerName}
+                        onChange={(e) => setCustomerName(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl font-bold focus:ring-2 focus:ring-primary outline-none"
+                     />
+                  </div>
+                  <div className="space-y-1">
+                     <label className="text-xs font-bold text-gray-500 uppercase">Amount Paid</label>
+                     <input
+                        type="number"
+                        value={amountPaid}
+                        onChange={(e) => setAmountPaid(Number(e.target.value))}
+                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl font-bold focus:ring-2 focus:ring-primary outline-none"
+                     />
+                  </div>
+               </div>
+
+               {/* Items List */}
+               <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                     <label className="text-xs font-bold text-gray-500 uppercase">Items Purchased</label>
+                     <button
+                        onClick={() => setIsAddingItem(true)}
+                        className="text-xs font-bold text-primary flex items-center gap-1 bg-indigo-50 px-2 py-1 rounded-lg hover:bg-indigo-100"
+                     >
+                        <Plus size={12}/> Add Item
+                     </button>
+                  </div>
+
+                  {isAddingItem && (
+                     <div className="mb-4 bg-gray-50 p-3 rounded-xl border animate-in slide-in-from-top-2">
+                        <div className="relative mb-2">
+                           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16}/>
+                           <input
+                              type="text"
+                              autoFocus
+                              placeholder="Search product to add..."
+                              className="w-full pl-9 pr-3 py-2 rounded-lg border focus:ring-2 focus:ring-primary outline-none text-sm"
+                              value={searchTerm}
+                              onChange={e => setSearchTerm(e.target.value)}
+                           />
+                           <button onClick={() => setIsAddingItem(false)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400"><X size={16}/></button>
+                        </div>
+                        <div className="max-h-40 overflow-y-auto space-y-1">
+                           {filteredProducts.map(p => (
+                              <button
+                                 key={p.id}
+                                 onClick={() => addItem(p)}
+                                 className="w-full flex justify-between items-center p-2 hover:bg-white rounded-lg text-sm text-left group"
+                              >
+                                 <span className="font-bold text-gray-700">{p.name}</span>
+                                 <span className="text-primary font-bold">{CURRENCY}{p.sellingPrice.toLocaleString()}</span>
+                              </button>
+                           ))}
+                           {filteredProducts.length === 0 && <p className="text-xs text-center text-gray-400 py-2">No products found</p>}
+                        </div>
+                     </div>
+                  )}
+
+                  <div className="space-y-2">
+                     {items.map((item, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-3 bg-white border border-gray-100 rounded-xl shadow-sm">
+                           <div className="flex-1 min-w-0">
+                              <p className="font-bold text-gray-800 truncate">{item.productName}</p>
+                              <p className="text-[10px] text-gray-400">{CURRENCY}{item.unitPrice.toLocaleString()} / unit</p>
+                           </div>
+                           <div className="flex items-center gap-3">
+                              <div className="flex items-center gap-2 bg-gray-50 rounded-lg p-1">
+                                 <button onClick={() => updateQuantity(idx, -1)} className="w-6 h-6 flex items-center justify-center bg-white rounded shadow-sm text-gray-600 hover:text-primary"><Minus size={12}/></button>
+                                 <span className="text-xs font-black w-4 text-center">{item.quantity}</span>
+                                 <button onClick={() => updateQuantity(idx, 1)} className="w-6 h-6 flex items-center justify-center bg-white rounded shadow-sm text-gray-600 hover:text-primary"><Plus size={12}/></button>
+                              </div>
+                              <div className="text-right w-16">
+                                 <p className="font-bold text-sm">{CURRENCY}{item.total.toLocaleString()}</p>
+                              </div>
+                              <button onClick={() => removeItem(idx)} className="text-gray-300 hover:text-red-500"><Trash2 size={16}/></button>
+                           </div>
+                        </div>
+                     ))}
+                  </div>
+               </div>
+
+               {/* Summary */}
+               <div className="bg-gray-50 p-4 rounded-xl space-y-2 text-sm">
+                  <div className="flex justify-between text-gray-500">
+                     <span>Subtotal</span>
+                     <span className="font-bold">{CURRENCY}{subtotal.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-500 items-center">
+                     <span>Global Discount</span>
+                     <input
+                        type="number"
+                        value={globalDiscount}
+                        onChange={e => setGlobalDiscount(Number(e.target.value))}
+                        className="w-20 px-2 py-1 text-right border rounded font-bold outline-none focus:border-primary"
+                     />
+                  </div>
+                  <div className="flex justify-between text-gray-900 pt-2 border-t border-gray-200">
+                     <span className="font-black">Total Amount</span>
+                     <span className="font-black text-lg">{CURRENCY}{totalAmount.toLocaleString()}</span>
+                  </div>
+                   <div className="flex justify-between text-gray-500 pt-1">
+                     <span>Balance Due</span>
+                     <span className={`font-black ${balance > 0 ? 'text-red-500' : 'text-emerald-500'}`}>{CURRENCY}{balance.toLocaleString()}</span>
+                  </div>
+               </div>
+
+            </div>
+
+            <div className="p-4 border-t bg-white shrink-0 flex gap-3">
+               <button onClick={onClose} className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200">Cancel</button>
+               <button
+                  onClick={handleSave}
+                  disabled={isSubmitting}
+                  className="flex-1 py-3 bg-primary text-white rounded-xl font-bold hover:bg-indigo-700 disabled:opacity-50"
+               >
+                  {isSubmitting ? 'Saving...' : 'Save Changes'}
+               </button>
+            </div>
+         </div>
+      </div>
+   );
 };
 
 export default HistoryScreen;

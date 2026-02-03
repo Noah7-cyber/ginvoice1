@@ -136,7 +136,9 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
 
   // Sync amount paid for full payments
   React.useEffect(() => {
-    if (paymentMethod !== 'credit') {
+    if (paymentMethod === 'credit') {
+      setAmountPaid(0);
+    } else if (paymentMethod !== 'credit') {
       setAmountPaid(cartTotal);
     }
   }, [cartTotal, paymentMethod]);

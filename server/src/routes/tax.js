@@ -3,6 +3,7 @@ const router = express.Router();
 const Business = require('../models/Business');
 const Transaction = require('../models/Transaction');
 const Expenditure = require('../models/Expenditure');
+const Category = require('../models/Category');
 const auth = require('../middleware/auth');
 const strategy = require('../strategies/NigeriaSmallBusinessStrategy');
 
@@ -36,11 +37,14 @@ router.get('/estimate', auth, async (req, res) => {
       date: { $gte: startOfYear, $lte: endOfYear }
     });
 
+    // Fetch Categories to determine expense types
+    const categories = await Category.find({ businessId: businessId });
+
     // Calculate Revenue
     const revenue = transactions.reduce((sum, t) => sum + (Number(t.totalAmount) || 0), 0);
 
     // Calculate Estimate
-    const result = strategy.calculate(revenue, expenditures, business);
+    const result = strategy.calculate(revenue, expenditures, business, categories);
 
     res.json({
       success: true,
