@@ -289,6 +289,18 @@ export const deleteExpenditure = async (id: string) => {
   });
 };
 
+export const settleTransaction = async (id: string) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request(`/api/transactions/${id}/settle`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+};
+
 export const getBusinessCount = async () => {
   return request('/api/stats/business-count', {
     method: 'GET'

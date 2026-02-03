@@ -64,6 +64,17 @@ router.put('/:id', auth, requireActiveSubscription, async (req, res) => {
 
     const calculatedTotal = Math.max(0, subtotal - finalGlobalDiscount);
 
+    // Auto-reconcile payment status
+    const newBalance = calculatedTotal - amountPaid;
+
+    if (newBalance <= 0) {
+        originalTx.balance = 0;
+        originalTx.paymentStatus = 'paid';
+    } else {
+        originalTx.balance = newBalance;
+        originalTx.paymentStatus = 'credit';
+    }
+
     originalTx.items = newItems;
     originalTx.subtotal = subtotal;
     originalTx.globalDiscount = finalGlobalDiscount;
@@ -104,6 +115,27 @@ router.put('/:id', auth, requireActiveSubscription, async (req, res) => {
 
   } catch (err) {
     console.error('Edit Transaction Error:', err);
+    res.status(500).json({ message: 'Server Error' });
+  }
+});
+
+// SETTLE Debt (Mark Paid)
+router.patch('/:id/settle', auth, requireActiveSubscription, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const transaction = await Transaction.findOne({ id, businessId: req.businessId });
+
+    if (!transaction) return res.status(404).json({ message: 'Transaction not found' });
+
+    transaction.amountPaid = transaction.totalAmount;
+    transaction.balance = 0;
+    transaction.paymentStatus = 'paid';
+
+    await transaction.save();
+
+    res.json(transaction);
+  } catch (err) {
+    console.error('Settle Transaction Error:', err);
     res.status(500).json({ message: 'Server Error' });
   }
 });

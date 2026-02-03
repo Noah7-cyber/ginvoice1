@@ -100,6 +100,7 @@ export interface Transaction {
   paymentMethod: PaymentMethod;
   amountPaid: number;
   balance: number;
+  paymentStatus?: 'paid' | 'credit';
   signature?: string;
   isSignatureLocked?: boolean;
   staffId: string;
