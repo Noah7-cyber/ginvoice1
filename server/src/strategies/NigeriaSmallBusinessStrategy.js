@@ -6,18 +6,29 @@ class NigeriaSmallBusinessStrategy {
 
     expenses.forEach(exp => {
       const amount = parseFloat(exp.amount.toString());
-      totalCashExpenses += amount;
-
+      const flow = exp.flowType || 'out'; // 'out' or 'in'
       const type = exp.expenseType || 'business';
       const taxCat = exp.taxCategory;
 
-      // Skip explicitly non-deductible items from business expenses
-      // (Though user said "Sum of all expenditures where expenseType === 'business'")
-      // I'll assume standard 'business' expenses are deductible.
-      if (taxCat === 'NON_DEDUCTIBLE') return;
+      if (flow === 'in') {
+        // MONEY IN: Reduces the total expenses (like a refund)
+        // Effectively, it increases profit, so we reduce the expense sum
+        totalCashExpenses -= amount;
 
-      if (type === 'business') {
-        businessExpenses += amount;
+        if (type === 'business' && taxCat !== 'NON_DEDUCTIBLE') {
+           businessExpenses -= amount;
+        }
+
+      } else {
+        // MONEY OUT: Increases expenses
+        totalCashExpenses += amount;
+
+        // Skip explicitly non-deductible items from business expenses
+        if (taxCat === 'NON_DEDUCTIBLE') return;
+
+        if (type === 'business') {
+            businessExpenses += amount;
+        }
       }
     });
 

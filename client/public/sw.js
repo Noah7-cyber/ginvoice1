@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ginvoice-v16'; // Incremented version for new build system
+const CACHE_NAME = 'ginvoice-v17'; // Incremented version to v17 for drill-down and money-in/out
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',

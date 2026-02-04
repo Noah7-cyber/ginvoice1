@@ -85,6 +85,8 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
   const [isDeleting, setIsDeleting] = useState(false);
   const [shouldRestock, setShouldRestock] = useState(true);
 
+  const [expandedDebtor, setExpandedDebtor] = useState<string | null>(null);
+
   const filteredInvoices = transactions.filter(t => {
     const matchesSearch = t.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           t.id.toLowerCase().includes(searchTerm.toLowerCase());
@@ -401,14 +403,20 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
             </div>
           ) : (
             debtorsLedger.map(debtor => (
-              <div key={debtor.name} className="bg-white p-6 rounded-2xl shadow-sm border-l-8 border-l-red-500 border group hover:shadow-lg transition-all">
-                <div className="flex flex-col md:flex-row justify-between gap-6 items-center">
+              <div key={debtor.name} className="bg-white rounded-2xl shadow-sm border-l-8 border-l-red-500 border group hover:shadow-lg transition-all overflow-hidden">
+                <div
+                  className="p-6 flex flex-col md:flex-row justify-between gap-6 items-center cursor-pointer"
+                  onClick={() => setExpandedDebtor(expandedDebtor === debtor.name ? null : debtor.name)}
+                >
                   <div className="flex items-center gap-4 flex-1 w-full">
                     <div className="w-14 h-14 rounded-2xl bg-red-50 flex items-center justify-center text-red-600 font-black text-xl">
                       {debtor.name[0].toUpperCase()}
                     </div>
                     <div className="flex-1">
-                      <h3 className="text-xl font-black text-gray-900">{debtor.name}</h3>
+                      <h3 className="text-xl font-black text-gray-900 flex items-center gap-2">
+                        {debtor.name}
+                        <span className="text-gray-400 text-xs">{expandedDebtor === debtor.name ? '▲' : '▼'}</span>
+                      </h3>
                       <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
                         <span className="flex items-center gap-1 font-medium"><Receipt size={14} /> {debtor.invoiceCount} Pending Bills</span>
                         <span className="w-1 h-1 bg-gray-300 rounded-full"></span>
@@ -425,27 +433,10 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
                     <p className="text-3xl font-black text-red-600">{CURRENCY}{debtor.totalOwed.toLocaleString()}</p>
                   </div>
 
-                  <div className="flex gap-2 w-full md:w-auto">
-                     {!isReadOnly && (
-                        <button
-                          onClick={() => handleSettleDebtor(debtor.transactions)}
-                          className="p-3 text-green-600 bg-green-50 rounded-xl hover:bg-green-100 transition-all border border-green-100"
-                          title="Mark All Paid"
-                        >
-                           <CheckCircle2 size={20} />
-                        </button>
-                     )}
-                    <button 
-                      onClick={() => {
-                        setSearchTerm(debtor.name);
-                        setViewMode('invoices');
-                      }}
-                      className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-xl font-bold hover:bg-black transition-all active:scale-95"
-                    >
-                      <Eye size={18} /> View Bills
-                    </button>
+                   <div className="flex gap-2 w-full md:w-auto">
                     <button
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         if (debtor.phone) {
                           window.location.href = `tel:${debtor.phone}`;
                         } else {
@@ -458,6 +449,56 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
                     </button>
                   </div>
                 </div>
+
+                {/* EXPANDED DRILL-DOWN VIEW */}
+                {expandedDebtor === debtor.name && (
+                   <div className="bg-gray-50 border-t p-4 space-y-3 animate-in slide-in-from-top-2">
+                       <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest px-2">Unpaid Invoices</h4>
+                       {debtor.transactions.map(tx => (
+                           <div key={tx.id} className="flex items-center justify-between bg-white p-3 rounded-xl border shadow-sm">
+                               <div className="flex items-center gap-3">
+                                   <div className="bg-gray-100 p-2 rounded-lg text-gray-500 font-mono text-xs font-bold">
+                                       #{tx.id.slice(-4)}
+                                   </div>
+                                   <div>
+                                       <p className="text-sm font-bold text-gray-900">
+                                            {new Date(tx.transactionDate).toLocaleDateString()}
+                                       </p>
+                                       <p className="text-xs text-gray-500">
+                                           {tx.items.length} items • Total: {CURRENCY}{tx.totalAmount.toLocaleString()}
+                                       </p>
+                                   </div>
+                               </div>
+                               <div className="flex items-center gap-4">
+                                   <div className="text-right">
+                                       <p className="text-xs font-bold text-gray-400 uppercase">Owed</p>
+                                       <p className="text-sm font-black text-red-600">{CURRENCY}{tx.balance.toLocaleString()}</p>
+                                   </div>
+                                   {!isReadOnly && (
+                                       <button
+                                          onClick={() => handleSettle(tx)}
+                                          className="p-2 bg-green-50 text-green-600 rounded-lg border border-green-200 hover:bg-green-100"
+                                          title="Mark Paid"
+                                       >
+                                           <CheckCircle2 size={18} />
+                                       </button>
+                                   )}
+                               </div>
+                           </div>
+                       ))}
+
+                       <div className="flex justify-end pt-2">
+                           {!isReadOnly && (
+                               <button
+                                  onClick={() => handleSettleDebtor(debtor.transactions)}
+                                  className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg font-bold text-xs hover:bg-black transition-all"
+                               >
+                                  <CheckCircle2 size={14} /> Settle All ({debtor.transactions.length})
+                               </button>
+                           )}
+                       </div>
+                   </div>
+                )}
               </div>
             ))
           )
