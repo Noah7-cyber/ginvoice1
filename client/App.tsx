@@ -118,12 +118,12 @@ const App: React.FC = () => {
     // Only run if enabled in settings
     if (!state.business.settings?.enableLowStockAlerts) return;
 
-    // Check permission
-    if (Notification.permission === 'default') {
-        Notification.requestPermission();
+    // Check permission - Explicitly use window.Notification to avoid hoisting/shadowing issues
+    if ('Notification' in window && window.Notification.permission === 'default') {
+        window.Notification.requestPermission();
     }
 
-    if (Notification.permission === 'granted') {
+    if ('Notification' in window && window.Notification.permission === 'granted') {
          const threshold = state.business.settings?.lowStockThreshold || 10;
          state.products.forEach(p => {
              if (p.currentStock <= threshold) {
@@ -132,7 +132,7 @@ const App: React.FC = () => {
                  // Ideally, track 'notified' state. For now, simple check.
                  const key = `notified_low_${p.id}_${p.currentStock}`;
                  if (!sessionStorage.getItem(key)) {
-                      new Notification('Low Stock Warning', {
+                      new window.Notification('Low Stock Warning', {
                           body: `${p.name} is running low (${p.currentStock} left).`,
                           icon: '/ginvoice.png'
                       });
