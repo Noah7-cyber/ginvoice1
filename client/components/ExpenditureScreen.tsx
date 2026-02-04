@@ -228,7 +228,20 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
+          <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1">Today</p>
+          <p className="text-2xl font-black text-emerald-700">
+             {new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(
+                expenditures
+                  .filter(e => new Date(e.date).toDateString() === new Date().toDateString())
+                  .reduce((sum, e) => {
+                     const val = e.amount || 0;
+                     return e.flowType === 'in' ? sum - val : sum + val;
+                  }, 0)
+             )}
+          </p>
+        </div>
         <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
           <p className="text-xs font-bold text-blue-500 uppercase tracking-wider mb-1">This Month</p>
           <p className="text-2xl font-black text-blue-700">
@@ -275,7 +288,7 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600">{exp.paymentMethod}</td>
                     <td className={`px-6 py-4 text-sm font-bold text-right ${exp.flowType === 'in' ? 'text-emerald-600' : 'text-red-600'}`}>
-                      {exp.flowType === 'in' ? '+' : '-'}{new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(exp.amount || 0)}
+                      {new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(exp.amount || 0)}
                     </td>
                     <td className="px-6 py-4 text-sm text-right flex justify-end gap-2">
                       {isReadOnly ? (

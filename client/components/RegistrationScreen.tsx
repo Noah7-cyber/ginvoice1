@@ -352,13 +352,13 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onM
                 />
                 <span>
                   I agree to the Privacy Policy.
-                  <button
-                    type="button"
-                    onClick={() => setShowPolicy(true)}
+                  <a
+                    href="/privacy.html"
+                    target="_blank"
                     className="ml-2 text-indigo-600 font-bold hover:underline"
                   >
                     View
-                  </button>
+                  </a>
                 </span>
               </div>
             )}

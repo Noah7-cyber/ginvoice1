@@ -113,6 +113,36 @@ const App: React.FC = () => {
   const wakeToastShownRef = useRef(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
 
+  // --- Local Notifications for Low Stock ---
+  useEffect(() => {
+    // Only run if enabled in settings
+    if (!state.business.settings?.enableLowStockAlerts) return;
+
+    // Check permission
+    if (Notification.permission === 'default') {
+        Notification.requestPermission();
+    }
+
+    if (Notification.permission === 'granted') {
+         const threshold = state.business.settings?.lowStockThreshold || 10;
+         state.products.forEach(p => {
+             if (p.currentStock <= threshold) {
+                 // Prevent spamming? We use a sessionStorage flag to avoid repeating per session?
+                 // Or just let it fire once per load.
+                 // Ideally, track 'notified' state. For now, simple check.
+                 const key = `notified_low_${p.id}_${p.currentStock}`;
+                 if (!sessionStorage.getItem(key)) {
+                      new Notification('Low Stock Warning', {
+                          body: `${p.name} is running low (${p.currentStock} left).`,
+                          icon: '/ginvoice.png'
+                      });
+                      sessionStorage.setItem(key, 'true');
+                 }
+             }
+         });
+    }
+  }, [state.products, state.business.settings?.enableLowStockAlerts, state.business.settings?.lowStockThreshold]);
+
   // Routing / Deep Linking Logic
   useEffect(() => {
     const syncURL = () => {

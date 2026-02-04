@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Store, Save, RefreshCw, CloudCheck, Upload, Trash2, Image as ImageIcon, MessageSquare, HeadphonesIcon, HelpCircle, Lock, AlertTriangle, X, Ticket, ToggleLeft, ToggleRight, Loader2, CreditCard, ShieldCheck, CheckCircle2, Palette } from 'lucide-react';
+import { Store, Save, RefreshCw, CloudCheck, Upload, Trash2, Image as ImageIcon, MessageSquare, HeadphonesIcon, HelpCircle, Lock, AlertTriangle, X, Ticket, ToggleLeft, ToggleRight, Loader2, CreditCard, ShieldCheck, CheckCircle2, Palette, Database, Download } from 'lucide-react';
 import { BusinessProfile, DiscountCode } from '../types';
 import { THEME_COLORS, FONTS } from '../constants';
 import { changeBusinessPins, deleteAccount, uploadFile, updateSettings, generateDiscountCode, verifyPayment, getEntitlements } from '../services/api';
 import api from '../services/api';
 import SupportBot from './SupportBot';
 import { useToast } from './ToastProvider';
+import { loadState } from '../services/storage';
 
 interface SettingsScreenProps {
   business: BusinessProfile;
@@ -24,7 +25,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
   const [formData, setFormData] = useState<BusinessProfile>(business);
   const [showSaved, setShowSaved] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'shop' | 'preferences' | 'billing' | 'security' | 'help'>('shop');
+  const [activeTab, setActiveTab] = useState<'shop' | 'preferences' | 'billing' | 'security' | 'data' | 'help'>('shop');
 
   // Security State
   const [currentOwnerPin, setCurrentOwnerPin] = useState('');
@@ -244,8 +245,62 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
       { id: 'preferences', label: 'Preferences', icon: Palette },
       { id: 'billing', label: 'Billing', icon: CreditCard },
       { id: 'security', label: 'Security', icon: ShieldCheck },
+      { id: 'data', label: 'Data', icon: Database },
       { id: 'help', label: 'Help', icon: HelpCircle },
   ];
+
+  const handleExport = (type: 'inventory' | 'transactions' | 'expenses') => {
+      const state = loadState();
+      if (!state) return addToast('No data to export', 'error');
+
+      let headers = '';
+      let rows: string[] = [];
+      let filename = '';
+
+      if (type === 'inventory') {
+          headers = 'Name,Category,Cost Price,Selling Price,Quantity';
+          rows = state.products.map(p =>
+             `"${p.name}","${p.category}",${p.costPrice},${p.sellingPrice},${p.currentStock}`
+          );
+          filename = `inventory_${new Date().toISOString().split('T')[0]}.csv`;
+      } else if (type === 'transactions') {
+          headers = 'Date,Invoice #,Customer Name,Total Amount,Amount Paid,Debt,Status';
+          rows = state.transactions.map(t =>
+             `"${t.transactionDate}","${t.id}","${t.customerName}",${t.totalAmount},${t.amountPaid},${t.balance},"${t.paymentStatus || (t.balance > 0 ? 'credit' : 'paid')}"`
+          );
+           filename = `sales_${new Date().toISOString().split('T')[0]}.csv`;
+      } else if (type === 'expenses') {
+          headers = 'Date,Category,Description,Amount,Type';
+          rows = (state.expenditures || []).map(e =>
+              `"${e.date}","${e.category}","${e.description || ''}",${e.amount},"${e.flowType === 'in' ? 'Money In' : 'Money Out'}"`
+          );
+          filename = `expenses_${new Date().toISOString().split('T')[0]}.csv`;
+      }
+
+      const csvContent = [headers, ...rows].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      addToast(`${type.charAt(0).toUpperCase() + type.slice(1)} exported!`, 'success');
+  };
+
+  const handleCancelSubscription = async () => {
+      if(!confirm("Are you sure you want to cancel your subscription? You will lose access to premium features immediately.")) return;
+      if (!isOnline) return addToast("Connect to internet to cancel.", "error");
+
+      try {
+          await api.post('/subscription/cancel', {});
+          addToast("Subscription cancelled.", "success");
+          onUpdateBusiness({ ...business, isSubscribed: false });
+      } catch (err) {
+          addToast("Failed to cancel subscription.", "error");
+      }
+  };
 
   return (
     <div className="max-w-4xl mx-auto pb-10 flex flex-col h-full overflow-hidden">
@@ -430,6 +485,24 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                               {formData.taxSettings?.isEnabled ? <ToggleRight size={32} /> : <ToggleLeft size={32} />}
                           </button>
                       </div>
+
+                       {/* Low Stock Alerts */}
+                      <div className="flex items-center justify-between p-4 rounded-2xl border bg-gray-50 mt-4">
+                          <div>
+                              <p className="font-bold text-sm text-gray-900">Enable Low Stock Alerts</p>
+                              <p className="text-[10px] text-gray-500 mt-0.5">Get notified when products run low</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                                const newSettings = { ...formData.settings, enableLowStockAlerts: !formData.settings?.enableLowStockAlerts };
+                                setFormData({ ...formData, settings: newSettings as any });
+                            }}
+                            className={`transition-colors ${formData.settings?.enableLowStockAlerts ? 'text-primary' : 'text-gray-300'}`}
+                          >
+                              {formData.settings?.enableLowStockAlerts ? <ToggleRight size={32} /> : <ToggleLeft size={32} />}
+                          </button>
+                      </div>
                   </div>
 
                   {/* Staff Permissions */}
@@ -546,6 +619,43 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                                   {isVerifying ? <Loader2 className="animate-spin" /> : 'Verify Payment'}
                               </button>
                           </div>
+                      </div>
+
+                       {/* Cancel Subscription */}
+                      {business.isSubscribed && (
+                          <div className="border-t pt-6 text-center">
+                              <button
+                                onClick={handleCancelSubscription}
+                                className="text-sm font-bold text-gray-400 hover:text-red-500 transition-colors"
+                              >
+                                Cancel Subscription
+                              </button>
+                          </div>
+                      )}
+                  </div>
+              </div>
+          )}
+
+           {/* DATA TAB */}
+          {activeTab === 'data' && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                  <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
+                      <h2 className="text-lg font-bold flex items-center gap-2"><Database className="text-blue-600" /> Data Management</h2>
+                      <p className="text-sm text-gray-500">Export your store data for external analysis or backup.</p>
+
+                      <div className="space-y-3">
+                          <button onClick={() => handleExport('inventory')} className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors group">
+                             <span className="font-bold text-gray-700">Export Inventory (CSV)</span>
+                             <Download className="text-gray-400 group-hover:text-blue-600" size={20} />
+                          </button>
+                          <button onClick={() => handleExport('transactions')} className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors group">
+                             <span className="font-bold text-gray-700">Export Transactions (CSV)</span>
+                             <Download className="text-gray-400 group-hover:text-blue-600" size={20} />
+                          </button>
+                           <button onClick={() => handleExport('expenses')} className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors group">
+                             <span className="font-bold text-gray-700">Export Expenses (CSV)</span>
+                             <Download className="text-gray-400 group-hover:text-blue-600" size={20} />
+                          </button>
                       </div>
                   </div>
               </div>
