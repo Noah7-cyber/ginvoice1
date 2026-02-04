@@ -118,6 +118,7 @@ export interface Expenditure {
   category?: string;
   taxCategory?: 'OPERATING_EXPENSE' | 'COST_OF_GOODS' | 'CAPITAL_ASSET' | 'NON_DEDUCTIBLE' | 'SALARY_PENSION';
   expenseType?: 'business' | 'personal';
+  flowType?: 'out' | 'in'; // New: Money In (Refund) vs Money Out
   title?: string;
   description?: string;
   paymentMethod?: string;

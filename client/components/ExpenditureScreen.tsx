@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, X, Save, Calendar, DollarSign, Tag, FileText, CreditCard, Pencil, Trash2, Settings } from 'lucide-react';
+import { Plus, X, Save, Calendar, DollarSign, Tag, FileText, CreditCard, Pencil, Trash2, Settings, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
 import { useToast } from '../components/ToastProvider';
 import { getCategories } from '../services/api';
 import CategoryManager from './CategoryManager';
@@ -15,6 +15,7 @@ interface Expenditure {
   description: string;
   paymentMethod: string;
   expenseType?: 'business' | 'personal';
+  flowType?: 'out' | 'in';
 }
 
 interface ExpenditureScreenProps {
@@ -54,7 +55,8 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
     date: new Date().toISOString().split('T')[0],
     description: '',
     paymentMethod: 'Cash',
-    expenseType: 'business' as 'business' | 'personal'
+    expenseType: 'business' as 'business' | 'personal',
+    flowType: 'out' as 'out' | 'in'
   });
 
   // Date Filters
@@ -72,12 +74,25 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
       return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
     });
 
-    const thisMonthTotal = thisMonth.reduce((sum, e) => sum + (e.amount || 0), 0);
-    const allTimeTotal = expenditures.reduce((sum, e) => sum + (e.amount || 0), 0);
+    // Logic: Money Out (+) vs Money In (-) for net calculations?
+    // Usually summaries show "Total Spent" so we sum 'out'. 'in' might be shown separately or net.
+    // Let's go with NET for Total, but maybe just sum 'out' for "Total Spent".
+    // User requested: "Expense (Money Out)" vs "Income (Money In)".
+    // Strategy: Calculate Net Flow? Or just Expenses?
+    // Let's show Net Flow for This Month, and Total Expenses for All Time?
+    // Or stick to simple: Sum(Out) - Sum(In)
 
-    // Top Category
+    const calculateNet = (list: Expenditure[]) => list.reduce((sum, e) => {
+        const val = e.amount || 0;
+        return e.flowType === 'in' ? sum - val : sum + val;
+    }, 0);
+
+    const thisMonthTotal = calculateNet(thisMonth);
+    const allTimeTotal = calculateNet(expenditures);
+
+    // Top Category (Expenses Only)
     const catMap: Record<string, number> = {};
-    thisMonth.forEach(e => {
+    thisMonth.filter(e => e.flowType !== 'in').forEach(e => {
       catMap[e.category] = (catMap[e.category] || 0) + (e.amount || 0);
     });
     let topCat = '-';
@@ -122,10 +137,11 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
           date: formData.date,
           description: formData.description,
           paymentMethod: formData.paymentMethod,
-          expenseType: formData.expenseType
+          expenseType: formData.expenseType,
+          flowType: formData.flowType
         };
         onEditExpenditure(updatedExpenditure);
-        addToast('Expenditure updated', 'success');
+        addToast('Transaction updated', 'success');
       } else {
         // Add Mode
         const newExpenditure: Expenditure = {
@@ -136,10 +152,11 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
           date: formData.date,
           description: formData.description,
           paymentMethod: formData.paymentMethod,
-          expenseType: formData.expenseType
+          expenseType: formData.expenseType,
+          flowType: formData.flowType
         };
         onAddExpenditure(newExpenditure);
-        addToast('Expenditure saved', 'success');
+        addToast('Transaction saved', 'success');
       }
 
       setShowAddModal(false);
@@ -151,7 +168,8 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
         date: new Date().toISOString().split('T')[0],
         description: '',
         paymentMethod: 'Cash',
-        expenseType: 'business'
+        expenseType: 'business',
+        flowType: 'out'
       });
 
     } catch (error) {
@@ -256,8 +274,8 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
                       <span className="px-2 py-1 rounded-full bg-gray-100 text-xs text-gray-600">{exp.category}</span>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600">{exp.paymentMethod}</td>
-                    <td className="px-6 py-4 text-sm font-bold text-red-600 text-right">
-                      -{new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(exp.amount || 0)}
+                    <td className={`px-6 py-4 text-sm font-bold text-right ${exp.flowType === 'in' ? 'text-emerald-600' : 'text-red-600'}`}>
+                      {exp.flowType === 'in' ? '+' : '-'}{new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(exp.amount || 0)}
                     </td>
                     <td className="px-6 py-4 text-sm text-right flex justify-end gap-2">
                       {isReadOnly ? (
@@ -277,7 +295,8 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
                                 date: exp.date ? new Date(exp.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
                                 description: exp.description || '',
                                 paymentMethod: exp.paymentMethod || 'Cash',
-                                expenseType: exp.expenseType || 'business'
+                                expenseType: exp.expenseType || 'business',
+                                flowType: exp.flowType || 'out'
                               });
                               setEditingId(exp.id);
                               setShowAddModal(true);
@@ -320,31 +339,60 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
               <button onClick={() => { setShowAddModal(false); setEditingId(null); }} className="text-gray-400 hover:text-gray-600 transition-colors"><X className="w-6 h-6" /></button>
             </div>
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
+
+               {/* Money In/Out Toggle */}
+               <div className="grid grid-cols-2 gap-3 mb-4">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, flowType: 'out' })}
+                    className={`flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm border-2 transition-all ${
+                        formData.flowType === 'out'
+                        ? 'border-red-500 bg-red-50 text-red-600'
+                        : 'border-gray-100 text-gray-400'
+                    }`}
+                  >
+                     <ArrowUpRight size={18} /> Money Out (Expense)
+                  </button>
+                   <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, flowType: 'in' })}
+                    className={`flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm border-2 transition-all ${
+                        formData.flowType === 'in'
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-600'
+                        : 'border-gray-100 text-gray-400'
+                    }`}
+                  >
+                     <ArrowDownLeft size={18} /> Money In (Refund)
+                  </button>
+               </div>
+
                <div><label className="block text-sm font-medium text-gray-700 mb-1">Title</label><input name="title" type="text" required value={formData.title} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" /></div>
                <div className="grid grid-cols-2 gap-4">
                   <input name="amount" type="number" placeholder="Amount" required value={formData.amount} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
                   <input name="date" type="date" required value={formData.date} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
                </div>
 
-               <div>
-                   <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Expense Type</label>
-                   <div className="flex bg-gray-100 p-1 rounded-xl">
-                      <button
-                        type="button"
-                        onClick={() => setFormData({ ...formData, expenseType: 'business' })}
-                        className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${formData.expenseType === 'business' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                      >
-                        Business (Tax Deductible)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setFormData({ ...formData, expenseType: 'personal' })}
-                        className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${formData.expenseType === 'personal' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                      >
-                        Personal (Not Deductible)
-                      </button>
-                   </div>
-               </div>
+               {formData.flowType === 'out' && (
+                <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Expense Type</label>
+                    <div className="flex bg-gray-100 p-1 rounded-xl">
+                        <button
+                            type="button"
+                            onClick={() => setFormData({ ...formData, expenseType: 'business' })}
+                            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${formData.expenseType === 'business' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                        >
+                            Business (Tax Deductible)
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setFormData({ ...formData, expenseType: 'personal' })}
+                            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${formData.expenseType === 'personal' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                        >
+                            Personal (Not Deductible)
+                        </button>
+                    </div>
+                </div>
+               )}
 
                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                  <div className="flex gap-2">

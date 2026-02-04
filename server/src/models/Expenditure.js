@@ -10,6 +10,7 @@ const ExpenditureSchema = new mongoose.Schema({
   title: { type: String, required: false },
   amount: { type: mongoose.Schema.Types.Decimal128, required: true }, // Using Decimal128 as per previous fixes
   category: { type: String, default: 'Other' },
+  flowType: { type: String, enum: ['out', 'in'], default: 'out' }, // 'out' = Expense (Red), 'in' = Income/Refund (Green)
   expenseType: { type: String, enum: ['business', 'personal'], default: 'business' },
   taxCategory: {
     type: String,
