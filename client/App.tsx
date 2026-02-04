@@ -18,7 +18,7 @@ import {
   Bell,
   AlertCircle
 } from 'lucide-react';
-import { InventoryState, UserRole, Product, ProductUnit, Transaction, BusinessProfile, TabId, SaleItem, PaymentMethod, Expenditure, ActivityLog } from './types';
+import { InventoryState, UserRole, Product, ProductUnit, Transaction, BusinessProfile, TabId, SaleItem, PaymentMethod, Expenditure, ActivityLog, Notification as NotificationModel } from './types';
 import { INITIAL_PRODUCTS } from './constants';
 import { safeCalculate } from './utils/math';
 import { saveState, loadState, pushToBackend, getDataVersion, saveDataVersion, getLastSync, saveLastSync } from './services/storage';
@@ -246,7 +246,7 @@ const App: React.FC = () => {
     };
     if (!base.expenditures) base.expenditures = [];
     if (!base.activities) base.activities = [];
-    if (!base.notifications) base.notifications = [];
+    if (!base.notifications) base.notifications = [] as NotificationModel[];
     return base as InventoryState;
   });
 
