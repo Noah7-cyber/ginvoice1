@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ginvoice-v17-hotfix'; // Polished update
+const CACHE_NAME = 'ginvoice-v18-critical'; // Critical fix for production crash
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
