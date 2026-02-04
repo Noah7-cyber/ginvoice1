@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ginvoice-v18-critical'; // Critical fix for production crash
+const CACHE_NAME = 'ginvoice-v19-emergency'; // Emergency cache bust to remove crashing notification code
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
