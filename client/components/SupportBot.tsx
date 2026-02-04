@@ -239,20 +239,41 @@ const SupportBot: React.FC<{ embed?: boolean }> = ({ embed = false }) => {
     </div>
   );
 
-  // Always render in EMBED MODE
-  return (
+  if (embed) {
+    return (
       <div className="w-full">
-          {!open ? (
-              <button
-                  onClick={() => setOpen(true)}
-                  className="w-full py-4 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-2xl font-black text-sm shadow-lg flex items-center justify-center gap-2 hover:opacity-95 transition-opacity"
-              >
-                  <LifeBuoy size={20} /> NEED HELP? OPEN CHAT
-              </button>
-          ) : (
-              <div className="mt-4">{ChatWindow}</div>
-          )}
+        {!open ? (
+          <button
+            onClick={() => setOpen(true)}
+            className="w-full py-4 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-2xl font-black text-sm shadow-lg flex items-center justify-center gap-2 hover:opacity-95 transition-opacity"
+          >
+            <LifeBuoy size={20} /> NEED HELP? OPEN CHAT
+          </button>
+        ) : (
+          <div className="mt-4">{ChatWindow}</div>
+        )}
       </div>
+    );
+  }
+
+  // Floating Mode
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="fixed bottom-24 md:bottom-10 right-4 z-[9999] p-4 bg-indigo-600 text-white rounded-full shadow-xl hover:bg-indigo-700 transition-all hover:scale-105 active:scale-95"
+      >
+        <MessageSquare size={24} />
+      </button>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-[10000] flex items-end justify-end p-4 md:p-6 pointer-events-none">
+      <div className="pointer-events-auto w-full max-w-md">
+        {ChatWindow}
+      </div>
+    </div>
   );
 };
 

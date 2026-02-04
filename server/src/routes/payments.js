@@ -219,6 +219,22 @@ router.post('/verify', auth, async (req, res) => {
   }
 });
 
+router.post('/cancel', auth, async (req, res) => {
+  try {
+    const business = await Business.findById(req.businessId);
+    if (!business) return res.status(404).json({ message: 'Business not found' });
+
+    business.isSubscribed = false;
+    business.subscriptionExpiresAt = new Date(); // Expire immediately
+    // Optional: Cancel on Paystack via API if needed, but for now we just cut access locally.
+
+    await business.save();
+    res.json({ message: 'Subscription cancelled' });
+  } catch (err) {
+    res.status(500).json({ message: 'Cancel failed' });
+  }
+});
+
 router.post('/webhook', async (req, res) => {
   try {
     const { webhookSecret } = getPaystackConfig();
