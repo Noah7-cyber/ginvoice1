@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ginvoice-v17-polished'; // Polished update
+const CACHE_NAME = 'ginvoice-v17-hotfix'; // Polished update
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -36,10 +36,22 @@ const shouldBypass = (requestUrl, request) => {
   });
 };
 
-// Installation: Cache the core Shell
+// Installation: Cache the core Shell (Fault Tolerant)
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS_TO_CACHE))
+    caches.open(CACHE_NAME).then(async (cache) => {
+      // Loop individually to prevent one 404 from failing the entire install
+      await Promise.all(ASSETS_TO_CACHE.map(async (url) => {
+        try {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(response.statusText);
+            await cache.put(url, response);
+        } catch (error) {
+            console.warn(`Failed to cache ${url}:`, error);
+            // Intentionally swallow error to allow installation to proceed
+        }
+      }));
+    })
   );
   self.skipWaiting(); // No hard refresh needed
 });
