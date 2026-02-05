@@ -296,11 +296,16 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
       if (!isOnline) return addToast("Connect to internet to cancel.", "error");
 
       try {
-          await api.post('/payments/cancel', {});
+          await api.post('/payments/subscription/cancel', {});
           addToast("Auto-renewal turned off.", "success");
           onUpdateBusiness({ ...business, autoRenew: false, subscriptionStatus: 'non-renewing' });
-      } catch (err) {
-          addToast("Failed to update subscription.", "error");
+      } catch (err: any) {
+          console.error("Subscription cancel error:", err);
+          if (err.status === 404) {
+             addToast("Server update pending, please contact support or try again later.", "error");
+          } else {
+             addToast(err.message || "Failed to update subscription.", "error");
+          }
       }
   };
 

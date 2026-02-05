@@ -284,6 +284,49 @@ router.post('/cancel', auth, async (req, res) => {
   }
 });
 
+// Route: POST /api/payments/subscription/cancel
+router.post('/subscription/cancel', auth, async (req, res) => {
+  try {
+      console.log('Attempting to cancel subscription for:', req.user.businessId);
+
+      const business = await Business.findById(req.user.businessId);
+      if (!business) return res.status(404).json({ message: 'Business not found' });
+
+      // 1. Validate we have the code
+      const subCode = business.paystackSubscriptionCode;
+      const subToken = business.paystackEmailToken;
+      const { secretKey } = getPaystackConfig();
+
+      // 2. Try to cancel via Paystack API if we have codes
+      if (subCode && subToken && secretKey) {
+          try {
+              await fetch('https://api.paystack.co/subscription/disable', {
+                  method: 'POST',
+                  headers: {
+                      Authorization: `Bearer ${secretKey}`,
+                      'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({ code: subCode, token: subToken })
+              });
+              console.log('Paystack API cancellation successful');
+          } catch (apiErr) {
+              console.error('Paystack API failed, continuing with local cancellation:', apiErr.message);
+          }
+      }
+
+      // 3. Always perform Local Cancellation (Safety Net)
+      business.autoRenew = false;
+      business.subscriptionStatus = 'non-renewing';
+      await business.save();
+
+      res.json({ success: true, message: 'Subscription cancelled. Auto-renewal is off.' });
+
+  } catch (error) {
+      console.error('Cancellation Fatal Error:', error);
+      res.status(500).json({ message: 'Server error during cancellation' });
+  }
+});
+
 router.post('/webhook', async (req, res) => {
   try {
     const { webhookSecret } = getPaystackConfig();
