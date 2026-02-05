@@ -15,6 +15,8 @@ const BusinessSchema = new mongoose.Schema({
   paystackCustomerCode: { type: String },
   paystackSubscriptionCode: { type: String },
   paystackPlanCode: { type: String },
+  subscriptionStatus: { type: String, enum: ['active', 'non-renewing', 'cancelled'], default: 'active' },
+  autoRenew: { type: Boolean, default: true },
   recoveryCode: { type: String },
   recoveryCodeExpires: { type: Date },
   emailVerified: { type: Boolean, default: false },

@@ -224,12 +224,34 @@ router.post('/cancel', auth, async (req, res) => {
     const business = await Business.findById(req.businessId);
     if (!business) return res.status(404).json({ message: 'Business not found' });
 
-    business.isSubscribed = false;
-    business.subscriptionExpiresAt = new Date(); // Expire immediately
-    // Optional: Cancel on Paystack via API if needed, but for now we just cut access locally.
+    // 1. Attempt Paystack Cancellation
+    if (business.paystackSubscriptionCode) {
+      const { secretKey } = getPaystackConfig();
+      if (secretKey) {
+        try {
+          // Attempt to disable on Paystack.
+          // Note: Standard API requires email token. If this fails, we rely on local non-renewing status.
+          await fetch('https://api.paystack.co/subscription/disable', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${secretKey}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ code: business.paystackSubscriptionCode, token: business.paystackEmailToken })
+          });
+        } catch (e) {
+          console.error("Paystack disable failed", e);
+        }
+      }
+    }
+
+    // 2. Update Local State
+    business.autoRenew = false;
+    business.subscriptionStatus = 'non-renewing';
+    // We DO NOT expire immediately. Access continues until subscriptionExpiresAt.
 
     await business.save();
-    res.json({ message: 'Subscription cancelled' });
+    res.json({ message: 'Auto-renewal disabled' });
   } catch (err) {
     res.status(500).json({ message: 'Cancel failed' });
   }
