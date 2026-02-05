@@ -46,9 +46,17 @@ const markAttemptStatus = async (reference, status) => {
 const extendSubscription = async (business, days) => {
   const now = new Date();
   const currentEnd = business.subscriptionExpiresAt ? new Date(business.subscriptionExpiresAt) : null;
+  // If expired or null, start from now. If active, extend from current end.
   const base = currentEnd && currentEnd > now ? currentEnd : now;
-  business.subscriptionExpiresAt = new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
+
+  // Calculate new expiry date
+  const nextDate = new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
+
+  business.subscriptionExpiresAt = nextDate;
   business.isSubscribed = true;
+  business.subscriptionStatus = 'active';
+  business.autoRenew = true;
+
   await business.save();
 };
 
@@ -58,6 +66,9 @@ const updatePaystackCodes = async (business, data) => {
   }
   if (data?.subscription_code && business.paystackSubscriptionCode !== data.subscription_code) {
     business.paystackSubscriptionCode = data.subscription_code;
+  }
+  if (data?.email_token && business.paystackEmailToken !== data.email_token) {
+    business.paystackEmailToken = data.email_token;
   }
   const planCode = data?.plan?.plan_code || data?.plan_code;
   if (planCode && business.paystackPlanCode !== planCode) {
@@ -224,34 +235,50 @@ router.post('/cancel', auth, async (req, res) => {
     const business = await Business.findById(req.businessId);
     if (!business) return res.status(404).json({ message: 'Business not found' });
 
-    // 1. Attempt Paystack Cancellation
-    if (business.paystackSubscriptionCode) {
-      const { secretKey } = getPaystackConfig();
-      if (secretKey) {
-        try {
-          // Attempt to disable on Paystack.
-          // Note: Standard API requires email token. If this fails, we rely on local non-renewing status.
-          await fetch('https://api.paystack.co/subscription/disable', {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${secretKey}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ code: business.paystackSubscriptionCode, token: business.paystackEmailToken })
-          });
-        } catch (e) {
-          console.error("Paystack disable failed", e);
-        }
-      }
+    // 1. Validate we have the code
+    const subCode = business.paystackSubscriptionCode;
+    const subToken = business.paystackEmailToken;
+    const { secretKey } = getPaystackConfig();
+
+    if (!subCode || !subToken || !secretKey) {
+        // If codes are missing, fallback to just local "Non-Renewing"
+        business.autoRenew = false;
+        business.subscriptionStatus = 'non-renewing';
+        await business.save();
+        return res.json({ success: true, message: "Auto-renewal turned off (Local)" });
     }
 
-    // 2. Update Local State
-    business.autoRenew = false;
-    business.subscriptionStatus = 'non-renewing';
-    // We DO NOT expire immediately. Access continues until subscriptionExpiresAt.
+    try {
+        // 2. Call Paystack API to Disable
+        const response = await fetch('https://api.paystack.co/subscription/disable', {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${secretKey}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ code: subCode, token: subToken })
+        });
 
-    await business.save();
-    res.json({ message: 'Auto-renewal disabled' });
+        const data = await response.json();
+
+        // 3. Update Local DB
+        if (data.status) {
+            business.autoRenew = false;
+            business.subscriptionStatus = 'non-renewing';
+            await business.save();
+            return res.json({ success: true, message: "Subscription cancelled successfully." });
+        } else {
+            console.error('Paystack rejected cancellation:', data);
+            throw new Error('Paystack rejected cancellation');
+        }
+    } catch (e) {
+        console.error('Cancel Error:', e.message);
+        // Fallback: If Paystack fails, force local off so user feels safe
+        business.autoRenew = false;
+        business.subscriptionStatus = 'non-renewing';
+        await business.save();
+        res.json({ success: true, message: "Auto-renewal disabled locally." });
+    }
   } catch (err) {
     res.status(500).json({ message: 'Cancel failed' });
   }
