@@ -585,7 +585,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                                   </div>
                                   <p className="text-sm text-gray-600 mb-4">
                                       {business.isSubscribed
-                                          ? `Your plan renews on ${new Date(business.subscriptionExpiresAt!).toDateString()}`
+                                          ? `Your plan renews on ${business.subscriptionExpiresAt ? new Date(business.subscriptionExpiresAt).toDateString() : 'Active (Date updating...)'}`
                                           : `Your trial expires on ${new Date(business.trialEndsAt).toDateString()}`
                                       }
                                   </p>
