@@ -13,6 +13,10 @@ export interface BusinessProfile {
   ownerPassword?: string;
   staffPassword?: string;
   trialEndsAt?: string;
+  isSubscribed?: boolean;
+  subscriptionExpiresAt?: string;
+  subscriptionStatus?: 'active' | 'non-renewing' | 'cancelled';
+  autoRenew?: boolean;
   theme: {
     primaryColor: string;
     fontFamily: string;

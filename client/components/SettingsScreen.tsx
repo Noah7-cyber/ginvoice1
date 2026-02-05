@@ -290,15 +290,17 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
   };
 
   const handleCancelSubscription = async () => {
-      if(!confirm("Are you sure you want to cancel your subscription? You will lose access to premium features immediately.")) return;
+      const expiryDate = business.subscriptionExpiresAt ? new Date(business.subscriptionExpiresAt).toLocaleDateString() : 'the end of the billing period';
+
+      if(!confirm(`Your subscription will not renew. You will retain full Pro access until ${expiryDate}, after which your account will revert to the Free plan. Continue?`)) return;
       if (!isOnline) return addToast("Connect to internet to cancel.", "error");
 
       try {
-          await api.post('/subscription/cancel', {});
-          addToast("Subscription cancelled.", "success");
-          onUpdateBusiness({ ...business, isSubscribed: false });
+          await api.post('/payments/cancel', {});
+          addToast("Auto-renewal turned off.", "success");
+          onUpdateBusiness({ ...business, autoRenew: false, subscriptionStatus: 'non-renewing' });
       } catch (err) {
-          addToast("Failed to cancel subscription.", "error");
+          addToast("Failed to update subscription.", "error");
       }
   };
 
@@ -626,9 +628,10 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                           <div className="border-t pt-6 text-center">
                               <button
                                 onClick={handleCancelSubscription}
-                                className="text-sm font-bold text-gray-400 hover:text-red-500 transition-colors"
+                                disabled={business.autoRenew === false}
+                                className="text-sm font-bold text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               >
-                                Cancel Subscription
+                                {business.autoRenew === false ? 'Auto-Renewal Off' : 'Turn Off Auto-Renewal'}
                               </button>
                           </div>
                       )}
