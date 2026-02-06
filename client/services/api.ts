@@ -85,6 +85,14 @@ export const requestPasswordReset = async (email: string) => {
   });
 };
 
+// NEW: Verify OTP
+export const verifyEmailCode = async (email: string, code: string) => {
+  return request('/api/auth/verify-email-code', {
+    method: 'POST',
+    body: JSON.stringify({ email, code })
+  });
+};
+
 export const resetPassword = async (email: string, code: string, newOwnerPin: string) => {
   return request('/api/auth/reset-password', {
     method: 'POST',

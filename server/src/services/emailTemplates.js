@@ -66,16 +66,22 @@ const buildRecoveryEmail = ({ code }) => {
   return baseTemplate(content, 'Reset Your PIN');
 };
 
-const buildVerificationEmail = ({ verificationUrl, businessName }) => {
+const buildVerificationEmail = ({ verificationUrl, businessName, code }) => {
   const content = `
     <h2 style="margin-top: 0; color: #111827;">Verify Your Email</h2>
     <p>Hello <strong>${businessName}</strong>,</p>
     <p>Please verify your email address to secure your account and unlock full features.</p>
-    <div style="text-align: center; margin-top: 30px;">
+
+    <div style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; text-align: center; margin: 25px 0;">
+      <p style="margin: 0 0 10px 0; font-size: 14px; text-transform: uppercase; color: #6b7280; font-weight: bold;">Your Verification Code</p>
+      <span style="font-size: 36px; font-weight: 900; letter-spacing: 8px; color: ${PRIMARY_COLOR}; display: block;">${code}</span>
+      <p style="margin: 10px 0 0 0; font-size: 12px; color: #ef4444;">(Expires in 30 minutes)</p>
+    </div>
+
+    <div style="text-align: center; margin-top: 20px;">
+      <p style="font-size: 14px; margin-bottom: 10px;">Or click the button below:</p>
       <a href="${verificationUrl}" class="button" style="color: #ffffff;">Verify Email Address</a>
     </div>
-    <p style="margin-top: 30px; font-size: 14px;">Or copy this link to your browser:</p>
-    <p style="font-size: 12px; color: ${PRIMARY_COLOR}; word-break: break-all;">${verificationUrl}</p>
   `;
   return baseTemplate(content, 'Verify Your Email');
 };

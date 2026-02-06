@@ -21,7 +21,8 @@ const BusinessSchema = new mongoose.Schema({
   recoveryCode: { type: String },
   recoveryCodeExpires: { type: Date },
   emailVerified: { type: Boolean, default: false },
-  emailVerificationToken: { type: String },
+  emailVerificationToken: { type: String }, // For Link
+  emailVerificationCode: { type: String }, // For OTP
   emailVerificationExpires: { type: Date },
   isCategoriesSeeded: { type: Boolean, default: false },
   credentialsVersion: { type: Number, default: 1 },
