@@ -2,6 +2,7 @@ import { InventoryState, BusinessProfile, Product, Category, DiscountCode } from
 
 const API_BASE = (import.meta as any).env?.VITE_API_URL || '';
 const TOKEN_KEY = 'ginvoice_auth_token_v1';
+const ADMIN_TOKEN_KEY = 'ginvoice_admin_token_v1';
 
 const buildUrl = (path: string) => {
   if (!API_BASE) return path;
@@ -18,6 +19,19 @@ export const loadAuthToken = (): string | null => {
 
 export const clearAuthToken = () => {
   localStorage.removeItem(TOKEN_KEY);
+};
+
+// Admin Token Helpers
+export const saveAdminToken = (token: string) => {
+    localStorage.setItem(ADMIN_TOKEN_KEY, token);
+};
+
+export const loadAdminToken = (): string | null => {
+    return localStorage.getItem(ADMIN_TOKEN_KEY);
+};
+
+export const clearAdminToken = () => {
+    localStorage.removeItem(ADMIN_TOKEN_KEY);
 };
 
 const request = async (path: string, options: RequestInit = {}) => {
@@ -298,10 +312,16 @@ export const deleteExpenditure = async (id: string) => {
 };
 
 // Admin API
+export const adminLogin = async (email: string, password: string) => {
+    return request('/api/admin/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password })
+    });
+};
 
 export const getAdminStats = async () => {
-  const token = loadAuthToken();
-  if (!token) throw new Error('Missing auth token');
+  const token = loadAdminToken();
+  if (!token) throw new Error('Missing admin token');
   return request('/api/admin/stats', {
     method: 'GET',
     headers: { Authorization: `Bearer ${token}` }
@@ -309,8 +329,8 @@ export const getAdminStats = async () => {
 };
 
 export const getAdminUsers = async (page = 1, search = '') => {
-  const token = loadAuthToken();
-  if (!token) throw new Error('Missing auth token');
+  const token = loadAdminToken();
+  if (!token) throw new Error('Missing admin token');
   return request(`/api/admin/users?page=${page}&search=${search}`, {
     method: 'GET',
     headers: { Authorization: `Bearer ${token}` }
@@ -318,8 +338,8 @@ export const getAdminUsers = async (page = 1, search = '') => {
 };
 
 export const getAdminUserDetails = async (id: string) => {
-  const token = loadAuthToken();
-  if (!token) throw new Error('Missing auth token');
+  const token = loadAdminToken();
+  if (!token) throw new Error('Missing admin token');
   return request(`/api/admin/users/${id}`, {
     method: 'GET',
     headers: { Authorization: `Bearer ${token}` }
@@ -327,8 +347,8 @@ export const getAdminUserDetails = async (id: string) => {
 };
 
 export const updateUserAdmin = async (id: string, data: any) => {
-  const token = loadAuthToken();
-  if (!token) throw new Error('Missing auth token');
+  const token = loadAdminToken();
+  if (!token) throw new Error('Missing admin token');
   return request(`/api/admin/users/${id}`, {
     method: 'PUT',
     headers: { Authorization: `Bearer ${token}` },
@@ -337,8 +357,8 @@ export const updateUserAdmin = async (id: string, data: any) => {
 };
 
 export const deleteUserAdmin = async (id: string) => {
-  const token = loadAuthToken();
-  if (!token) throw new Error('Missing auth token');
+  const token = loadAdminToken();
+  if (!token) throw new Error('Missing admin token');
   return request(`/api/admin/users/${id}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${token}` }
@@ -346,8 +366,8 @@ export const deleteUserAdmin = async (id: string) => {
 };
 
 export const grantSubscriptionAdmin = async (id: string, days: number) => {
-  const token = loadAuthToken();
-  if (!token) throw new Error('Missing auth token');
+  const token = loadAdminToken();
+  if (!token) throw new Error('Missing admin token');
   return request(`/api/admin/users/${id}/grant-subscription`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
