@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Store, Save, RefreshCw, CloudCheck, Upload, Trash2, Image as ImageIcon, MessageSquare, HeadphonesIcon, HelpCircle, Lock, AlertTriangle, X, Ticket, ToggleLeft, ToggleRight, Loader2, CreditCard, ShieldCheck, CheckCircle2, Palette, Database, Download } from 'lucide-react';
 import { BusinessProfile, DiscountCode } from '../types';
 import { THEME_COLORS, FONTS } from '../constants';
-import { changeBusinessPins, deleteAccount, uploadFile, updateSettings, generateDiscountCode, verifyPayment, getEntitlements } from '../services/api';
+import { changeBusinessPins, deleteAccount, uploadFile, updateSettings, generateDiscountCode, verifyPayment, getEntitlements, cancelSubscription, pauseSubscription, resumeSubscription } from '../services/api';
 import api from '../services/api';
 import SupportBot from './SupportBot';
 import { useToast } from './ToastProvider';
@@ -80,6 +80,59 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
   const handleSubscribe = () => {
       if (onSubscribe) onSubscribe();
       setIsPollingSubscription(true);
+  };
+
+  // Subscription Management State
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [isManagingSub, setIsManagingSub] = useState(false);
+
+  const handlePause = async () => {
+    if(!confirm("Pause auto-renewal? You will keep access until your current period ends.")) return;
+    setIsManagingSub(true);
+    try {
+       await pauseSubscription();
+       addToast("Auto-renewal paused.", "success");
+       const newBusiness = { ...business, autoRenew: false, subscriptionStatus: 'non-renewing' };
+       onUpdateBusiness(newBusiness as any);
+       setFormData(prev => ({ ...prev, ...newBusiness } as any));
+    } catch(e) {
+       addToast("Failed to pause.", "error");
+    } finally {
+       setIsManagingSub(false);
+    }
+  };
+
+  const handleResume = async () => {
+    setIsManagingSub(true);
+    try {
+       await resumeSubscription();
+       addToast("Auto-renewal resumed!", "success");
+       const newBusiness = { ...business, autoRenew: true, subscriptionStatus: 'active' };
+       onUpdateBusiness(newBusiness as any);
+       setFormData(prev => ({ ...prev, ...newBusiness } as any));
+    } catch(e) {
+       addToast("Failed to resume.", "error");
+    } finally {
+       setIsManagingSub(false);
+    }
+  };
+
+  const handleCancel = async () => {
+      if(!cancelReason) return addToast("Please provide a reason.", "error");
+      setIsManagingSub(true);
+      try {
+          await cancelSubscription(cancelReason);
+          addToast("Subscription cancelled.", "success");
+          const newBusiness = { ...business, autoRenew: false, subscriptionStatus: 'cancelled' };
+          onUpdateBusiness(newBusiness as any);
+          setFormData(prev => ({ ...prev, ...newBusiness } as any));
+          setShowCancelModal(false);
+      } catch(e) {
+          addToast("Cancellation failed.", "error");
+      } finally {
+          setIsManagingSub(false);
+      }
   };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -610,12 +663,49 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                           </div>
                       </div>
 
-                       {/* Subscription Status Footer */}
+                       {/* Manage Subscription */}
                       {business.isSubscribed && (
-                          <div className="border-t pt-6 text-center">
-                              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
-                                {business.autoRenew === false ? 'Auto-Renewal: Off' : 'Auto-Renewal: On'}
-                              </p>
+                          <div className="border-t pt-6">
+                              <h3 className="font-bold text-gray-900 mb-4">Manage Subscription</h3>
+
+                              {business.autoRenew ? (
+                                  <div className="flex flex-col gap-3">
+                                      <div className="p-4 bg-emerald-50 text-emerald-800 rounded-xl text-sm border border-emerald-100 flex items-center gap-2">
+                                          <CheckCircle2 size={16} />
+                                          <span>Auto-renewal is <strong>ON</strong>. Next charge on {business.subscriptionExpiresAt ? new Date(business.subscriptionExpiresAt).toDateString() : 'expiry date'}.</span>
+                                      </div>
+                                      <div className="flex gap-3">
+                                          <button
+                                              onClick={handlePause}
+                                              disabled={isManagingSub}
+                                              className="flex-1 py-3 border-2 border-gray-200 text-gray-700 font-bold rounded-xl hover:bg-gray-50 disabled:opacity-50"
+                                          >
+                                              {isManagingSub ? <Loader2 className="animate-spin mx-auto"/> : 'Pause Auto-Renew'}
+                                          </button>
+                                          <button
+                                              onClick={() => setShowCancelModal(true)}
+                                              disabled={isManagingSub}
+                                              className="flex-1 py-3 border-2 border-red-100 text-red-600 font-bold rounded-xl hover:bg-red-50 disabled:opacity-50"
+                                          >
+                                              Cancel Plan
+                                          </button>
+                                      </div>
+                                  </div>
+                              ) : (
+                                  <div className="flex flex-col gap-3">
+                                      <div className="p-4 bg-orange-50 text-orange-800 rounded-xl text-sm border border-orange-100 flex items-center gap-2">
+                                          <AlertTriangle size={16} />
+                                          <span>Auto-renewal is <strong>OFF</strong>. Access expires on {business.subscriptionExpiresAt ? new Date(business.subscriptionExpiresAt).toDateString() : 'expiry date'}.</span>
+                                      </div>
+                                      <button
+                                          onClick={handleResume}
+                                          disabled={isManagingSub}
+                                          className="w-full py-3 bg-gray-900 text-white font-bold rounded-xl hover:bg-black disabled:opacity-50"
+                                      >
+                                          {isManagingSub ? <Loader2 className="animate-spin mx-auto"/> : 'Resume Auto-Renewal'}
+                                      </button>
+                                  </div>
+                              )}
                           </div>
                       )}
                   </div>
@@ -785,6 +875,45 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                  )}
               </div>
            </div>
+        </div>
+      )}
+
+      {/* Cancellation Modal */}
+      {showCancelModal && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-6">
+            <div className="flex justify-between items-center">
+              <h3 className="text-xl font-black text-gray-900">Cancel Subscription</h3>
+              <button onClick={() => setShowCancelModal(false)}><X className="text-gray-400" /></button>
+            </div>
+
+            <p className="text-sm text-gray-600 font-medium">
+              We're sorry to see you go. Please tell us why you're cancelling so we can improve.
+            </p>
+
+            <textarea
+              placeholder="Reason for cancellation..."
+              className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-100 rounded-xl font-medium text-gray-900 placeholder-gray-400 focus:outline-none focus:border-gray-500 h-32 resize-none"
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+            />
+
+            <div className="flex gap-4">
+              <button
+                onClick={() => setShowCancelModal(false)}
+                className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200"
+              >
+                Keep Plan
+              </button>
+              <button
+                onClick={handleCancel}
+                disabled={isManagingSub || !cancelReason}
+                className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 disabled:opacity-50"
+              >
+                {isManagingSub ? <Loader2 className="animate-spin mx-auto"/> : 'Confirm Cancel'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
