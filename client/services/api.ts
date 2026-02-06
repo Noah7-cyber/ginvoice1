@@ -297,6 +297,64 @@ export const deleteExpenditure = async (id: string) => {
   });
 };
 
+// Admin API
+
+export const getAdminStats = async () => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+  return request('/api/admin/stats', {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+};
+
+export const getAdminUsers = async (page = 1, search = '') => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+  return request(`/api/admin/users?page=${page}&search=${search}`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+};
+
+export const getAdminUserDetails = async (id: string) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+  return request(`/api/admin/users/${id}`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+};
+
+export const updateUserAdmin = async (id: string, data: any) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+  return request(`/api/admin/users/${id}`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(data)
+  });
+};
+
+export const deleteUserAdmin = async (id: string) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+  return request(`/api/admin/users/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+};
+
+export const grantSubscriptionAdmin = async (id: string, days: number) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+  return request(`/api/admin/users/${id}/grant-subscription`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ days })
+  });
+};
+
 export const cancelSubscription = async (reason: string) => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');

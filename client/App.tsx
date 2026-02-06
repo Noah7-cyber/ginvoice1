@@ -39,6 +39,7 @@ import SupportBot from './components/SupportBot';
 import useServerWakeup from './services/useServerWakeup';
 import NotificationCenter from './components/NotificationCenter';
 import WelcomeScreen from './components/WelcomeScreen';
+import AdminDashboard from './components/AdminDashboard';
 
 // Helper to check for active alerts (duplicated from NotificationCenter to avoid circular deps or complex state lifting)
 const hasActiveAlerts = (products: Product[], business: BusinessProfile, lowStockThreshold: number) => {
@@ -127,6 +128,11 @@ const App: React.FC = () => {
       const parts = path.split('/').filter(Boolean); // e.g. ['inventory', '123']
 
       if (parts.length > 0) {
+        if (parts[0] === 'admin-portal') {
+          setActiveTab('admin-portal');
+          return;
+        }
+
         const tab = parts[0] as TabId;
         // Simple check if tab is valid, or at least exists in our map
         if (TAB_LABELS[tab] || ['sales', 'inventory', 'history', 'dashboard', 'expenditure', 'settings'].includes(tab)) {
@@ -746,6 +752,8 @@ const App: React.FC = () => {
   }, [state.role, state.business.staffPermissions, entitlements, state.business.trialEndsAt, state.business.isSubscribed]);
 
   useEffect(() => {
+    if (activeTab === 'admin-portal') return;
+
     if (allowedTabs.length > 0 && !allowedTabs.includes(activeTab)) {
       setActiveTab(allowedTabs[0]);
     }
@@ -972,6 +980,12 @@ const App: React.FC = () => {
                 onSubscribe={openPaymentLink}
               />
             </div>
+          )}
+
+          {activeTab === 'admin-portal' && (
+             <div className="absolute inset-0 overflow-y-auto bg-gray-50 z-50">
+                 <AdminDashboard onLogout={() => window.location.href = '/'} />
+             </div>
           )}
 
         </div>

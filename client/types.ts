@@ -1,7 +1,7 @@
 /* Updated: added 'expenditure' to TabId, and Expenditure type + expenditures array on InventoryState */
 export type UserRole = 'owner' | 'staff';
 
-export type TabId = 'sales' | 'inventory' | 'history' | 'dashboard' | 'settings' | 'expenditure';
+export type TabId = 'sales' | 'inventory' | 'history' | 'dashboard' | 'settings' | 'expenditure' | 'admin-portal';
 
 export interface BusinessProfile {
   id?: string;
