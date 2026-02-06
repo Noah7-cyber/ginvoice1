@@ -289,25 +289,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
       addToast(`${type.charAt(0).toUpperCase() + type.slice(1)} exported!`, 'success');
   };
 
-  const handleCancelSubscription = async () => {
-      const expiryDate = business.subscriptionExpiresAt ? new Date(business.subscriptionExpiresAt).toLocaleDateString() : 'the end of the billing period';
-
-      if(!confirm(`Your subscription will not renew. You will retain full Pro access until ${expiryDate}, after which your account will revert to the Free plan. Continue?`)) return;
-      if (!isOnline) return addToast("Connect to internet to cancel.", "error");
-
-      try {
-          await api.post('/payments/subscription/cancel', {});
-          addToast("Auto-renewal turned off.", "success");
-          onUpdateBusiness({ ...business, autoRenew: false, subscriptionStatus: 'non-renewing' });
-      } catch (err: any) {
-          console.error("Subscription cancel error:", err);
-          if (err.status === 404) {
-             addToast("Server update pending, please contact support or try again later.", "error");
-          } else {
-             addToast(err.message || "Failed to update subscription.", "error");
-          }
-      }
-  };
+  // handleCancelSubscription removed
 
   return (
     <div className="max-w-4xl mx-auto pb-10 flex flex-col h-full overflow-hidden">
@@ -628,16 +610,12 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                           </div>
                       </div>
 
-                       {/* Cancel Subscription */}
+                       {/* Subscription Status Footer */}
                       {business.isSubscribed && (
                           <div className="border-t pt-6 text-center">
-                              <button
-                                onClick={handleCancelSubscription}
-                                disabled={business.autoRenew === false}
-                                className="text-sm font-bold text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                {business.autoRenew === false ? 'Auto-Renewal Off' : 'Turn Off Auto-Renewal'}
-                              </button>
+                              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                                {business.autoRenew === false ? 'Auto-Renewal: Off' : 'Auto-Renewal: On'}
+                              </p>
                           </div>
                       )}
                   </div>
