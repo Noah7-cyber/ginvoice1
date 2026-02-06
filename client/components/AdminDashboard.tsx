@@ -11,7 +11,7 @@ import {
   Check,
   AlertTriangle,
   Loader2,
-  MoreHorizontal
+  LogOut
 } from 'lucide-react';
 import {
   getAdminStats,
@@ -19,7 +19,8 @@ import {
   getAdminUserDetails,
   updateUserAdmin,
   deleteUserAdmin,
-  grantSubscriptionAdmin
+  grantSubscriptionAdmin,
+  clearAdminToken
 } from '../services/api';
 import { useToast } from './ToastProvider';
 
@@ -53,15 +54,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
       setUsers(usersData.users);
       setTotalPages(usersData.pages);
     } catch (err: any) {
-      if (err.status === 403) {
-        addToast('Access Denied. Admin only.', 'error');
+      if (err.status === 403 || err.status === 401) {
+        addToast('Session expired. Please log in.', 'error');
+        if (onLogout) onLogout();
       } else {
         addToast('Failed to load admin data.', 'error');
       }
     } finally {
       setIsLoading(false);
     }
-  }, [page, search, addToast]);
+  }, [page, search, addToast, onLogout]);
 
   useEffect(() => {
     fetchData();
@@ -118,12 +120,25 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
       }
   };
 
+  const handleLogout = () => {
+      clearAdminToken();
+      if (onLogout) onLogout();
+      else window.location.reload();
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto bg-gray-50 min-h-screen">
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-black text-gray-900">Admin Dashboard</h1>
-        <button className="text-sm font-bold text-gray-500 hover:text-gray-900" onClick={() => window.location.href = '/'}>
-            Exit Admin
+        <div>
+           <h1 className="text-3xl font-black text-gray-900">Admin Dashboard</h1>
+           <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Command Center</p>
+        </div>
+        <button
+           className="flex items-center gap-2 px-4 py-2 bg-white border border-red-100 text-red-600 hover:bg-red-50 rounded-lg text-sm font-bold shadow-sm transition-all"
+           onClick={handleLogout}
+        >
+            <LogOut size={16} />
+            Exit Secure Mode
         </button>
       </div>
 
@@ -218,12 +233,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                     <button
                       onClick={() => {
                         fetchDetails(user._id).then(() => {
-                           // fetchDetails sets selectedUser, wait for it?
-                           // actually fetchDetails is async and sets state.
-                           // But inside map, we just trigger it.
-                           // We need to set selectedUser roughly now or after fetch.
-                           // For now, let's just set the basic info and let modal fetch more or use fetched.
-                           // Actually fetchDetails sets selectedUser.
                            setIsEditModalOpen(true);
                         });
                       }}

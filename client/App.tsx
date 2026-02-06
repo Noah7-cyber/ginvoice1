@@ -40,6 +40,8 @@ import useServerWakeup from './services/useServerWakeup';
 import NotificationCenter from './components/NotificationCenter';
 import WelcomeScreen from './components/WelcomeScreen';
 import AdminDashboard from './components/AdminDashboard';
+import AdminLogin from './components/AdminLogin';
+import { loadAdminToken } from './services/api';
 
 // Helper to check for active alerts (duplicated from NotificationCenter to avoid circular deps or complex state lifting)
 const hasActiveAlerts = (products: Product[], business: BusinessProfile, lowStockThreshold: number) => {
@@ -759,6 +761,19 @@ const App: React.FC = () => {
     }
   }, [allowedTabs, activeTab]);
 
+  // SPECIAL ROUTE: Admin Portal (Bypasses Main App Auth)
+  if (activeTab === 'admin-portal') {
+      return (
+         <div className="absolute inset-0 overflow-y-auto bg-gray-50 z-50">
+             {loadAdminToken() ? (
+                <AdminDashboard onLogout={() => window.location.reload()} />
+             ) : (
+                <AdminLogin onLoginSuccess={() => window.location.reload()} />
+             )}
+         </div>
+      );
+  }
+
   if (view === 'forgot-password') {
     return (
       <ForgotPasswordScreen
@@ -982,11 +997,6 @@ const App: React.FC = () => {
             </div>
           )}
 
-          {activeTab === 'admin-portal' && (
-             <div className="absolute inset-0 overflow-y-auto bg-gray-50 z-50">
-                 <AdminDashboard onLogout={() => window.location.href = '/'} />
-             </div>
-          )}
 
         </div>
 

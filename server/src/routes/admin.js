@@ -1,13 +1,32 @@
 const express = require('express');
 const router = express.Router();
+const jwt = require('jsonwebtoken');
 const Business = require('../models/Business');
 const Product = require('../models/Product');
 const Transaction = require('../models/Transaction');
 const Expenditure = require('../models/Expenditure');
-const { requireAdmin } = require('../middleware/auth'); // Import requireAdmin
+const adminAuth = require('../middleware/adminAuth');
 
-// Apply requireAdmin to ALL routes in this router
-router.use(requireAdmin);
+// POST /login (Admin Only)
+router.post('/login', (req, res) => {
+    const { email, password } = req.body;
+
+    // Strict Env Check
+    if (email === process.env.ADMIN_EMAIL && password === process.env.ADMIN_PASSWORD) {
+        // Sign token strictly for admin role
+        const token = jwt.sign(
+            { role: 'superadmin' },
+            process.env.JWT_SECRET || '',
+            { expiresIn: '12h' }
+        );
+        return res.json({ token });
+    }
+
+    return res.status(401).json({ message: 'Invalid admin credentials' });
+});
+
+// Apply adminAuth to ALL subsequent routes
+router.use(adminAuth);
 
 // GET /stats
 router.get('/stats', async (req, res) => {
