@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ginvoice-v23-landing-refresh';
+const CACHE_NAME = 'ginvoice-v24-supervise';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
