@@ -68,6 +68,7 @@ app.use('/api/discounts', discountsRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/support', supportRouter);
 app.use('/api/stats', statsRouter);
+app.use('/api/admin', require('./routes/admin'));
 app.use('/api/transactions', require('./routes/transactions'));
 app.use('/api/tax', require('./routes/tax'));
 
