@@ -297,6 +297,37 @@ export const deleteExpenditure = async (id: string) => {
   });
 };
 
+export const cancelSubscription = async (reason: string) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/payments/subscription/cancel', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ reason })
+  });
+};
+
+export const pauseSubscription = async () => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/payments/subscription/pause', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+};
+
+export const resumeSubscription = async () => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/payments/subscription/resume', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+};
+
 export const settleTransaction = async (id: string) => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');
