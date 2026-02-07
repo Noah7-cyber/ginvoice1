@@ -66,7 +66,8 @@ router.get('/users', async (req, res) => {
       .select('name email phone isSubscribed subscriptionExpiresAt lastActiveAt subscriptionStatus')
       .sort({ lastActiveAt: -1 }) // Most recently active first
       .skip((page - 1) * limit)
-      .limit(parseInt(limit));
+      .limit(parseInt(limit))
+      .lean();
 
     const total = await Business.countDocuments(query);
 
@@ -84,14 +85,14 @@ router.get('/users', async (req, res) => {
 // GET /users/:id (Full Details)
 router.get('/users/:id', async (req, res) => {
   try {
-    const business = await Business.findById(req.params.id);
+    const business = await Business.findById(req.params.id).lean();
     if (!business) return res.status(404).json({ message: 'User not found' });
 
     const productCount = await Product.countDocuments({ businessId: req.params.id });
     const transactionCount = await Transaction.countDocuments({ businessId: req.params.id });
 
     res.json({
-      ...business.toObject(),
+      ...business,
       productCount,
       transactionCount
     });
@@ -113,7 +114,7 @@ router.put('/users/:id', async (req, res) => {
       req.params.id,
       update,
       { new: true }
-    );
+    ).lean();
 
     if (!business) return res.status(404).json({ message: 'User not found' });
     res.json(business);
@@ -151,7 +152,7 @@ router.post('/users/:id/grant-subscription', async (req, res) => {
 router.delete('/users/:id', async (req, res) => {
   try {
     const businessId = req.params.id;
-    const business = await Business.findById(businessId);
+    const business = await Business.findById(businessId).lean();
     if (!business) return res.status(404).json({ message: 'User not found' });
 
     // Strict confirmation or check? User dashboard usually has red button.

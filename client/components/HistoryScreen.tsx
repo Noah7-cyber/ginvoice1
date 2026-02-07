@@ -86,8 +86,9 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
   const [shouldRestock, setShouldRestock] = useState(true);
 
   const [expandedDebtor, setExpandedDebtor] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(50);
 
-  const filteredInvoices = transactions.filter(t => {
+  const filteredInvoices = useMemo(() => transactions.filter(t => {
     const matchesSearch = t.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           t.id.toLowerCase().includes(searchTerm.toLowerCase());
 
@@ -103,7 +104,13 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
     }
 
     return matchesSearch && matchesDate;
-  });
+  }), [transactions, searchTerm, startDate, endDate]);
+
+  const visibleInvoices = useMemo(() => filteredInvoices.slice(0, visibleCount), [filteredInvoices, visibleCount]);
+
+  useEffect(() => {
+      setVisibleCount(50);
+  }, [searchTerm, startDate, endDate]);
 
   // Aggregated Debtors Ledger
   const debtorsLedger = useMemo(() => {
@@ -311,7 +318,8 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
               <p>No transactions found</p>
             </div>
           ) : (
-            filteredInvoices.map(t => (
+            <>
+            {visibleInvoices.map(t => (
               <div key={t.id} className="bg-white p-6 rounded-2xl shadow-sm border group hover:shadow-md transition-all">
                 <div className="flex flex-col lg:flex-row justify-between gap-6">
                   <div className="flex-1 space-y-4">
@@ -391,7 +399,16 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
                   </div>
                 </div>
               </div>
-            ))
+            ))}
+            {filteredInvoices.length > visibleCount && (
+                <button
+                  onClick={() => setVisibleCount(prev => prev + 50)}
+                  className="w-full py-4 bg-gray-50 text-gray-600 font-bold rounded-2xl border border-dashed hover:bg-gray-100 transition-colors"
+                >
+                    Load More Invoices ({filteredInvoices.length - visibleCount} remaining)
+                </button>
+            )}
+            </>
           )
         ) : (
           // Debtors Ledger View
