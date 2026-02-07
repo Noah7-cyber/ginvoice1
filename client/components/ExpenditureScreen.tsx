@@ -207,22 +207,13 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
            </div>
 
            {!isReadOnly && (
-             <>
-                <button
-                    onClick={() => setIsCategoryManagerOpen(true)}
-                    className="flex items-center justify-center px-4 py-2 bg-white text-gray-700 border rounded-lg hover:bg-gray-50 transition-colors font-bold"
-                >
-                    <Tag className="w-5 h-5 mr-2" />
-                    Manage Categories
-                </button>
-                <button
-                    onClick={() => setShowAddModal(true)}
-                    className="flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-bold shadow-lg shadow-blue-100"
-                >
-                    <Plus className="w-5 h-5 mr-2" />
-                    Add Expense
-                </button>
-             </>
+             <button
+                onClick={() => setShowAddModal(true)}
+                className="hidden md:flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-bold shadow-lg shadow-blue-100"
+            >
+                <Plus className="w-5 h-5 mr-2" />
+                Add Expense
+            </button>
            )}
         </div>
       </div>
@@ -260,7 +251,57 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      {/* Mobile Card View (md:hidden) */}
+      <div className="md:hidden space-y-3">
+        {(!filteredExpenditures || filteredExpenditures.length === 0) ? (
+            <div className="text-center text-gray-500 py-8">No expenditures found.</div>
+        ) : (
+            filteredExpenditures.map((exp) => (
+                <div
+                   key={exp.id || Math.random()}
+                   className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 active:scale-[0.98] transition-transform"
+                   onClick={() => {
+                       // Trigger Edit on Click for mobile
+                       if (isReadOnly) return;
+                       if (!isOnline) {
+                          addToast('Online connection required to edit.', 'error');
+                          return;
+                       }
+                       setFormData({
+                           title: exp.title,
+                           amount: exp.amount.toString(),
+                           category: exp.category,
+                           date: exp.date ? new Date(exp.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+                           description: exp.description || '',
+                           paymentMethod: exp.paymentMethod || 'Cash',
+                           expenseType: exp.expenseType || 'business',
+                           flowType: exp.flowType || 'out'
+                       });
+                       setEditingId(exp.id);
+                       setShowAddModal(true);
+                   }}
+                >
+                    <div className="flex justify-between items-start mb-2">
+                        <span className="font-bold text-gray-900 text-sm truncate pr-2">{exp.title}</span>
+                        <span className={`font-black text-sm whitespace-nowrap ${exp.flowType === 'in' ? 'text-emerald-600' : 'text-red-600'}`}>
+                            {new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(exp.amount || 0)}
+                        </span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                        <span className="text-gray-400 font-medium">
+                            {exp.date ? new Date(exp.date).toLocaleDateString() : 'N/A'}
+                        </span>
+                        <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-bold text-[10px] uppercase tracking-wide">
+                            {exp.category}
+                        </span>
+                    </div>
+                </div>
+            ))
+        )}
+      </div>
+
+      {/* Desktop Table View (hidden on mobile) */}
+      <div className="hidden md:block bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead className="bg-gray-50 border-b border-gray-100">
@@ -342,6 +383,16 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
           </table>
         </div>
       </div>
+
+      {/* Mobile Floating Action Button */}
+      {!isReadOnly && (
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="md:hidden fixed bottom-6 right-6 z-50 w-14 h-14 bg-blue-600 text-white rounded-full shadow-xl flex items-center justify-center hover:bg-blue-700 active:scale-95 transition-all"
+          >
+              <Plus size={32} />
+          </button>
+      )}
 
       {/* FIXED CENTRALIZED MODAL */}
       {showAddModal && (

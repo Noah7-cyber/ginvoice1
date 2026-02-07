@@ -17,7 +17,7 @@ router.post('/login', (req, res) => {
         const token = jwt.sign(
             { role: 'superadmin' },
             process.env.JWT_SECRET || '',
-            { expiresIn: '12h' }
+            { expiresIn: '12h' } // Explicit 12h expiry as requested
         );
         return res.json({ token });
     }
@@ -62,11 +62,13 @@ router.get('/users', async (req, res) => {
       ];
     }
 
+    // Performance Turbo: .lean() returns plain JSON instead of Mongoose Docs
     const businesses = await Business.find(query)
       .select('name email phone isSubscribed subscriptionExpiresAt lastActiveAt subscriptionStatus')
-      .sort({ lastActiveAt: -1 }) // Most recently active first
+      .sort({ lastActiveAt: -1 })
       .skip((page - 1) * limit)
-      .limit(parseInt(limit));
+      .limit(parseInt(limit))
+      .lean();
 
     const total = await Business.countDocuments(query);
 

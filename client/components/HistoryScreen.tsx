@@ -50,6 +50,9 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
+  // Pagination (Virtualization)
+  const [visibleCount, setVisibleCount] = useState(50);
+
   // Edit State
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
@@ -87,23 +90,26 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
 
   const [expandedDebtor, setExpandedDebtor] = useState<string | null>(null);
 
-  const filteredInvoices = transactions.filter(t => {
-    const matchesSearch = t.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          t.id.toLowerCase().includes(searchTerm.toLowerCase());
+  // Memoized Filter Logic
+  const filteredInvoices = useMemo(() => {
+    return transactions.filter(t => {
+      const matchesSearch = t.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            t.id.toLowerCase().includes(searchTerm.toLowerCase());
 
-    let matchesDate = true;
-    if (startDate) {
-        matchesDate = matchesDate && new Date(t.transactionDate) >= new Date(startDate);
-    }
-    if (endDate) {
-        // End of day
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        matchesDate = matchesDate && new Date(t.transactionDate) <= end;
-    }
+      let matchesDate = true;
+      if (startDate) {
+          matchesDate = matchesDate && new Date(t.transactionDate) >= new Date(startDate);
+      }
+      if (endDate) {
+          // End of day
+          const end = new Date(endDate);
+          end.setHours(23, 59, 59, 999);
+          matchesDate = matchesDate && new Date(t.transactionDate) <= end;
+      }
 
-    return matchesSearch && matchesDate;
-  });
+      return matchesSearch && matchesDate;
+    });
+  }, [transactions, searchTerm, startDate, endDate]);
 
   // Aggregated Debtors Ledger
   const debtorsLedger = useMemo(() => {
@@ -311,9 +317,10 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
               <p>No transactions found</p>
             </div>
           ) : (
-            filteredInvoices.map(t => (
-              <div key={t.id} className="bg-white p-6 rounded-2xl shadow-sm border group hover:shadow-md transition-all">
-                <div className="flex flex-col lg:flex-row justify-between gap-6">
+            <>
+              {filteredInvoices.slice(0, visibleCount).map(t => (
+                <div key={t.id} className="bg-white p-6 rounded-2xl shadow-sm border group hover:shadow-md transition-all">
+                  <div className="flex flex-col lg:flex-row justify-between gap-6">
                   <div className="flex-1 space-y-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -390,8 +397,20 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
                     </div>
                   </div>
                 </div>
-              </div>
-            ))
+              ))}
+
+              {/* Load More Button */}
+              {filteredInvoices.length > visibleCount && (
+                <div className="text-center pt-4">
+                  <button
+                    onClick={() => setVisibleCount(prev => prev + 50)}
+                    className="px-6 py-2 bg-gray-100 text-gray-600 rounded-full font-bold hover:bg-gray-200 transition-colors shadow-sm"
+                  >
+                    Load More ({filteredInvoices.length - visibleCount} remaining)
+                  </button>
+                </div>
+              )}
+            </>
           )
         ) : (
           // Debtors Ledger View
