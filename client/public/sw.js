@@ -38,6 +38,9 @@ const shouldBypass = (requestUrl, request) => {
 
 // Installation: Cache the core Shell (Fault Tolerant)
 self.addEventListener('install', (event) => {
+  // FORCE IMMEDIATE UPDATE
+  self.skipWaiting();
+
   event.waitUntil(
     caches.open(CACHE_NAME).then(async (cache) => {
       // Loop individually to prevent one 404 from failing the entire install
@@ -53,20 +56,21 @@ self.addEventListener('install', (event) => {
       }));
     })
   );
-  self.skipWaiting(); // No hard refresh needed
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) return caches.delete(cacheName);
-        })
-      );
-    })
+    Promise.all([
+      self.clients.claim(), // Take control immediately
+      caches.keys().then((cacheNames) => {
+        return Promise.all(
+          cacheNames.map((cacheName) => {
+            if (cacheName !== CACHE_NAME) return caches.delete(cacheName);
+          })
+        );
+      })
+    ])
   );
-  self.clients.claim(); // Take control immediately
 });
 
 self.addEventListener('fetch', (event) => {

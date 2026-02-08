@@ -220,38 +220,6 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
-          <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1">Today</p>
-          <p className="text-2xl font-black text-emerald-700">
-             {new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(
-                expenditures
-                  .filter(e => new Date(e.date).toDateString() === new Date().toDateString())
-                  .reduce((sum, e) => {
-                     const val = e.amount || 0;
-                     return e.flowType === 'in' ? sum - val : sum + val;
-                  }, 0)
-             )}
-          </p>
-        </div>
-        <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
-          <p className="text-xs font-bold text-blue-500 uppercase tracking-wider mb-1">This Month</p>
-          <p className="text-2xl font-black text-blue-700">
-            {new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(summaryMetrics.thisMonthTotal)}
-          </p>
-        </div>
-        <div className="bg-purple-50 p-4 rounded-xl border border-purple-100">
-          <p className="text-xs font-bold text-purple-500 uppercase tracking-wider mb-1">Total Spent</p>
-          <p className="text-2xl font-black text-purple-700">
-            {new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(summaryMetrics.allTimeTotal)}
-          </p>
-        </div>
-        <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
-          <p className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-1">Top Category (Month)</p>
-          <p className="text-xl font-black text-orange-700 truncate">{summaryMetrics.topCat}</p>
-        </div>
-      </div>
 
       {/* Mobile Card List */}
       <div className="md:hidden space-y-3">
@@ -422,27 +390,25 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
                   <input name="date" type="date" required value={formData.date} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
                </div>
 
-               {formData.flowType === 'out' && (
-                <div>
-                    <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Expense Type</label>
+               <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Classification</label>
                     <div className="flex bg-gray-100 p-1 rounded-xl">
                         <button
                             type="button"
                             onClick={() => setFormData({ ...formData, expenseType: 'business' })}
                             className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${formData.expenseType === 'business' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                         >
-                            Business (Tax Deductible)
+                            Business
                         </button>
                         <button
                             type="button"
                             onClick={() => setFormData({ ...formData, expenseType: 'personal' })}
                             className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${formData.expenseType === 'personal' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                         >
-                            Personal (Not Deductible)
+                            Personal
                         </button>
                     </div>
                 </div>
-               )}
 
                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                  <div className="flex gap-2">
@@ -480,9 +446,9 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
       {!isReadOnly && (
           <button
               onClick={() => setShowAddModal(true)}
-              className="md:hidden fixed bottom-6 right-6 z-50 w-14 h-14 bg-blue-600 rounded-full shadow-lg flex items-center justify-center text-white hover:bg-blue-700 transition-all active:scale-95"
+              className="md:hidden fixed bottom-24 right-6 z-50 w-12 h-12 bg-blue-600 rounded-full shadow-lg flex items-center justify-center text-white hover:bg-blue-700 transition-all active:scale-95 border-2 border-white"
           >
-              <Plus size={28} />
+              <Plus size={24} />
           </button>
       )}
 
