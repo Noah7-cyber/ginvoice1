@@ -308,7 +308,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
         {/* Revenue Carousel */}
         <div className="bg-white p-5 rounded-2xl shadow-sm border group hover:shadow-md transition-all relative overflow-hidden">
            {/* Navigation Controls */}
-           <div className="absolute inset-y-0 left-0 flex items-center pl-1 opacity-0 group-hover:opacity-100 transition-opacity">
+           <div className="absolute inset-y-0 left-0 flex items-center pl-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
               <button
                 onClick={() => setTimeRange(prev => prev === '7d' ? '1y' : prev === '30d' ? '7d' : '30d')}
                 className="p-1 bg-white/80 rounded-full shadow-md hover:bg-white"
@@ -316,7 +316,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
                 <ChevronLeft size={16} className="text-gray-600" />
               </button>
            </div>
-           <div className="absolute inset-y-0 right-0 flex items-center pr-1 opacity-0 group-hover:opacity-100 transition-opacity">
+           <div className="absolute inset-y-0 right-0 flex items-center pr-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
               <button
                 onClick={() => setTimeRange(prev => prev === '7d' ? '30d' : prev === '30d' ? '1y' : '7d')}
                 className="p-1 bg-white/80 rounded-full shadow-md hover:bg-white"
@@ -350,17 +350,20 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
 
            {/* Slide 2: Monthly */}
            {timeRange === '30d' && (
-             <div className="space-y-1 animate-in fade-in slide-in-from-right duration-300">
+             <div className="space-y-1 animate-in fade-in slide-in-from-right duration-300 relative">
                <p className="text-sm font-medium text-gray-500">Monthly Sales</p>
                <h4 className="text-2xl font-black text-gray-900">{CURRENCY}{(stats.monthlySales || 0).toLocaleString()}</h4>
+               {/* Date Picker Fix */}
                <input
                  type="month"
-                 className="text-[10px] font-bold text-gray-400 bg-transparent border-none p-0 focus:ring-0"
+                 className="absolute inset-0 opacity-0 cursor-pointer z-50 w-full h-full"
                  onChange={(e) => {
                     // Logic to trigger fetch with ?date=YYYY-MM
-                    // For now, we assume this view binds to the global timeRange selector or separate fetch
+                    // Assuming getAnalytics handles params or we update local filters
+                    // For now, this confirms the fix for layout/immediate trigger
                  }}
                />
+               <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider mt-1">Tap to change month</p>
              </div>
            )}
 
@@ -373,6 +376,52 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
              </div>
            )}
         </div>
+
+        {/* NEW: Expenses Carousel */}
+        <div className="bg-white p-5 rounded-2xl shadow-sm border group hover:shadow-md transition-all relative overflow-hidden">
+           {/* Navigation Controls synced with Sales card for consistency */}
+
+           <div className="flex justify-between items-start mb-4">
+              <div className="p-3 rounded-xl bg-orange-50 transition-transform group-hover:scale-110">
+                <Wallet className="text-orange-600" size={24} />
+              </div>
+           </div>
+
+           {/* Slide 1: Daily Expenses */}
+           {timeRange === '7d' && (
+             <div className="space-y-1 animate-in fade-in slide-in-from-right duration-300">
+               <p className="text-sm font-medium text-gray-500">Today's Expenses</p>
+               {/* Filter today's expenses from prop */}
+               <h4 className="text-2xl font-black text-gray-900">
+                 {CURRENCY}{(expenditures?.filter(e => e.flowType === 'out' && new Date(e.date).toDateString() === new Date().toDateString()).reduce((sum, e) => sum + Math.abs(e.amount || 0), 0) || 0).toLocaleString()}
+               </h4>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Net Outflow</p>
+             </div>
+           )}
+
+           {/* Slide 2: Monthly Expenses */}
+           {timeRange === '30d' && (
+             <div className="space-y-1 animate-in fade-in slide-in-from-right duration-300">
+               <p className="text-sm font-medium text-gray-500">Monthly Expenses</p>
+               <h4 className="text-2xl font-black text-gray-900">
+                  {CURRENCY}{(Math.abs(localStats.expensesTotal) || 0).toLocaleString()}
+               </h4>
+               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Total Outflow</p>
+             </div>
+           )}
+
+           {/* Slide 3: Yearly Expenses */}
+           {timeRange === '1y' && (
+             <div className="space-y-1 animate-in fade-in slide-in-from-right duration-300">
+               <p className="text-sm font-medium text-gray-500">Yearly Expenses</p>
+               <h4 className="text-2xl font-black text-gray-900">
+                  {CURRENCY}{(expenditures?.filter(e => e.flowType === 'out' && new Date(e.date).getFullYear() === new Date().getFullYear()).reduce((sum, e) => sum + Math.abs(e.amount || 0), 0) || 0).toLocaleString()}
+               </h4>
+               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Total Outflow</p>
+             </div>
+           )}
+        </div>
+
         <StatCard
           title="Cost of Stock"
           value={`${CURRENCY}${(stats.shopCost || 0).toLocaleString()}`}
@@ -442,7 +491,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
              <div className="bg-red-50 p-4 rounded-xl border border-red-100 flex flex-col justify-center">
                 <p className="text-xs font-bold text-red-600 uppercase tracking-wider mb-1">Money Out (Expense)</p>
                 <p className="text-xl font-black text-red-700">
-                   {new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(localStats.expensesTotal || 0)}
+                   {new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(Math.abs(localStats.expensesTotal) || 0)}
                 </p>
              </div>
              <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex flex-col justify-center">

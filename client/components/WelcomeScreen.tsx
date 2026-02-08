@@ -46,10 +46,10 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onRegister, onLogin }) =>
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center gap-12">
            <div className="flex-1 text-center md:text-left space-y-6 animate-in slide-in-from-bottom-8 fade-in duration-700">
               <h1 className="text-4xl md:text-6xl font-black text-gray-900 leading-tight">
-                The Easy Way to Manage Your Shop & Money.
+                The Operating System for Nigerian Traders.
               </h1>
               <p className="text-xl text-gray-600 font-medium max-w-lg mx-auto md:mx-0">
-                Invoicing, Stock Control, and Debt Tracking for Nigerian businesses.
+                Track Sales, Control Stock, and Master Your Finances. Works perfectly without internet.
               </p>
 
               <div className="space-y-4">
@@ -131,8 +131,34 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onRegister, onLogin }) =>
          </div>
       </section>
 
+      {/* NEW: Tax Readiness Section */}
+      <section className="py-16 bg-gray-50 border-b border-gray-100">
+         <div className="max-w-6xl mx-auto px-4">
+            <div className="flex flex-col md:flex-row items-center gap-8 bg-white p-8 rounded-[2rem] border border-indigo-100 shadow-sm">
+                <div className="bg-indigo-100 p-6 rounded-3xl text-indigo-600 mb-4 md:mb-0">
+                    <Receipt size={48} />
+                </div>
+                <div className="flex-1 space-y-3 text-center md:text-left">
+                    <h2 className="text-3xl font-black text-gray-900">Master the 2026 Tax Laws</h2>
+                    <p className="text-lg text-gray-500 font-medium">
+                        Stop guessing. Automatically estimate your VAT and liability based on your actual sales.
+                        Use clear records to negotiate with confidence and avoid overpaying.
+                    </p>
+                </div>
+                <div>
+                    <button
+                       onClick={onRegister}
+                       className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100"
+                    >
+                        Start Tracking
+                    </button>
+                </div>
+            </div>
+         </div>
+      </section>
+
       {/* Who It's For Section */}
-      <section className="py-20 px-4 bg-gray-50">
+      <section className="py-20 px-4 bg-white">
           <div className="max-w-6xl mx-auto">
               <div className="text-center mb-12 space-y-2">
                   <h2 className="text-3xl font-black text-gray-900">Is Ginvoice For You?</h2>
@@ -140,23 +166,23 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onRegister, onLogin }) =>
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
-                  <div className="bg-white p-6 rounded-2xl shadow-sm text-center space-y-3 hover:-translate-y-1 transition-transform duration-300">
+                  <div className="bg-gray-50 p-6 rounded-2xl shadow-sm text-center space-y-3 hover:-translate-y-1 transition-transform duration-300">
                       <div className="w-12 h-12 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mx-auto"><ShoppingBag size={24} /></div>
                       <p className="font-bold text-gray-900 text-sm">Provision Stores</p>
                   </div>
-                  <div className="bg-white p-6 rounded-2xl shadow-sm text-center space-y-3 hover:-translate-y-1 transition-transform duration-300">
+                  <div className="bg-gray-50 p-6 rounded-2xl shadow-sm text-center space-y-3 hover:-translate-y-1 transition-transform duration-300">
                       <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center mx-auto"><Scissors size={24} /></div>
                       <p className="font-bold text-gray-900 text-sm">Boutiques</p>
                   </div>
-                  <div className="bg-white p-6 rounded-2xl shadow-sm text-center space-y-3 hover:-translate-y-1 transition-transform duration-300">
+                  <div className="bg-gray-50 p-6 rounded-2xl shadow-sm text-center space-y-3 hover:-translate-y-1 transition-transform duration-300">
                       <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto"><Wrench size={24} /></div>
                       <p className="font-bold text-gray-900 text-sm">Spare Parts</p>
                   </div>
-                  <div className="bg-white p-6 rounded-2xl shadow-sm text-center space-y-3 hover:-translate-y-1 transition-transform duration-300">
+                  <div className="bg-gray-50 p-6 rounded-2xl shadow-sm text-center space-y-3 hover:-translate-y-1 transition-transform duration-300">
                       <div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto"><ShoppingCart size={24} /></div>
                       <p className="font-bold text-gray-900 text-sm">Supermarkets</p>
                   </div>
-                  <div className="bg-white p-6 rounded-2xl shadow-sm text-center space-y-3 hover:-translate-y-1 transition-transform duration-300 col-span-2 md:col-span-1">
+                  <div className="bg-gray-50 p-6 rounded-2xl shadow-sm text-center space-y-3 hover:-translate-y-1 transition-transform duration-300 col-span-2 md:col-span-1">
                       <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto"><Pill size={24} /></div>
                       <p className="font-bold text-gray-900 text-sm">Pharmacies</p>
                   </div>
