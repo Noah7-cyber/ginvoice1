@@ -24,17 +24,23 @@ router.get('/', auth, async (req, res) => {
 });
 
 router.post('/', auth, requireActiveSubscription, async (req, res) => {
-  const { title, amount, category, date, description, paymentMethod, id, expenseType } = req.body;
+  const { title, amount, category, date, description, paymentMethod, id, expenseType, flowType } = req.body;
   try {
+    // Force sign based on flowType
+    let finalAmount = parseFloat(amount);
+    if (flowType === 'out') finalAmount = -Math.abs(finalAmount);
+    else if (flowType === 'in') finalAmount = Math.abs(finalAmount);
+
     const newExpenditure = new Expenditure({
       id: id || require('crypto').randomUUID(), // Ensure id is present
       title,
-      amount,
+      amount: finalAmount,
       category,
       date,
       description,
       paymentMethod,
       expenseType: expenseType || 'business', // Default to business
+      flowType: flowType || 'out',
       // FIX: Add fallback to req.user.id to match the GET route logic
       business: req.user.businessId || req.user.id,
       user: req.user.id
@@ -54,19 +60,25 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
 });
 
 router.put('/:id', auth, requireActiveSubscription, async (req, res) => {
-  const { title, amount, category, date, description, paymentMethod, expenseType } = req.body;
+  const { title, amount, category, date, description, paymentMethod, expenseType, flowType } = req.body;
   try {
     const businessId = req.user.businessId || req.user.id;
     let expenditure = await Expenditure.findOne({ id: req.params.id, business: businessId });
     if (!expenditure) return res.status(404).json({ msg: 'Expenditure not found' });
 
+    // Force sign based on flowType
+    let finalAmount = parseFloat(amount);
+    if (flowType === 'out') finalAmount = -Math.abs(finalAmount);
+    else if (flowType === 'in') finalAmount = Math.abs(finalAmount);
+
     expenditure.title = title;
-    expenditure.amount = amount;
+    expenditure.amount = finalAmount;
     expenditure.category = category;
     expenditure.date = date;
     expenditure.description = description;
     expenditure.paymentMethod = paymentMethod;
     if (expenseType) expenditure.expenseType = expenseType;
+    if (flowType) expenditure.flowType = flowType;
 
     await expenditure.save();
 

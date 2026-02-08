@@ -24,7 +24,7 @@ import {
   Tooltip, 
   ResponsiveContainer
 } from 'recharts';
-import { Transaction, Product, BusinessProfile } from '../types';
+import { Transaction, Product, BusinessProfile, Expenditure } from '../types';
 import { CURRENCY } from '../constants';
 import { getAnalytics, updateBusinessProfile } from '../services/api';
 import { safeCalculate, safeSum } from '../utils/math';
@@ -34,11 +34,12 @@ import ComplianceShieldModal from './ComplianceShieldModal';
 interface DashboardScreenProps {
   transactions: Transaction[];
   products: Product[];
+  expenditures?: Expenditure[];
   business?: BusinessProfile;
   onUpdateBusiness?: (business: Partial<BusinessProfile>) => void;
 }
 
-const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, products, business, onUpdateBusiness }) => {
+const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, products, expenditures = [], business, onUpdateBusiness }) => {
   const [showShieldModal, setShowShieldModal] = useState(false);
 
   const [remoteAnalytics, setRemoteAnalytics] = useState<{
@@ -141,8 +142,12 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
         'totalAmount'
     );
 
-    return { totalRevenue, totalProfit, totalSales: transactions.length, cashSales, transferSales, posSales, totalDebt, shopCost, shopWorth, dailyRevenue };
-  }, [transactions, products]);
+    const expensesTotal = expenditures.reduce((sum, e) => e.flowType === 'out' ? sum + (e.amount || 0) : sum, 0);
+    const incomeTotal = expenditures.reduce((sum, e) => e.flowType === 'in' ? sum + (e.amount || 0) : sum, 0);
+    const expensesBalance = incomeTotal - expensesTotal; // Should be negative if more expenses
+
+    return { totalRevenue, totalProfit, totalSales: transactions.length, cashSales, transferSales, posSales, totalDebt, shopCost, shopWorth, dailyRevenue, expensesTotal, incomeTotal, expensesBalance };
+  }, [transactions, products, expenditures]);
 
   // Hybrid Stats Logic: Merge remote and local
   const stats = useMemo(() => {
@@ -386,42 +391,66 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-8">
         {/* Sales Chart */}
-        <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="font-bold text-gray-800 flex items-center gap-2">
-              <Calendar className="text-indigo-600" size={20} /> Sales Performance
-            </h3>
-            <div className="flex gap-2">
-              {['7d', '30d', '1y'].map(r => (
-                <button
-                  key={r}
-                  onClick={() => setTimeRange(r as any)}
-                  className={`px-3 py-1 rounded-full text-xs font-bold ${timeRange === r ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600'}`}
-                >
-                  {r === '7d' ? 'Weekly' : r === '30d' ? 'Monthly' : 'Yearly'}
-                </button>
-              ))}
+        <div className="lg:col-span-2 space-y-4">
+          <div className="bg-white p-6 rounded-2xl shadow-sm border">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                <Calendar className="text-indigo-600" size={20} /> Sales Performance
+              </h3>
+              <div className="flex gap-2">
+                {['7d', '30d', '1y'].map(r => (
+                  <button
+                    key={r}
+                    onClick={() => setTimeRange(r as any)}
+                    className={`px-3 py-1 rounded-full text-xs font-bold ${timeRange === r ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600'}`}
+                  >
+                    {r === '7d' ? 'Weekly' : r === '30d' ? 'Monthly' : 'Yearly'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="h-[300px] min-h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData}>
+                  <defs>
+                    <linearGradient id="colorAmount" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.1}/>
+                      <stop offset="95%" stopColor="#4f46e5" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} tickFormatter={(val) => `₦${val/1000}k`} />
+                  <Tooltip
+                    contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}}
+                    formatter={(value: number) => [`${CURRENCY}${value.toLocaleString()}`, 'Revenue']}
+                  />
+                  <Area type="monotone" dataKey="amount" stroke="#4f46e5" strokeWidth={3} fillOpacity={1} fill="url(#colorAmount)" />
+                </AreaChart>
+              </ResponsiveContainer>
             </div>
           </div>
-          <div className="h-[300px] min-h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData}>
-                <defs>
-                  <linearGradient id="colorAmount" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.1}/>
-                    <stop offset="95%" stopColor="#4f46e5" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} dy={10} />
-                <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} tickFormatter={(val) => `₦${val/1000}k`} />
-                <Tooltip 
-                  contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}}
-                  formatter={(value: number) => [`${CURRENCY}${value.toLocaleString()}`, 'Revenue']}
-                />
-                <Area type="monotone" dataKey="amount" stroke="#4f46e5" strokeWidth={3} fillOpacity={1} fill="url(#colorAmount)" />
-              </AreaChart>
-            </ResponsiveContainer>
+
+          {/* Money In/Out/Balance Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+             <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 flex flex-col justify-center">
+                <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1">Money In (Income)</p>
+                <p className="text-xl font-black text-emerald-700">
+                   {new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(localStats.incomeTotal || 0)}
+                </p>
+             </div>
+             <div className="bg-red-50 p-4 rounded-xl border border-red-100 flex flex-col justify-center">
+                <p className="text-xs font-bold text-red-600 uppercase tracking-wider mb-1">Money Out (Expense)</p>
+                <p className="text-xl font-black text-red-700">
+                   {new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(localStats.expensesTotal || 0)}
+                </p>
+             </div>
+             <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex flex-col justify-center">
+                <p className="text-xs font-bold text-blue-500 uppercase tracking-wider mb-1">Net Balance</p>
+                <p className={`text-xl font-black ${localStats.expensesBalance >= 0 ? 'text-blue-700' : 'text-red-600'}`}>
+                   {new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(localStats.expensesBalance || 0)}
+                </p>
+             </div>
           </div>
         </div>
 

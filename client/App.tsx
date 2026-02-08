@@ -956,6 +956,7 @@ const App: React.FC = () => {
                    <DashboardScreen
                     transactions={state.transactions}
                     products={state.products}
+                    expenditures={state.expenditures}
                     business={state.business}
                     onUpdateBusiness={b => setState(prev => ({ ...prev, business: { ...prev.business, ...b } }))}
                   />
