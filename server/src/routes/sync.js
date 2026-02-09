@@ -117,12 +117,22 @@ router.get('/', auth, async (req, res) => {
     }));
 
     const expenditures = rawExpenditures.map(e => {
-      const amount = parseDecimal(e.amount);
+      let amount = parseDecimal(e.amount);
+      let flowType = e.flowType;
+
+      if (flowType === 'out') {
+        amount = -Math.abs(amount);
+      } else if (flowType === 'in') {
+        amount = Math.abs(amount);
+      } else {
+        flowType = amount >= 0 ? 'in' : 'out';
+      }
+
       return {
         ...e,
         id: (e.id && e.id !== 'undefined' && e.id !== 'null') ? e.id : e._id.toString(),
         amount,
-        flowType: amount >= 0 ? 'in' : 'out'
+        flowType
       };
     });
 
