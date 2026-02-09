@@ -11,10 +11,14 @@ router.get('/', auth, async (req, res) => {
         business: req.user.businessId || req.user.id
     }).sort({ date: -1 }).lean();
 
-    const expenditures = rawExpenditures.map(e => ({
-      ...e,
-      amount: parseFloat((e.amount || 0).toString())
-    }));
+    const expenditures = rawExpenditures.map(e => {
+      const amount = parseFloat((e.amount || 0).toString());
+      return {
+        ...e,
+        amount,
+        flowType: e.flowType || (amount >= 0 ? 'in' : 'out')
+      };
+    });
 
     res.json(expenditures);
   } catch (err) {
