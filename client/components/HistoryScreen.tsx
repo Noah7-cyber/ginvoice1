@@ -491,15 +491,24 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
                                        <p className="text-xs font-bold text-gray-400 uppercase">Owed</p>
                                        <p className="text-sm font-black text-red-600">{CURRENCY}{tx.balance.toLocaleString()}</p>
                                    </div>
-                                   {!isReadOnly && (
+                                   <div className="flex gap-2">
                                        <button
-                                          onClick={() => handleSettle(tx)}
-                                          className="p-2 bg-green-50 text-green-600 rounded-lg border border-green-200 hover:bg-green-100"
-                                          title="Mark Paid"
+                                          onClick={() => { setSelectedInvoice(tx); updateUrlForInvoice(tx.id); }}
+                                          className="p-2 bg-indigo-50 text-indigo-600 rounded-lg border border-indigo-200 hover:bg-indigo-100"
+                                          title="View Bill"
                                        >
-                                           <CheckCircle2 size={18} />
+                                           <Eye size={18} />
                                        </button>
-                                   )}
+                                       {!isReadOnly && (
+                                           <button
+                                              onClick={() => handleSettle(tx)}
+                                              className="p-2 bg-green-50 text-green-600 rounded-lg border border-green-200 hover:bg-green-100"
+                                              title="Mark Paid"
+                                           >
+                                               <CheckCircle2 size={18} />
+                                           </button>
+                                       )}
+                                   </div>
                                </div>
                            </div>
                        ))}

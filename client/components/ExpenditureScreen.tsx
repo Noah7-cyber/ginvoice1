@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, X, Save, Calendar, DollarSign, Tag, FileText, CreditCard, Pencil, Trash2, Settings, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import { Plus, X, Save, Calendar, DollarSign, Tag, FileText, CreditCard, Pencil, Trash2, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
 import { useToast } from '../components/ToastProvider';
 import { getCategories } from '../services/api';
-import CategoryManager from './CategoryManager';
 import { Category } from '../types';
 
 // Update Interface to match your types.ts
@@ -34,7 +33,6 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
 
   // Categories
   const [categories, setCategories] = useState<Category[]>([]);
-  const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
 
   useEffect(() => {
     const fetchCats = async () => {
@@ -261,6 +259,41 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
                         {exp.category}
                     </span>
                 </div>
+                {!isReadOnly && (
+                    <div className="flex justify-end gap-3 border-t border-gray-100 pt-3 mt-3">
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setFormData({
+                                    title: exp.title,
+                                    amount: exp.amount.toString(),
+                                    category: exp.category,
+                                    date: exp.date ? new Date(exp.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+                                    description: exp.description || '',
+                                    paymentMethod: exp.paymentMethod || 'Cash',
+                                    expenseType: exp.expenseType || 'business',
+                                    flowType: exp.flowType || 'out'
+                                });
+                                setEditingId(exp.id);
+                                setShowAddModal(true);
+                            }}
+                            className="p-2 text-gray-400 hover:text-blue-600 transition-colors"
+                        >
+                            <Pencil size={16} />
+                        </button>
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                if (window.confirm('Delete this expenditure?')) {
+                                    onDeleteExpenditure(exp.id);
+                                }
+                            }}
+                            className="p-2 text-gray-400 hover:text-red-600 transition-colors"
+                        >
+                            <Trash2 size={16} />
+                        </button>
+                    </div>
+                )}
             </div>
         ))}
       </div>
@@ -412,7 +445,7 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
 
                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                  <div className="flex gap-2">
-                    <select name="category" value={formData.category} onChange={handleInputChange} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg outline-none">
+                    <select name="category" value={formData.category} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg outline-none">
                         <option value="">Category...</option>
                         {categories.filter(c => c.type === 'expense').map(cat => <option key={cat.id} value={cat.name}>{cat.name}</option>)}
                         {!categories.some(c => c.name === 'Rent') && <option value="Rent">Rent</option>}
@@ -422,14 +455,6 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
                         {!categories.some(c => c.name === 'Withholding Tax (WHT)') && <option value="Withholding Tax (WHT)">Withholding Tax (WHT)</option>}
                         {!categories.some(c => c.name === 'Other') && <option value="Other">Other</option>}
                     </select>
-                    <button
-                        type="button"
-                        onClick={() => setIsCategoryManagerOpen(true)}
-                        className="p-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200"
-                        title="Manage Categories"
-                    >
-                        <Settings size={18} />
-                    </button>
                  </div>
                  <select name="paymentMethod" value={formData.paymentMethod} onChange={handleInputChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg outline-none"><option value="Cash">Cash</option><option value="Bank Transfer">Bank Transfer</option></select>
                </div>
@@ -446,21 +471,12 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
       {!isReadOnly && (
           <button
               onClick={() => setShowAddModal(true)}
-              className="md:hidden fixed bottom-24 right-6 z-50 w-12 h-12 bg-blue-600 rounded-full shadow-lg flex items-center justify-center text-white hover:bg-blue-700 transition-all active:scale-95 border-2 border-white"
+              className="md:hidden fixed bottom-6 right-6 z-50 w-14 h-14 bg-blue-600 rounded-full shadow-lg flex items-center justify-center text-white hover:bg-blue-700 transition-all active:scale-95 border-2 border-white"
           >
               <Plus size={24} />
           </button>
       )}
 
-      {/* Category Manager */}
-      <CategoryManager
-        isOpen={isCategoryManagerOpen}
-        onClose={() => setIsCategoryManagerOpen(false)}
-        categories={categories}
-        setCategories={setCategories}
-        isOnline={isOnline}
-        mode="expense"
-      />
     </div>
   );
 };
