@@ -16,7 +16,7 @@ router.get('/', auth, async (req, res) => {
       return {
         ...e,
         amount,
-        flowType: e.flowType || (amount >= 0 ? 'in' : 'out')
+        flowType: amount >= 0 ? 'in' : 'out'
       };
     });
 
