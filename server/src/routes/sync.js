@@ -117,22 +117,28 @@ router.get('/', auth, async (req, res) => {
     }));
 
     const expenditures = rawExpenditures.map(e => {
-      let amount = parseDecimal(e.amount);
-      let flowType = e.flowType;
+      const val = parseDecimal(e.amount);
+      let finalAmount = val;
+      let finalFlow = 'out'; // Default
 
-      if (flowType === 'out') {
-        amount = -Math.abs(amount);
-      } else if (flowType === 'in') {
-        amount = Math.abs(amount);
+      // 1. Respect existing label if present
+      if (e.flowType === 'out') {
+        finalFlow = 'out';
+        finalAmount = -Math.abs(val); // Force Negative
+      } else if (e.flowType === 'in') {
+        finalFlow = 'in';
+        finalAmount = Math.abs(val);  // Force Positive
       } else {
-        flowType = amount >= 0 ? 'in' : 'out';
+        // 2. Fallback to sign detection for new/undefined records
+        finalFlow = val >= 0 ? 'in' : 'out';
+        finalAmount = val;
       }
 
       return {
         ...e,
         id: (e.id && e.id !== 'undefined' && e.id !== 'null') ? e.id : e._id.toString(),
-        amount,
-        flowType
+        amount: finalAmount,
+        flowType: finalFlow
       };
     });
 
@@ -274,6 +280,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
                 title: e.title,
                 description: e.description,
                 paymentMethod: e.paymentMethod,
+                expenseType: e.expenseType || 'business',
                 updatedAt: new Date(),
                 flowType: val >= 0 ? 'in' : 'out'
               }
