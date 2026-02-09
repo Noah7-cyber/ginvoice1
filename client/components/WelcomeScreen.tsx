@@ -132,23 +132,26 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onRegister, onLogin }) =>
       </section>
 
       {/* NEW: Tax Readiness Section */}
-      <section className="py-16 bg-gray-50 border-b border-gray-100">
+      <section className="py-16 bg-white border-b border-gray-100">
          <div className="max-w-6xl mx-auto px-4">
-            <div className="flex flex-col md:flex-row items-center gap-8 bg-white p-8 rounded-[2rem] border border-indigo-100 shadow-sm">
-                <div className="bg-indigo-100 p-6 rounded-3xl text-indigo-600 mb-4 md:mb-0">
+            <div className="flex flex-col md:flex-row items-center gap-8 bg-gradient-to-br from-slate-900 to-slate-800 p-8 md:p-12 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
+                {/* Background Pattern */}
+                <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+
+                <div className="bg-white/10 p-6 rounded-3xl text-emerald-400 mb-4 md:mb-0 backdrop-blur-sm border border-white/10">
                     <Receipt size={48} />
                 </div>
-                <div className="flex-1 space-y-3 text-center md:text-left">
-                    <h2 className="text-3xl font-black text-gray-900">Master the 2026 Tax Laws</h2>
-                    <p className="text-lg text-gray-500 font-medium">
+                <div className="flex-1 space-y-3 text-center md:text-left z-10">
+                    <h2 className="text-3xl md:text-4xl font-black text-white">Master the 2026 Tax Laws</h2>
+                    <p className="text-lg text-gray-300 font-medium leading-relaxed">
                         Stop guessing. Automatically estimate your VAT and liability based on your actual sales.
                         Use clear records to negotiate with confidence and avoid overpaying.
                     </p>
                 </div>
-                <div>
+                <div className="z-10">
                     <button
                        onClick={onRegister}
-                       className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100"
+                       className="px-8 py-4 bg-white text-slate-900 rounded-2xl font-black hover:bg-gray-100 transition-all shadow-xl hover:scale-105 active:scale-95"
                     >
                         Start Tracking
                     </button>
