@@ -5,7 +5,7 @@ class NigeriaSmallBusinessStrategy {
     let totalCashExpenses = 0;
 
     expenses.forEach(exp => {
-      const amount = parseFloat(exp.amount.toString());
+      const amount = Math.abs(parseFloat(exp.amount.toString()));
       const flow = exp.flowType || 'out'; // 'out' or 'in'
       const type = exp.expenseType || 'business';
       const taxCat = exp.taxCategory;

@@ -142,9 +142,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
         'totalAmount'
     );
 
-    const expensesTotal = expenditures.reduce((sum, e) => e.flowType === 'out' ? sum + (e.amount || 0) : sum, 0);
-    const incomeTotal = expenditures.reduce((sum, e) => e.flowType === 'in' ? sum + (e.amount || 0) : sum, 0);
-    const expensesBalance = incomeTotal - expensesTotal; // Should be negative if more expenses
+    const expensesTotal = expenditures.reduce((sum, e) => e.flowType === 'out' ? sum + Math.abs(e.amount || 0) : sum, 0);
+    const incomeTotal = expenditures.reduce((sum, e) => e.flowType === 'in' ? sum + Math.abs(e.amount || 0) : sum, 0);
+    const expensesBalance = incomeTotal - expensesTotal;
 
     return { totalRevenue, totalProfit, totalSales: transactions.length, cashSales, transferSales, posSales, totalDebt, shopCost, shopWorth, dailyRevenue, expensesTotal, incomeTotal, expensesBalance };
   }, [transactions, products, expenditures]);
