@@ -12,11 +12,21 @@ router.get('/', auth, async (req, res) => {
     }).sort({ date: -1 }).lean();
 
     const expenditures = rawExpenditures.map(e => {
-      const amount = parseFloat((e.amount || 0).toString());
+      let amount = parseFloat((e.amount || 0).toString());
+      let flowType = e.flowType;
+
+      if (flowType === 'out') {
+        amount = -Math.abs(amount);
+      } else if (flowType === 'in') {
+        amount = Math.abs(amount);
+      } else {
+        flowType = amount >= 0 ? 'in' : 'out';
+      }
+
       return {
         ...e,
         amount,
-        flowType: amount >= 0 ? 'in' : 'out'
+        flowType
       };
     });
 

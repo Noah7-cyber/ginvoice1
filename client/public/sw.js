@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ginvoice-v27-expenditure-sync-fix';
+const CACHE_NAME = 'ginvoice-v28-expenditure-hybrid-norm';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
