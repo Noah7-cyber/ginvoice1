@@ -125,12 +125,17 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
       return;
     }
     try {
+      // Force Sign Logic: Money Out must be negative, Money In must be positive.
+      let finalAmount = parseFloat(formData.amount);
+      if (formData.flowType === 'out') finalAmount = -Math.abs(finalAmount);
+      else finalAmount = Math.abs(finalAmount);
+
       if (editingId) {
         // Edit Mode
         const updatedExpenditure: Expenditure = {
           id: editingId,
           title: formData.title,
-          amount: parseFloat(formData.amount),
+          amount: finalAmount,
           category: formData.category,
           date: formData.date,
           description: formData.description,
@@ -145,7 +150,7 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
         const newExpenditure: Expenditure = {
           id: crypto.randomUUID(), // Client-side ID
           title: formData.title,
-          amount: parseFloat(formData.amount),
+          amount: finalAmount,
           category: formData.category,
           date: formData.date,
           description: formData.description,
