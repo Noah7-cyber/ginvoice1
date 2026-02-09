@@ -82,7 +82,7 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
 
     const calculateNet = (list: Expenditure[]) => list.reduce((sum, e) => {
         const val = e.amount || 0;
-        return e.flowType === 'in' ? sum - val : sum + val;
+        return sum + val;
     }, 0);
 
     const thisMonthTotal = calculateNet(thisMonth);
@@ -233,7 +233,7 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
                      }
                      setFormData({
                         title: exp.title,
-                        amount: exp.amount.toString(),
+                        amount: Math.abs(exp.amount).toString(),
                         category: exp.category,
                         date: exp.date ? new Date(exp.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
                         description: exp.description || '',
@@ -248,7 +248,7 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
                 <div className="flex justify-between items-center mb-2">
                     <h3 className="font-bold text-gray-900 text-left">{exp.title}</h3>
                     <span className={`font-bold ${exp.flowType === 'in' ? 'text-emerald-600' : 'text-red-600'}`}>
-                        {new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(exp.amount || 0)}
+                        {new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(Math.abs(exp.amount || 0))}
                     </span>
                 </div>
                 <div className="flex justify-between items-center">
@@ -266,7 +266,7 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
                                 e.stopPropagation();
                                 setFormData({
                                     title: exp.title,
-                                    amount: exp.amount.toString(),
+                                    amount: Math.abs(exp.amount).toString(),
                                     category: exp.category,
                                     date: exp.date ? new Date(exp.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
                                     description: exp.description || '',
@@ -326,7 +326,7 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600">{exp.paymentMethod}</td>
                     <td className={`px-6 py-4 text-sm font-bold text-right ${exp.flowType === 'in' ? 'text-emerald-600' : 'text-red-600'}`}>
-                      {new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(exp.amount || 0)}
+                      {new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(Math.abs(exp.amount || 0))}
                     </td>
                     <td className="px-6 py-4 text-sm text-right flex justify-end gap-2">
                       {isReadOnly ? (
@@ -341,7 +341,7 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
                               }
                               setFormData({
                                 title: exp.title,
-                                amount: exp.amount.toString(),
+                                amount: Math.abs(exp.amount).toString(),
                                 category: exp.category,
                                 date: exp.date ? new Date(exp.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
                                 description: exp.description || '',
