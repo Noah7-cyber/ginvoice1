@@ -12,21 +12,27 @@ router.get('/', auth, async (req, res) => {
     }).sort({ date: -1 }).lean();
 
     const expenditures = rawExpenditures.map(e => {
-      let amount = parseFloat((e.amount || 0).toString());
-      let flowType = e.flowType;
+      const val = parseFloat((e.amount || 0).toString());
+      let finalAmount = val;
+      let finalFlow = 'out'; // Default
 
-      if (flowType === 'out') {
-        amount = -Math.abs(amount);
-      } else if (flowType === 'in') {
-        amount = Math.abs(amount);
+      // 1. Respect existing label if present
+      if (e.flowType === 'out') {
+        finalFlow = 'out';
+        finalAmount = -Math.abs(val); // Force Negative
+      } else if (e.flowType === 'in') {
+        finalFlow = 'in';
+        finalAmount = Math.abs(val);  // Force Positive
       } else {
-        flowType = amount >= 0 ? 'in' : 'out';
+        // 2. Fallback to sign detection for new/undefined records
+        finalFlow = val >= 0 ? 'in' : 'out';
+        finalAmount = val;
       }
 
       return {
         ...e,
-        amount,
-        flowType
+        amount: finalAmount,
+        flowType: finalFlow
       };
     });
 
