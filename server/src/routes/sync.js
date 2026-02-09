@@ -116,11 +116,15 @@ router.get('/', auth, async (req, res) => {
       balance: parseDecimal(t.balance)
     }));
 
-    const expenditures = rawExpenditures.map(e => ({
-      ...e,
-      id: (e.id && e.id !== 'undefined' && e.id !== 'null') ? e.id : e._id.toString(),
-      amount: parseDecimal(e.amount)
-    }));
+    const expenditures = rawExpenditures.map(e => {
+      const amount = parseDecimal(e.amount);
+      return {
+        ...e,
+        id: (e.id && e.id !== 'undefined' && e.id !== 'null') ? e.id : e._id.toString(),
+        amount,
+        flowType: amount >= 0 ? 'in' : 'out'
+      };
+    });
 
     const notifications = (rawNotifications || []).map(n => ({
         id: n._id.toString(),
@@ -245,13 +249,29 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
     }
 
     if (expenditures.length > 0) {
-      const expOps = expenditures.map((e) => ({
-        updateOne: {
-          filter: { business: businessId, id: e.id },
-          update: { $set: { business: businessId, id: e.id, date: e.date ? new Date(e.date) : new Date(), amount: toDecimal(e.amount), category: e.category, title: e.title, description: e.description, paymentMethod: e.paymentMethod, updatedAt: new Date() } },
-          upsert: true
-        }
-      }));
+      const expOps = expenditures.map((e) => {
+        const val = parseDecimal(e.amount);
+        return {
+          updateOne: {
+            filter: { business: businessId, id: e.id },
+            update: {
+              $set: {
+                business: businessId,
+                id: e.id,
+                date: e.date ? new Date(e.date) : new Date(),
+                amount: toDecimal(e.amount),
+                category: e.category,
+                title: e.title,
+                description: e.description,
+                paymentMethod: e.paymentMethod,
+                updatedAt: new Date(),
+                flowType: val >= 0 ? 'in' : 'out'
+              }
+            },
+            upsert: true
+          }
+        };
+      });
       await Expenditure.bulkWrite(expOps);
     }
 
