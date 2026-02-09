@@ -354,15 +354,17 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
                <p className="text-sm font-medium text-gray-500">Monthly Sales</p>
                <h4 className="text-2xl font-black text-gray-900">{CURRENCY}{(stats.monthlySales || 0).toLocaleString()}</h4>
                {/* Date Picker Fix */}
-               <input
-                 type="month"
-                 className="absolute inset-0 opacity-0 cursor-pointer z-50 w-full h-full"
-                 onChange={(e) => {
-                    // Logic to trigger fetch with ?date=YYYY-MM
-                    // Assuming getAnalytics handles params or we update local filters
-                    // For now, this confirms the fix for layout/immediate trigger
-                 }}
-               />
+               <div className="absolute inset-0 z-50 w-full h-full" onPointerDown={(e) => e.stopPropagation()}>
+                   <input
+                     type="month"
+                     className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                     onChange={(e) => {
+                        // Logic to trigger fetch with ?date=YYYY-MM
+                        // Assuming getAnalytics handles params or we update local filters
+                        // For now, this confirms the fix for layout/immediate trigger
+                     }}
+                   />
+               </div>
                <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider mt-1">Tap to change month</p>
              </div>
            )}
