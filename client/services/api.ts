@@ -311,6 +311,19 @@ export const deleteExpenditure = async (id: string) => {
   });
 };
 
+export const sendChat = async (message: string, history: any[]) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/support/chat', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ message, history })
+  });
+};
+
 // Admin API
 export const adminLogin = async (email: string, password: string) => {
     return request('/api/admin/login', {
