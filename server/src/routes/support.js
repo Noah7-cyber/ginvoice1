@@ -46,6 +46,13 @@ try {
   if (process.env.GEMINI_API_KEY) {
     model = genAI.getGenerativeModel({
       model: "gemini-1.5-flash",
+      // 1. Move instructions here
+      systemInstruction: `You are the GInvoice Assistant. You are helpful, friendly, and smart.
+      You can answer specific business questions using your tools.
+      If the user wants to perform an action, append a navigation tag to your response: [[NAVIGATE:screen_name]].
+      Valid screens: sales, inventory, expenditure, dashboard, settings.
+      Current Date: ${new Date().toISOString()}
+      When using get_business_data, if the user doesn't specify a date range, ask for clarification OR assume "this month" or "all time" based on context, but explicitly state your assumption.`,
       tools: [
         businessDataTool,
         { googleSearch: {} } // Enable Google Search
@@ -75,26 +82,19 @@ router.post('/chat', auth, async (req, res) => {
 
     // Map frontend history to Gemini format
     // Filter out internal system messages or keep them if text is present
-    const chatHistory = (history || []).map(msg => ({
+    let chatHistory = (history || []).map(msg => ({
       role: msg.from === 'bot' ? 'model' : 'user',
       parts: [{ text: msg.text }]
     }));
 
-    // Context for the AI
-    const systemInstruction = `
-      You are the GInvoice Assistant. You are helpful, friendly, and smart.
-      You can answer general questions (using Google Search) and specific business questions (using your tools).
-      If the user wants to perform an action, append a navigation tag to your response: [[NAVIGATE:screen_name]].
-      Valid screens: sales, inventory, expenditure, dashboard, settings.
+    // CRITICAL FIX: Ensure history doesn't start with 'model'
+    if (chatHistory.length > 0 && chatHistory[0].role === 'model') {
+        chatHistory.shift();
+    }
 
-      Today's date is ${new Date().toDateString()}.
-
-      When using get_business_data, if the user doesn't specify a date range, ask for clarification OR assume "this month" or "all time" based on context, but explicitly state your assumption.
-    `;
-
+    // 2. Start with valid history
     const chat = model.startChat({
-      history: chatHistory,
-      systemInstruction: systemInstruction,
+      history: chatHistory
     });
 
     const result = await chat.sendMessage(message);
@@ -111,8 +111,9 @@ router.post('/chat', auth, async (req, res) => {
         if (call.name === 'get_business_data') {
             const args = call.args;
             try {
-                // Execute the tool with businessId from auth middleware
-                const toolResult = await get_business_data(args, { businessId: req.businessId });
+                // Execute the tool with req.business._id as requested
+                // Note: get_business_data expects { businessId } in the second arg
+                const toolResult = await get_business_data(args, { businessId: req.business._id });
 
                 // Send the result back to the model
                 const result2 = await chat.sendMessage([
