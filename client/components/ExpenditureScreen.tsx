@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, X, Save, Calendar, DollarSign, Tag, FileText, CreditCard, Pencil, Trash2, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import { Plus, X, Save, Calendar, DollarSign, Tag, FileText, CreditCard, Pencil, Trash2, ArrowUpRight, ArrowDownLeft, Layers } from 'lucide-react';
 import { useToast } from '../components/ToastProvider';
 import { getCategories } from '../services/api';
 import { Category } from '../types';
+import CategoryManager from './CategoryManager';
 
 // Update Interface to match your types.ts
 interface Expenditure {
@@ -30,6 +31,7 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const { addToast } = useToast();
+  const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
 
   // Categories
   const [categories, setCategories] = useState<Category[]>([]);
@@ -115,7 +117,7 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
       if (startDate && e.date < startDate) return false;
       if (endDate && e.date > endDate) return false;
       return true;
-    });
+    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [expenditures, startDate, endDate]);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -182,7 +184,7 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
   };
 
   return (
-    <div className="p-6">
+    <div className="p-6 relative min-h-screen">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Shop Expenses</h1>
 
@@ -211,6 +213,13 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
 
            {!isReadOnly && (
              <>
+                <button
+                    onClick={() => setIsCategoryManagerOpen(true)}
+                    className="flex items-center justify-center px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-bold shadow-sm"
+                >
+                    <Layers className="w-5 h-5 mr-2" />
+                    <span className="hidden md:inline">Categories</span>
+                </button>
                 <button
                     onClick={() => setShowAddModal(true)}
                     className="hidden md:flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-bold shadow-lg shadow-blue-100"
@@ -476,11 +485,20 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
       {!isReadOnly && (
           <button
               onClick={() => setShowAddModal(true)}
-              className="md:hidden fixed bottom-6 right-6 z-50 w-14 h-14 bg-blue-600 rounded-full shadow-lg flex items-center justify-center text-white hover:bg-blue-700 transition-all active:scale-95 border-2 border-white"
+              className="md:hidden absolute top-[70%] right-6 z-50 w-14 h-14 bg-blue-600 rounded-full shadow-lg flex items-center justify-center text-white hover:bg-blue-700 transition-all active:scale-95 border-2 border-white"
           >
               <Plus size={24} />
           </button>
       )}
+
+      <CategoryManager
+        isOpen={isCategoryManagerOpen}
+        onClose={() => setIsCategoryManagerOpen(false)}
+        categories={categories}
+        setCategories={setCategories}
+        isOnline={isOnline}
+        mode="expense"
+      />
 
     </div>
   );
