@@ -41,16 +41,32 @@ const businessDataTool = {
   ]
 };
 
-const model = genAI.getGenerativeModel({
-  model: "gemini-1.5-flash",
-  tools: [
-    businessDataTool,
-    { googleSearch: {} } // Enable Google Search
-  ],
-});
+let model;
+try {
+  if (process.env.GEMINI_API_KEY) {
+    model = genAI.getGenerativeModel({
+      model: "gemini-1.5-flash",
+      tools: [
+        businessDataTool,
+        { googleSearch: {} } // Enable Google Search
+      ],
+    });
+  }
+} catch (err) {
+  console.error("Failed to initialize Gemini model:", err);
+}
 
 router.post('/chat', auth, async (req, res) => {
   try {
+    if (!process.env.GEMINI_API_KEY) {
+       console.error("GEMINI_API_KEY not configured");
+       return res.status(503).json({ text: "AI Assistant is not currently configured. Please try again later." });
+    }
+
+    if (!model) {
+       return res.status(503).json({ text: "AI Service initialization failed. Please try again later." });
+    }
+
     const { message, history } = req.body;
 
     if (!message) {
