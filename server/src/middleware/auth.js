@@ -34,6 +34,9 @@ const authMiddleware = async (req, res, next) => {
       role: payload.role
     };
 
+    // Attach the full business object as requested
+    req.business = business;
+
     // Force Logout Logic: Check credential version
     // Only check for non-owners (staff) as owners are the authority.
     if (payload.role !== 'owner') {
