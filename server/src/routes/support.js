@@ -1,147 +1,199 @@
 const express = require('express');
 const router = express.Router();
-const { sendSupportEmail } = require('../services/mail');
-const auth = require('../middleware/auth');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const { get_business_data } = require('../services/aiTools');
+const auth = require('../middleware/auth');
+const mongoose = require('mongoose');
+const Transaction = require('../models/Transaction');
+const Expenditure = require('../models/Expenditure');
+const Product = require('../models/Product');
+const { sendSupportEmail } = require('../services/mail');
 
-// Initialize Gemini
-// Ensure GEMINI_API_KEY is in your .env file
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-
-// Define the tool definition for Gemini
-const businessDataTool = {
-  functionDeclarations: [
-    {
-      name: "get_business_data",
-      description: "Get financial and inventory data for the business. Use this to answer questions about revenue, profit, expenses, or stock counts.",
-      parameters: {
-        type: "OBJECT",
-        properties: {
-          metric: {
-            type: "STRING",
-            description: "The metric to retrieve. Options: 'revenue', 'profit', 'expenses', 'inventory_count'",
-          },
-          startDate: {
-            type: "STRING",
-            description: "Start date in YYYY-MM-DD format. Default to beginning of time if not specified.",
-          },
-          endDate: {
-            type: "STRING",
-            description: "End date in YYYY-MM-DD format. Default to today if not specified.",
-          },
-          groupBy: {
-            type: "STRING",
-            description: "Grouping for the data (e.g., 'day', 'month'). Optional.",
-          },
-        },
-        required: ["metric"],
+// --- 1. DEFINE THE TOOLS (Calculator) ---
+const businessTool = {
+  name: "get_business_data",
+  description: "Calculates specific business metrics (revenue, profit, expenses, inventory) for a given date range.",
+  parameters: {
+    type: "OBJECT",
+    properties: {
+      metric: {
+        type: "STRING",
+        description: "The metric to calculate.",
+        enum: ["revenue", "profit", "expenses", "inventory_count"]
       },
-    }
-  ]
+      startDate: { type: "STRING", description: "Start date (YYYY-MM-DD)." },
+      endDate: { type: "STRING", description: "End date (YYYY-MM-DD)." }
+    },
+    required: ["metric"]
+  }
 };
 
-let model;
-try {
-  if (process.env.GEMINI_API_KEY) {
-    model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
-      // 1. Move instructions here
-      systemInstruction: `You are the GInvoice Assistant. You are helpful, friendly, and smart.
-      You can answer specific business questions using your tools.
-      If the user wants to perform an action, append a navigation tag to your response: [[NAVIGATE:screen_name]].
-      Valid screens: sales, inventory, expenditure, dashboard, settings.
-      Current Date: ${new Date().toISOString()}
-      When using get_business_data, if the user doesn't specify a date range, ask for clarification OR assume "this month" or "all time" based on context, but explicitly state your assumption.`,
-      tools: [
-        businessDataTool,
-        { googleSearch: {} } // Enable Google Search
-      ],
-    });
+// --- 2. DEFINE THE TOOL EXECUTION LOGIC ---
+async function executeBusinessTool(businessId, { metric, startDate, endDate }) {
+  // Ensure we have a valid ID string
+  const businessIdStr = businessId.toString();
+  const businessIdObj = new mongoose.Types.ObjectId(businessIdStr);
+
+  const start = startDate ? new Date(startDate) : new Date(0);
+  const end = endDate ? new Date(endDate) : new Date();
+  // Set end of day for end date
+  if (endDate && endDate.length <= 10) {
+      end.setHours(23, 59, 59, 999);
   }
-} catch (err) {
-  console.error("Failed to initialize Gemini model:", err);
+
+  try {
+    if (metric === 'revenue') {
+      // Transaction uses businessId (ObjectId) and transactionDate
+      const result = await Transaction.aggregate([
+        {
+            $match: {
+                businessId: businessIdObj,
+                transactionDate: { $gte: start, $lte: end }
+            }
+        },
+        { $group: { _id: null, total: { $sum: "$totalAmount" } } }
+      ]);
+      return { revenue: result[0]?.total || 0, currency: "NGN" };
+    }
+
+    if (metric === 'expenses') {
+      // Expenditure uses business (ObjectId) and date
+      const result = await Expenditure.aggregate([
+        {
+            $match: {
+                business: businessIdObj,
+                date: { $gte: start, $lte: end },
+                flowType: 'out' // Only count expenses
+            }
+        },
+        { $group: { _id: null, total: { $sum: "$amount" } } }
+      ]);
+      return { expenses: parseFloat(result[0]?.total?.toString() || 0), currency: "NGN" };
+    }
+
+    if (metric === 'inventory_count') {
+      // Product uses businessId (String)
+      const count = await Product.countDocuments({ businessId: businessIdStr });
+      return { total_products: count };
+    }
+
+    if (metric === 'profit') {
+       // Simple estimation: Revenue - Expenses (for the selected period)
+       // Revenue
+       const revResult = await Transaction.aggregate([
+        {
+            $match: {
+                businessId: businessIdObj,
+                transactionDate: { $gte: start, $lte: end }
+            }
+        },
+        { $group: { _id: null, total: { $sum: "$totalAmount" } } }
+      ]);
+
+      // Expenses
+      const expResult = await Expenditure.aggregate([
+        {
+            $match: {
+                business: businessIdObj,
+                date: { $gte: start, $lte: end },
+                flowType: 'out'
+            }
+        },
+        { $group: { _id: null, total: { $sum: "$amount" } } }
+      ]);
+
+      const revenue = revResult[0]?.total || 0;
+      const expenses = parseFloat(expResult[0]?.total?.toString() || 0);
+
+      return {
+          estimated_profit: revenue - expenses,
+          revenue,
+          expenses,
+          currency: "NGN"
+      };
+    }
+
+    return { error: "Metric not found" };
+  } catch (err) {
+    console.error("Tool Execution Error:", err);
+    return { error: "Calculation failed" };
+  }
 }
 
+// --- 3. THE CHAT ROUTE ---
 router.post('/chat', auth, async (req, res) => {
   try {
+    // A. Critical API Key Check
     if (!process.env.GEMINI_API_KEY) {
-       console.error("GEMINI_API_KEY not configured");
-       return res.status(503).json({ text: "AI Assistant is not currently configured. Please try again later." });
+      console.error("CRITICAL: GEMINI_API_KEY is missing in environment variables.");
+      return res.status(503).json({ text: "System Error: AI Service not configured." });
     }
 
-    if (!model) {
-       return res.status(503).json({ text: "AI Service initialization failed. Please try again later." });
-    }
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const userMessage = req.body.message;
+    const history = req.body.history || [];
 
-    const { message, history } = req.body;
+    // B. Initialize Model with SYSTEM INSTRUCTION (Correct Placement)
+    const model = genAI.getGenerativeModel({
+      model: "gemini-1.5-flash",
+      systemInstruction: `You are the GInvoice Financial Assistant.
+      - Help the user with business questions using your tools.
+      - If they ask to navigate, append [[NAVIGATE:screen_name]] to your response.
+      - Valid screens: sales, inventory, expenditure, dashboard, settings.
+      - Current Date: ${new Date().toDateString()}`,
+      tools: { functionDeclarations: [businessTool] }
+    });
 
-    if (!message) {
-      return res.status(400).json({ message: 'Message is required' });
-    }
-
-    // Map frontend history to Gemini format
-    // Filter out internal system messages or keep them if text is present
-    let chatHistory = (history || []).map(msg => ({
+    // Clean history for Gemini (remove leading model messages)
+    let chatHistory = history.map(msg => ({
       role: msg.from === 'bot' ? 'model' : 'user',
       parts: [{ text: msg.text }]
     }));
 
-    // CRITICAL FIX: Ensure history doesn't start with 'model'
     if (chatHistory.length > 0 && chatHistory[0].role === 'model') {
         chatHistory.shift();
     }
 
-    // 2. Start with valid history
+    // C. Start Chat with Correct History
     const chat = model.startChat({
       history: chatHistory
     });
 
-    const result = await chat.sendMessage(message);
+    // D. Send Message
+    const result = await chat.sendMessage(userMessage);
     const response = await result.response;
+    const functionCalls = response.functionCalls();
 
-    // Check for function calls
-    const calls = response.functionCalls();
+    // E. Handle Calculator Tools
+    if (functionCalls && functionCalls.length > 0) {
+      const call = functionCalls[0];
+      if (call.name === 'get_business_data') {
+        // FIX: Use req.business._id instead of req.businessId
+        // Also ensure req.business is available (auth middleware fixed earlier)
+        const businessId = req.business ? req.business._id : req.businessId;
 
-    let text = "";
-
-    if (calls && calls.length > 0) {
-        // We only support one function for now
-        const call = calls[0];
-        if (call.name === 'get_business_data') {
-            const args = call.args;
-            try {
-                // Execute the tool with req.business._id as requested
-                // Note: get_business_data expects { businessId } in the second arg
-                const toolResult = await get_business_data(args, { businessId: req.business._id });
-
-                // Send the result back to the model
-                const result2 = await chat.sendMessage([
-                    {
-                        functionResponse: {
-                            name: 'get_business_data',
-                            response: { result: toolResult }
-                        }
-                    }
-                ]);
-
-                text = result2.response.text();
-            } catch (err) {
-                console.error("Tool execution failed", err);
-                text = "I'm sorry, I encountered an error while accessing your business data. Please try again later.";
-            }
-        } else {
-             text = response.text();
+        if (!businessId) {
+             return res.json({ text: "I'm having trouble identifying your business account. Please try logging in again." });
         }
-    } else {
-        text = response.text();
+
+        const toolData = await executeBusinessTool(businessId, call.args);
+
+        // Feed result back to AI
+        const result2 = await chat.sendMessage([{
+          functionResponse: {
+            name: 'get_business_data',
+            response: toolData
+          }
+        }]);
+        return res.json({ text: result2.response.text() });
+      }
     }
 
-    res.json({ text });
+    // F. Standard Response
+    return res.json({ text: response.text() });
 
-  } catch (err) {
-    console.error('AI Chat error', err);
-    res.status(500).json({ message: 'AI service currently unavailable.' });
+  } catch (error) {
+    console.error('AI Route Error:', error);
+    res.status(500).json({ text: "I'm having trouble connecting right now. Please try again." });
   }
 });
 
