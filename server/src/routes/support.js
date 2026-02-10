@@ -2,6 +2,131 @@ const express = require('express');
 const router = express.Router();
 const { sendSupportEmail } = require('../services/mail');
 const auth = require('../middleware/auth');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { get_business_data } = require('../services/aiTools');
+
+// Initialize Gemini
+// Ensure GEMINI_API_KEY is in your .env file
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+
+// Define the tool definition for Gemini
+const businessDataTool = {
+  functionDeclarations: [
+    {
+      name: "get_business_data",
+      description: "Get financial and inventory data for the business. Use this to answer questions about revenue, profit, expenses, or stock counts.",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          metric: {
+            type: "STRING",
+            description: "The metric to retrieve. Options: 'revenue', 'profit', 'expenses', 'inventory_count'",
+          },
+          startDate: {
+            type: "STRING",
+            description: "Start date in YYYY-MM-DD format. Default to beginning of time if not specified.",
+          },
+          endDate: {
+            type: "STRING",
+            description: "End date in YYYY-MM-DD format. Default to today if not specified.",
+          },
+          groupBy: {
+            type: "STRING",
+            description: "Grouping for the data (e.g., 'day', 'month'). Optional.",
+          },
+        },
+        required: ["metric"],
+      },
+    }
+  ]
+};
+
+const model = genAI.getGenerativeModel({
+  model: "gemini-1.5-flash",
+  tools: [
+    businessDataTool,
+    { googleSearch: {} } // Enable Google Search
+  ],
+});
+
+router.post('/chat', auth, async (req, res) => {
+  try {
+    const { message, history } = req.body;
+
+    if (!message) {
+      return res.status(400).json({ message: 'Message is required' });
+    }
+
+    // Map frontend history to Gemini format
+    // Filter out internal system messages or keep them if text is present
+    const chatHistory = (history || []).map(msg => ({
+      role: msg.from === 'bot' ? 'model' : 'user',
+      parts: [{ text: msg.text }]
+    }));
+
+    // Context for the AI
+    const systemInstruction = `
+      You are the GInvoice Assistant. You are helpful, friendly, and smart.
+      You can answer general questions (using Google Search) and specific business questions (using your tools).
+      If the user wants to perform an action, append a navigation tag to your response: [[NAVIGATE:screen_name]].
+      Valid screens: sales, inventory, expenditure, dashboard, settings.
+
+      Today's date is ${new Date().toDateString()}.
+
+      When using get_business_data, if the user doesn't specify a date range, ask for clarification OR assume "this month" or "all time" based on context, but explicitly state your assumption.
+    `;
+
+    const chat = model.startChat({
+      history: chatHistory,
+      systemInstruction: systemInstruction,
+    });
+
+    const result = await chat.sendMessage(message);
+    const response = await result.response;
+
+    // Check for function calls
+    const calls = response.functionCalls();
+
+    let text = "";
+
+    if (calls && calls.length > 0) {
+        // We only support one function for now
+        const call = calls[0];
+        if (call.name === 'get_business_data') {
+            const args = call.args;
+            try {
+                // Execute the tool with businessId from auth middleware
+                const toolResult = await get_business_data(args, { businessId: req.businessId });
+
+                // Send the result back to the model
+                const result2 = await chat.sendMessage([
+                    {
+                        functionResponse: {
+                            name: 'get_business_data',
+                            response: { result: toolResult }
+                        }
+                    }
+                ]);
+
+                text = result2.response.text();
+            } catch (err) {
+                console.error("Tool execution failed", err);
+                text = "I'm sorry, I encountered an error while accessing your business data. Please try again later.";
+            }
+        } else {
+             text = response.text();
+        }
+    } else {
+        text = response.text();
+    }
+
+    res.json({ text });
+
+  } catch (err) {
+    console.error('AI Chat error', err);
+    res.status(500).json({ message: 'AI service currently unavailable.' });
+  }
+});
 
 router.post('/contact', auth, async (req, res) => {
   try {

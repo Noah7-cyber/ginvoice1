@@ -1,129 +1,103 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, LifeBuoy, Send, User, Bot, Mail, MessageSquare } from 'lucide-react';
 import { useToast } from './ToastProvider';
-import { contactSupport } from '../services/api';
+import { sendChat } from '../services/api';
 import { loadState } from '../services/storage';
+import { TabId } from '../types';
 
 const SUPPORT_WHATSAPP = 'https://wa.me/2348051763431';
 
-// Quick Actions
-const QUICK_ACTIONS = [
-  { id: 'sell', label: 'How do I sell?' },
-  { id: 'stock', label: 'Add/Edit Items' },
-  { id: 'sync', label: 'Save my data' },
-  { id: 'debt', label: 'Who owes me?' },
-  { id: 'mistake', label: 'Fix a mistake' },
-  { id: 'pin', label: 'Forgot PIN' },
-  { id: 'verify', label: 'How to verify payment?' },
-  { id: 'discount', label: 'How to add discounts?' },
-  { id: 'invoice', label: 'How to create an Invoice?' },
-];
+interface SupportBotProps {
+  embed?: boolean;
+  onNavigate?: (tab: TabId) => void;
+}
 
-// Knowledge Base
-const KNOWLEDGE_BASE: Record<string, string> = {
-  // Sales & Day-to-Day
-  sell: "To make a sale, tap 'Sales' at the bottom. Tap the items the customer wants, then tap the checkout button (the shopping cart icon) to finish.",
-  mistake: "Sold the wrong thing? Go to the 'History' tab. Tap the sale you want to fix, and you can delete or edit it there.",
-  debt: "The 'Dashboard' shows a red card with 'Money Owed To You'. These are your debtors. You can also see unpaid balances in the 'History' tab.",
-
-  // Inventory
-  stock: "Go to 'Inventory'. To add a new item, tap the big Plus (+) button. To change a price or quantity, just tap the item in the list.",
-  categories: "You can organize items into groups (like Drinks, Snacks). Go to 'Inventory' and look for the 'Manage Categories' button.",
-
-  // Technical / Settings
-  sync: "The app saves to the cloud automatically when you have internet. You can also force a save by going to 'Settings' and tapping the 'Sync Now' button at the top.",
-  wifi: "You don't need internet to sell! You can work offline. Just connect to the internet once a day so your data backs up safely.",
-  pin: "If you forgot your PIN, go to Settings > Security to change it. If you are locked out completely, use the 'Forgot Password' option on the login screen.",
-  discount: "Want to give a customer a deal? Go to Settings > Preferences > Discount Codes to create a special code for them.",
-
-  // Subscription
-  sub: "To check your subscription, go to Settings > Billing. It will tell you when your next payment is due.",
-
-  // Existing Features
-  verify: "Go to Settings > Billing and enter your Paystack reference code. This will manually unlock your subscription.",
-  invoice: "To create an invoice, go to the 'Sales' tab. Add products to the cart by tapping them. Then open the cart sidebar (right side) to enter customer details and select a payment method. Click 'Complete Sale' to generate the receipt.",
-};
-
-const GENERIC_HELP = "I can help you with Sales, Inventory, and Expenses. Please select a topic below or contact our support team.";
-
-const SupportBot: React.FC<{ embed?: boolean }> = ({ embed = false }) => {
+const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate }) => {
   const { addToast } = useToast();
   const [open, setOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // State
   const [messages, setMessages] = useState<{ from: 'bot' | 'user'; text: string; isAction?: boolean }[]>([
-    { from: 'bot', text: 'Hello! I am your Ginvoice Assistant. How can I help you today?' }
+    { from: 'bot', text: 'Hello! I am your Ginvoice Assistant. I can help with business questions, math, or navigating the app.' }
   ]);
-  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
-  const [contactMode, setContactMode] = useState(false);
-  const [contactMessage, setContactMessage] = useState('');
 
   // Auto-scroll
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, open]);
+  }, [messages, open, isSending]);
+
+  // Focus input on open
+  useEffect(() => {
+      if (open && inputRef.current) {
+          setTimeout(() => inputRef.current?.focus(), 100);
+      }
+  }, [open]);
 
   const addMessage = (from: 'bot' | 'user', text: string, isAction = false) => {
     setMessages(prev => [...prev, { from, text, isAction }]);
   };
 
-  const handleQuickAction = (actionId: string, label: string) => {
-    addMessage('user', label);
+  const handleSendMessage = async (text: string) => {
+      if (!text.trim()) return;
 
-    // Simulate thinking
-    setTimeout(() => {
-        const response = KNOWLEDGE_BASE[actionId];
-        if (response) {
-            addMessage('bot', response);
-            setFailedAttempts(0); // Reset failure count on success
-        } else {
-            handleUnknownQuery();
-        }
-    }, 600);
-  };
-
-  const handleUnknownQuery = () => {
-      const newFailCount = failedAttempts + 1;
-      setFailedAttempts(newFailCount);
-
-      if (newFailCount >= 2) {
-          addMessage('bot', "I'm having trouble understanding. Would you like to contact a human support agent?", true);
-      } else {
-          addMessage('bot', GENERIC_HELP);
-      }
-  };
-
-  const handleSendSupportEmail = async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!contactMessage.trim()) return;
-      if (!navigator.onLine) {
-          addToast('Please connect to the internet.', 'error');
-          return;
-      }
-
+      const userMessage = text.trim();
+      addMessage('user', userMessage);
+      setInputText('');
       setIsSending(true);
+
       try {
-          const state = loadState();
-          const email = state?.business?.email || 'unknown@ginvoice.app';
-          const businessName = state?.business?.name || 'Unknown Business';
+          const response = await sendChat(userMessage, messages);
 
-          await contactSupport(contactMessage, email, businessName);
+          let botText = response.text || "I'm having trouble connecting right now.";
 
-          addMessage('user', `Support Request: ${contactMessage}`);
-          addMessage('bot', 'We have received your message. A support agent will reply to your email shortly.');
-          setContactMode(false);
-          setContactMessage('');
-          setFailedAttempts(0);
+          // Navigation Logic
+          const navMatch = botText.match(/\[\[NAVIGATE:([a-zA-Z]+)\]\]/);
+          if (navMatch && navMatch[1]) {
+              const screen = navMatch[1].toLowerCase();
+              // Validate screen is a valid TabId if possible, or cast it
+              // We accept common variations
+              let targetTab: TabId | null = null;
+              if (['sales', 'inventory', 'history', 'dashboard', 'expenditure', 'settings'].includes(screen)) {
+                  targetTab = screen as TabId;
+              }
+
+              // Strip the tag
+              botText = botText.replace(navMatch[0], '').trim();
+
+              if (targetTab && onNavigate) {
+                  onNavigate(targetTab);
+                  // Optional: add a small delay or message about navigating
+              }
+          }
+
+          addMessage('bot', botText);
+
       } catch (err) {
-          addToast('Failed to send message. Try again later.', 'error');
+          console.error(err);
+          addMessage('bot', "Sorry, I'm having trouble connecting to the server. Please check your internet connection.");
       } finally {
           setIsSending(false);
       }
   };
+
+  const handleSubmit = (e: React.FormEvent) => {
+      e.preventDefault();
+      handleSendMessage(inputText);
+  };
+
+  const QUICK_ACTIONS = [
+      "How much did I sell today?",
+      "Show me my profit this month",
+      "Do I have low stock?",
+      "Take me to Inventory",
+      "How to create an invoice?"
+  ];
 
   const ChatWindow = (
     <div className={`flex flex-col h-[500px] max-h-[60vh] md:max-h-[80vh] w-full max-w-md bg-white rounded-2xl overflow-hidden shadow-2xl animate-in slide-in-from-bottom duration-300 border border-gray-100`}>
@@ -134,7 +108,7 @@ const SupportBot: React.FC<{ embed?: boolean }> = ({ embed = false }) => {
                     <LifeBuoy size={18} />
                 </div>
                 <div>
-                    <h3 className="font-bold text-sm">Ginvoice Support</h3>
+                    <h3 className="font-bold text-sm">AI Assistant</h3>
                     <div className="flex items-center gap-1.5 opacity-80">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
                         <span className="text-[10px] font-medium uppercase tracking-wide">Online</span>
@@ -153,7 +127,7 @@ const SupportBot: React.FC<{ embed?: boolean }> = ({ embed = false }) => {
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${msg.from === 'user' ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-200 text-gray-600'}`}>
                         {msg.from === 'user' ? <User size={14} /> : <Bot size={14} />}
                     </div>
-                    <div className={`max-w-[80%] p-3 text-sm shadow-sm ${
+                    <div className={`max-w-[80%] p-3 text-sm shadow-sm whitespace-pre-wrap ${
                         msg.from === 'user'
                         ? 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white rounded-2xl rounded-tr-none'
                         : 'bg-white text-gray-700 rounded-2xl rounded-tl-none border border-gray-100'
@@ -162,79 +136,53 @@ const SupportBot: React.FC<{ embed?: boolean }> = ({ embed = false }) => {
                     </div>
                 </div>
             ))}
-
-            {/* Anti-Loop / Contact Trigger */}
-            {failedAttempts >= 2 && !contactMode && (
-                <div className="flex flex-col gap-2 pl-11">
-                    <button
-                        onClick={() => setContactMode(true)}
-                        className="bg-gray-900 text-white px-4 py-3 rounded-xl text-sm font-bold shadow-lg hover:scale-[1.02] transition-transform flex items-center gap-2 w-fit"
-                    >
-                        <Mail size={16} /> Contact Human Support
-                    </button>
-                    <a
-                        href={SUPPORT_WHATSAPP}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="bg-emerald-500 text-white px-4 py-3 rounded-xl text-sm font-bold shadow-lg hover:scale-[1.02] transition-transform flex items-center gap-2 w-fit"
-                    >
-                        <MessageSquare size={16} /> Chat on WhatsApp
-                    </a>
-                </div>
-            )}
-
-            {/* Contact Form */}
-            {contactMode && (
-                <div className="pl-11 pr-4 animate-in fade-in slide-in-from-bottom-2">
-                    <form onSubmit={handleSendSupportEmail} className="bg-white p-4 rounded-xl border shadow-sm space-y-3">
-                        <p className="text-xs font-bold text-gray-500 uppercase">Send a message to support</p>
-                        <textarea
-                            autoFocus
-                            className="w-full p-3 bg-gray-50 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
-                            placeholder="Describe your issue..."
-                            rows={3}
-                            value={contactMessage}
-                            onChange={(e) => setContactMessage(e.target.value)}
-                        />
-                        <div className="flex gap-2">
-                            <button
-                                type="button"
-                                onClick={() => setContactMode(false)}
-                                className="flex-1 py-2 text-xs font-bold text-gray-500 hover:bg-gray-100 rounded-lg"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="submit"
-                                disabled={isSending || !contactMessage.trim()}
-                                className="flex-1 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-                            >
-                                {isSending ? 'Sending...' : 'Send Message'}
-                            </button>
-                        </div>
-                    </form>
-                </div>
+            {isSending && (
+                 <div className="flex gap-3">
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-gray-200 text-gray-600">
+                        <Bot size={14} />
+                    </div>
+                    <div className="bg-white text-gray-500 rounded-2xl rounded-tl-none border border-gray-100 p-3 text-sm italic">
+                        Thinking...
+                    </div>
+                 </div>
             )}
         </div>
 
-        {/* Footer / Chips */}
-        <div className="p-4 bg-white border-t space-y-3">
-            {!contactMode && (
-                <>
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Quick Actions</p>
-                    <div className="flex flex-wrap gap-2 justify-center">
-                        {QUICK_ACTIONS.map(action => (
-                            <button
-                                key={action.id}
-                                onClick={() => handleQuickAction(action.id, action.label)}
-                                className="px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-full text-xs font-bold border border-indigo-100 hover:bg-indigo-100 hover:border-indigo-200 transition-colors active:scale-95"
-                            >
-                                {action.label}
-                            </button>
-                        ))}
-                    </div>
-                </>
+        {/* Input Area */}
+        <div className="p-3 bg-white border-t">
+            {/* Quick Chips if empty input */}
+            {messages.length < 3 && !inputText && (
+                <div className="flex overflow-x-auto gap-2 mb-3 pb-1 no-scrollbar">
+                    {QUICK_ACTIONS.map((action, i) => (
+                        <button
+                            key={i}
+                            onClick={() => handleSendMessage(action)}
+                            className="whitespace-nowrap px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-full text-xs font-bold border border-indigo-100 hover:bg-indigo-100 transition-colors"
+                        >
+                            {action}
+                        </button>
+                    ))}
+                </div>
             )}
+
+            <form onSubmit={handleSubmit} className="flex gap-2">
+                <input
+                    ref={inputRef}
+                    type="text"
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                    placeholder="Ask anything..."
+                    className="flex-1 bg-gray-100 border-0 rounded-xl px-4 text-sm focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all outline-none"
+                    disabled={isSending}
+                />
+                <button
+                    type="submit"
+                    disabled={!inputText.trim() || isSending}
+                    className="p-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                    <Send size={18} />
+                </button>
+            </form>
         </div>
     </div>
   );
