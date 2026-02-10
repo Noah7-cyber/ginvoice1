@@ -485,7 +485,7 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
       {!isReadOnly && (
           <button
               onClick={() => setShowAddModal(true)}
-              className="md:hidden absolute top-[70%] right-6 z-50 w-14 h-14 bg-blue-600 rounded-full shadow-lg flex items-center justify-center text-white hover:bg-blue-700 transition-all active:scale-95 border-2 border-white"
+              className="md:hidden fixed bottom-24 right-6 z-[60] w-14 h-14 bg-blue-600 rounded-full shadow-lg flex items-center justify-center text-white hover:bg-blue-700 transition-all active:scale-95 border-2 border-white"
           >
               <Plus size={24} />
           </button>

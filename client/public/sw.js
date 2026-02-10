@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ginvoice-v31-ui-updates';
+const CACHE_NAME = 'ginvoice-v32-fab-fix';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
