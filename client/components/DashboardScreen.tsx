@@ -208,6 +208,21 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
       .slice(0, 5);
   }, [transactions, products]);
 
+  // Top Expense Categories
+  const topExpenseCategories = useMemo(() => {
+    const catMap: Record<string, number> = {};
+    expenditures.forEach(e => {
+      if (e.flowType === 'out') {
+        catMap[e.category] = (catMap[e.category] || 0) + Math.abs(e.amount || 0);
+      }
+    });
+
+    return Object.entries(catMap)
+      .map(([name, amount]) => ({ name, amount }))
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 3);
+  }, [expenditures]);
+
   return (
     <div className="max-w-7xl mx-auto space-y-8">
       <div>
@@ -575,6 +590,24 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
                         <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">{prod.category}</span>
                     </div>
                     <span className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-black">{prod.qty} units</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-2xl shadow-sm border">
+            <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+              <Wallet className="text-red-600" size={20} /> Top Expense Categories
+            </h3>
+            <div className="space-y-3">
+              {topExpenseCategories.length === 0 ? (
+                <p className="text-sm text-gray-400 italic">No expenses yet</p>
+              ) : (
+                topExpenseCategories.map((cat, idx) => (
+                  <div key={idx} className="flex justify-between items-center p-2 hover:bg-gray-50 rounded-xl transition-colors">
+                    <span className="text-sm font-bold text-gray-800 truncate max-w-[150px]">{cat.name}</span>
+                    <span className="px-2 py-1 bg-red-50 text-red-700 rounded-lg text-xs font-black">{CURRENCY}{cat.amount.toLocaleString()}</span>
                   </div>
                 ))
               )}
