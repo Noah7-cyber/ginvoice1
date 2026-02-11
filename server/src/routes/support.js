@@ -134,7 +134,7 @@ router.post('/chat', auth, async (req, res) => {
 
     // B. Initialize Model with SYSTEM INSTRUCTION (Correct Placement)
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
+      model: "gemini-2.5-flash",
       systemInstruction: `You are the GInvoice Financial Assistant.
       - Help the user with business questions using your tools.
       - If they ask to navigate, append [[NAVIGATE:screen_name]] to your response.
