@@ -216,6 +216,7 @@ const executeTool = async (call, businessId) => {
           return {
               type: "NAVIGATE",
               payload: route,
+              status: "success",
               message: `Navigating to ${screenName}...`
           };
       }

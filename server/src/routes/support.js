@@ -36,16 +36,18 @@ Knowledge Context:
 
 Tools:
 - Use 'get_business_data' for financial metrics (revenue, profit, expenses, inventory).
-- Use 'MapsApp' to navigate the user to specific screens. IF YOU USE THIS TOOL, YOU MUST OUTPUT the JSON command returned by the tool in your final response to the user.
+- Use 'MapsApp' to navigate the user to specific screens. CRITICAL: You must ALSO provide a helpful sentence telling the user what to do on that screen (e.g., 'Taking you to Inventory so you can restock items.'). Never send the JSON command alone.
 
 Current Date: ${new Date().toDateString()}`
     };
 
     // C. Construct Messages Array
-    // Convert history to OpenAI/Groq format
+    // Prevent context length errors by keeping only the last 10 turns
+    const recentHistory = history.slice(-10);
+
     let messages = [systemPrompt];
 
-    history.forEach(msg => {
+    recentHistory.forEach(msg => {
         messages.push({
             role: msg.from === 'bot' ? 'assistant' : 'user',
             content: msg.text
@@ -115,6 +117,10 @@ Current Date: ${new Date().toDateString()}`
     return res.json({ text: responseMessage.content });
 
   } catch (error) {
+    if (error.status === 400 || error.status === 422) {
+        console.warn('AI Context/Request Error (likely token limit):', error.status, error.message);
+        return res.json({ text: "I'm having trouble remembering everything. Let's start a fresh topic!" });
+    }
     console.error('AI Route Error:', error);
     res.status(500).json({ text: "I'm having trouble connecting right now. Please try again." });
   }
