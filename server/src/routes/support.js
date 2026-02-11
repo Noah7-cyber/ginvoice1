@@ -16,6 +16,7 @@ router.post('/chat', auth, async (req, res) => {
     const userMessage = req.body.message;
     const history = req.body.history || [];
     const businessId = req.business?._id || req.businessId;
+    const userRole = req.user?.role || 'staff';
 
     if (!businessId) {
        return res.json({ text: "I'm having trouble identifying your business account. Please try logging in again." });
@@ -89,7 +90,7 @@ router.post('/chat', auth, async (req, res) => {
                 }
 
                 // Execute Tool
-                const toolResult = await executeTool({ name: functionName, args: functionArgs }, businessId);
+                const toolResult = await executeTool({ name: functionName, args: functionArgs }, businessId, userRole);
 
                 // SPECIAL INTERCEPTION: Large Data Sets / Direct Navigation
                 if (toolResult && toolResult.special_action === 'NAVIGATE') {
