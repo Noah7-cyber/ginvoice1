@@ -38,7 +38,7 @@ interface HistoryScreenProps {
   onRenewSubscription?: () => void;
   isReadOnly?: boolean;
   isOnline: boolean;
-  initialParams?: { id?: string };
+  initialParams?: { id?: string; filter?: string; search?: string };
 }
 
 type ViewMode = 'invoices' | 'debtors';
@@ -57,6 +57,14 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
 
   // Sync with URL Params
   useEffect(() => {
+    if (initialParams?.filter === 'unpaid') {
+        setViewMode('debtors');
+    }
+
+    if (initialParams?.search) {
+        setSearchTerm(initialParams.search);
+    }
+
     if (initialParams?.id) {
        const tx = transactions.find(t => t.id === initialParams.id);
        if (tx) {

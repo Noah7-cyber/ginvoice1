@@ -3,6 +3,32 @@ const Transaction = require('../models/Transaction');
 const Product = require('../models/Product');
 const Expenditure = require('../models/Expenditure');
 
+// --- Helper: Data Diet ---
+const sanitizeData = (doc) => {
+  if (Array.isArray(doc)) {
+    return doc.map(d => sanitizeData(d));
+  }
+  if (typeof doc === 'object' && doc !== null) {
+    // Handle Mongoose Document
+    const data = doc.toObject ? doc.toObject() : doc;
+    const { _id, __v, businessId, createdAt, updatedAt, image, password, items, ...rest } = data;
+
+    // Recursively sanitize nested objects/arrays
+    Object.keys(rest).forEach(key => {
+      if (typeof rest[key] === 'object' && rest[key] !== null) {
+        rest[key] = sanitizeData(rest[key]);
+      }
+    });
+
+    // Handle Decimal128 conversion
+    if (data.sellingPrice && data.sellingPrice.toString) rest.sellingPrice = parseFloat(data.sellingPrice.toString());
+    if (data.costPrice && data.costPrice.toString) rest.costPrice = parseFloat(data.costPrice.toString());
+
+    return rest;
+  }
+  return doc;
+};
+
 // --- Tool Definitions ---
 
 const tools = [
@@ -52,6 +78,44 @@ const tools = [
         required: ["screenName"]
       }
     }
+  },
+  {
+      type: "function",
+      function: {
+          name: "check_debtors",
+          description: "Checks for customers who owe money (debtors).",
+          parameters: { type: "object", properties: {}, required: [] }
+      }
+  },
+  {
+      type: "function",
+      function: {
+          name: "check_low_stock",
+          description: "Checks for products with low stock (quantity <= 5).",
+          parameters: { type: "object", properties: {}, required: [] }
+      }
+  },
+  {
+      type: "function",
+      function: {
+          name: "product_search",
+          description: "Searches for a product by name to check stats or profit.",
+          parameters: {
+              type: "object",
+              properties: {
+                  searchQuery: { type: "string", description: "The product name to search for." }
+              },
+              required: ["searchQuery"]
+          }
+      }
+  },
+  {
+      type: "function",
+      function: {
+          name: "get_recent_transaction",
+          description: "Retrieves the single most recent transaction/sale.",
+          parameters: { type: "object", properties: {}, required: [] }
+      }
   }
 ];
 
@@ -221,12 +285,146 @@ const get_business_data = async ({ metric, startDate, endDate, breakdownBy, prod
   }
 };
 
+const check_debtors = async ({}, { businessId }) => {
+    if (!businessId) return { error: "Login required." };
+
+    // Find transactions with outstanding balance
+    const debtors = await Transaction.find({
+        businessId,
+        balance: { $gt: 0 }
+    }).select('customerName balance totalAmount transactionDate id').sort({ transactionDate: -1 }).limit(10);
+
+    const count = await Transaction.countDocuments({ businessId, balance: { $gt: 0 } });
+
+    if (count > 5) {
+        return {
+            special_action: "NAVIGATE",
+            screen: "history",
+            filter: "unpaid",
+            message: `You have ${count} debtors. Opening Debtor List...`
+        };
+    } else if (count > 0) {
+        return {
+            message: `Found ${count} debtors.`,
+            debtors: sanitizeData(debtors)
+        };
+    } else {
+        return { message: "No debtors found. Everyone has paid up!" };
+    }
+};
+
+const check_low_stock = async ({}, { businessId }) => {
+    if (!businessId) return { error: "Login required." };
+    const businessIdStr = businessId.toString();
+
+    const lowStockItems = await Product.find({
+        businessId: businessIdStr,
+        stock: { $lte: 5 }
+    }).select('name stock sellingPrice').limit(10);
+
+    const count = await Product.countDocuments({ businessId: businessIdStr, stock: { $lte: 5 } });
+
+    if (count > 5) {
+        return {
+            special_action: "NAVIGATE",
+            screen: "inventory",
+            filter: "low_stock",
+            message: `You have ${count} items running low. Opening Inventory...`
+        };
+    } else if (count > 0) {
+        return {
+            message: `Found ${count} low stock items.`,
+            items: sanitizeData(lowStockItems)
+        };
+    } else {
+        return { message: "Stock levels look good! No items below 5 units." };
+    }
+};
+
+const product_search = async ({ searchQuery }, { businessId }) => {
+    if (!businessId) return { error: "Login required." };
+    const businessIdStr = businessId.toString();
+
+    const products = await Product.find({
+        businessId: businessIdStr,
+        name: { $regex: searchQuery, $options: 'i' }
+    });
+
+    const count = products.length;
+
+    if (count === 1) {
+        const p = products[0];
+        const cost = parseFloat(p.costPrice?.toString() || 0);
+        const price = parseFloat(p.sellingPrice?.toString() || 0);
+        const stock = p.stock || 0;
+        const profit = price - cost;
+        const margin = price > 0 ? ((profit / price) * 100).toFixed(1) + '%' : '0%';
+
+        return {
+            name: p.name,
+            cost,
+            price,
+            stock,
+            profit_per_unit: profit,
+            margin
+        };
+    } else if (count > 5) {
+        return {
+            special_action: "NAVIGATE",
+            screen: "inventory",
+            search: searchQuery,
+            message: `Found ${count} items matching "${searchQuery}". Opening Inventory...`
+        };
+    } else if (count > 0) {
+        return {
+            message: `Found ${count} items.`,
+            items: sanitizeData(products.map(p => ({
+                name: p.name,
+                stock: p.stock,
+                price: parseFloat(p.sellingPrice?.toString() || 0)
+            })))
+        };
+    } else {
+        return { message: `No products found matching "${searchQuery}".` };
+    }
+};
+
+const get_recent_transaction = async ({}, { businessId }) => {
+    if (!businessId) return { error: "Login required." };
+
+    const transaction = await Transaction.findOne({ businessId })
+        .sort({ transactionDate: -1 });
+
+    if (transaction) {
+        const date = new Date(transaction.transactionDate).toLocaleString();
+        return {
+            summary: `Last sale was to ${transaction.customerName || 'Walk-in Customer'} for NGN ${transaction.totalAmount} at ${date}.`,
+            details: sanitizeData(transaction)
+        };
+    } else {
+        return { message: "No recent transactions found." };
+    }
+};
+
 // --- Executor ---
 
 const executeTool = async (call, businessId) => {
   try {
       if (call.name === 'get_business_data') {
-          return await get_business_data(call.args, { businessId });
+          return sanitizeData(await get_business_data(call.args, { businessId }));
+      }
+
+      if (call.name === 'check_debtors') {
+          return await check_debtors(call.args, { businessId });
+      }
+      if (call.name === 'check_low_stock') {
+          return await check_low_stock(call.args, { businessId });
+      }
+      if (call.name === 'product_search') {
+          return await product_search(call.args, { businessId });
+      }
+      if (call.name === 'get_recent_transaction') {
+          return await get_recent_transaction(call.args, { businessId });
       }
 
       if (call.name === 'MapsApp') {

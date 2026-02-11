@@ -102,7 +102,20 @@ Current Date: ${new Date().toDateString()}`
             // Execute Tool
             const toolResult = await executeTool({ name: functionName, args: functionArgs }, businessId);
 
-            // Capture Navigation Action
+            // SPECIAL INTERCEPTION: Large Data Sets / Direct Navigation
+            if (toolResult && toolResult.special_action === 'NAVIGATE') {
+                return res.json({
+                    text: toolResult.message,
+                    action: {
+                        type: "NAVIGATE",
+                        payload: toolResult.screen,
+                        params: { filter: toolResult.filter, search: toolResult.search },
+                        message: toolResult.message
+                    }
+                });
+            }
+
+            // Capture Navigation Action (Standard)
             if (toolResult && toolResult.type === 'NAVIGATE') {
                 clientAction = toolResult;
             }

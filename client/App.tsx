@@ -100,7 +100,7 @@ const App: React.FC = () => {
   // Lazy Keep-Alive Tabs: Track which tabs have been visited
   const [visitedTabs, setVisitedTabs] = useState<Set<TabId>>(new Set(['sales']));
 
-  const [deepLinkParams, setDeepLinkParams] = useState<{ id?: string }>({});
+  const [deepLinkParams, setDeepLinkParams] = useState<any>({});
   const [isCartOpen, setIsCartOpen] = useState(window.innerWidth > 1024);
   const [view, setView] = useState<'main' | 'forgot-password'>('main');
   const [recoveryEmail, setRecoveryEmail] = useState<string | undefined>(undefined);
@@ -163,6 +163,16 @@ const App: React.FC = () => {
     setVisitedTabs(prev => new Set(prev).add(tab));
     setDeepLinkParams({}); // Clear deep link params on tab switch
     window.history.pushState(null, '', `/${tab}`);
+  };
+
+  const handleBotNavigate = (tab: TabId, params?: any) => {
+      setActiveTab(tab);
+      setVisitedTabs(prev => new Set(prev).add(tab));
+      if (params) {
+          setDeepLinkParams(params);
+      } else {
+          setDeepLinkParams({});
+      }
   };
 
   // Email Verification Feedback
@@ -1031,7 +1041,7 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      <SupportBot onNavigate={setActiveTab} />
+      <SupportBot onNavigate={handleBotNavigate} />
     </div>
   );
 };
