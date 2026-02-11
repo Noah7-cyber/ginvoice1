@@ -140,7 +140,7 @@ router.post('/chat', auth, async (req, res) => {
       - If they ask to navigate, append [[NAVIGATE:screen_name]] to your response.
       - Valid screens: sales, inventory, expenditure, dashboard, settings.
       - Current Date: ${new Date().toDateString()}`,
-      tools: { functionDeclarations: [businessTool] }
+      tools: [ { functionDeclarations: [businessTool] } ]
     });
 
     // Clean history for Gemini (remove leading model messages)
@@ -169,7 +169,7 @@ router.post('/chat', auth, async (req, res) => {
       if (call.name === 'get_business_data') {
         // FIX: Use req.business._id instead of req.businessId
         // Also ensure req.business is available (auth middleware fixed earlier)
-        const businessId = req.business ? req.business._id : req.businessId;
+        const businessId = req.business?._id || req.businessId;
 
         if (!businessId) {
              return res.json({ text: "I'm having trouble identifying your business account. Please try logging in again." });

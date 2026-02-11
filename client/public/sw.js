@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ginvoice-v33-gemini-fix';
+const CACHE_NAME = 'ginvoice-v34-gemini-crash-fix';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
