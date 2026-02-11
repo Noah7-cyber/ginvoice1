@@ -1,28 +1,33 @@
 const express = require('express');
 const router = express.Router();
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const Groq = require('groq-sdk');
 const auth = require('../middleware/auth');
 const { sendSupportEmail } = require('../services/mail');
 const { tools, executeTool } = require('../services/aiTools');
+
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 // --- THE CHAT ROUTE ---
 router.post('/chat', auth, async (req, res) => {
   try {
     // A. Critical API Key Check
-    if (!process.env.GEMINI_API_KEY) {
-      console.error("CRITICAL: GEMINI_API_KEY is missing in environment variables.");
+    if (!process.env.GROQ_API_KEY) {
+      console.error("CRITICAL: GROQ_API_KEY is missing in environment variables.");
       return res.status(503).json({ text: "System Error: AI Service not configured." });
     }
 
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const userMessage = req.body.message;
     const history = req.body.history || [];
+    const businessId = req.business?._id || req.businessId;
 
-    // B. Initialize Model with SYSTEM INSTRUCTION
-    // Persona: Nigerian business partner. Market OS. Benchmarks.
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash", // Updated model version
-      systemInstruction: `You are the GInvoice Market OS Assistant. You speak like a savvy Nigerian business partner—witty, professional, and focused on growth.
+    if (!businessId) {
+       return res.json({ text: "I'm having trouble identifying your business account. Please try logging in again." });
+    }
+
+    // B. Initialize System Prompt
+    const systemPrompt = {
+      role: "system",
+      content: `You are the GInvoice Market OS Assistant. You speak like a savvy Nigerian business partner—witty, professional, and focused on growth.
 
 Knowledge Context:
 - Typical retail margins in Nigeria: 15-20%.
@@ -33,54 +38,81 @@ Tools:
 - Use 'get_business_data' for financial metrics (revenue, profit, expenses, inventory).
 - Use 'MapsApp' to navigate the user to specific screens. IF YOU USE THIS TOOL, YOU MUST OUTPUT the JSON command returned by the tool in your final response to the user.
 
-Current Date: ${new Date().toDateString()}`,
-      tools: tools
+Current Date: ${new Date().toDateString()}`
+    };
+
+    // C. Construct Messages Array
+    // Convert history to OpenAI/Groq format
+    let messages = [systemPrompt];
+
+    history.forEach(msg => {
+        messages.push({
+            role: msg.from === 'bot' ? 'assistant' : 'user',
+            content: msg.text
+        });
     });
 
-    // Clean history for Gemini (remove leading model messages)
-    let chatHistory = history.map(msg => ({
-      role: msg.from === 'bot' ? 'model' : 'user',
-      parts: [{ text: msg.text }]
-    }));
-
-    if (chatHistory.length > 0 && chatHistory[0].role === 'model') {
-        chatHistory.shift();
+    if (userMessage) {
+        messages.push({ role: "user", content: userMessage });
     }
 
-    // C. Start Chat with Correct History
-    const chat = model.startChat({
-      history: chatHistory
-    });
-
-    // D. Send Message
-    const result = await chat.sendMessage(userMessage);
-    const response = await result.response;
-    const functionCalls = response.functionCalls();
-
-    // E. Handle Tools
-    if (functionCalls && functionCalls.length > 0) {
-      const call = functionCalls[0];
-
-      const businessId = req.business?._id || req.businessId;
-      if (!businessId) {
-            return res.json({ text: "I'm having trouble identifying your business account. Please try logging in again." });
-      }
-
-      // Execute the tool using the modular service
-      const toolResult = await executeTool(call, businessId);
-
-      // Feed result back to AI
-      const result2 = await chat.sendMessage([{
-        functionResponse: {
-          name: call.name,
-          response: toolResult
+    // D. Execution Loop with Retry
+    const makeRequest = async (msgs, retryCount = 0) => {
+        try {
+            return await groq.chat.completions.create({
+                model: "llama-3.3-70b-versatile",
+                messages: msgs,
+                tools: tools,
+                tool_choice: "auto"
+            });
+        } catch (error) {
+            if (error.status === 429 && retryCount < 1) {
+                console.warn("Rate limit hit, retrying in 2 seconds...");
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                return makeRequest(msgs, retryCount + 1);
+            }
+            throw error;
         }
-      }]);
-      return res.json({ text: result2.response.text() });
+    };
+
+    // First Call
+    const completion = await makeRequest(messages);
+    const responseMessage = completion.choices[0].message;
+
+    // E. Handle Tool Calls
+    if (responseMessage.tool_calls) {
+        // Append assistant's message with tool calls to history
+        messages.push(responseMessage);
+
+        for (const toolCall of responseMessage.tool_calls) {
+            const functionName = toolCall.function.name;
+            let functionArgs;
+            try {
+                functionArgs = JSON.parse(toolCall.function.arguments);
+            } catch (e) {
+                console.error("Failed to parse tool arguments", e);
+                functionArgs = {};
+            }
+
+            // Execute Tool
+            const toolResult = await executeTool({ name: functionName, args: functionArgs }, businessId);
+
+            // Append Tool Result
+            messages.push({
+                tool_call_id: toolCall.id,
+                role: "tool",
+                name: functionName,
+                content: JSON.stringify(toolResult)
+            });
+        }
+
+        // Second Call (Final Response)
+        const finalCompletion = await makeRequest(messages);
+        return res.json({ text: finalCompletion.choices[0].message.content });
     }
 
-    // F. Standard Response
-    return res.json({ text: response.text() });
+    // F. Standard Response (No Tool Calls)
+    return res.json({ text: responseMessage.content });
 
   } catch (error) {
     console.error('AI Route Error:', error);

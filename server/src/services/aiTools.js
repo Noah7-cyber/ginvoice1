@@ -5,47 +5,50 @@ const Expenditure = require('../models/Expenditure');
 
 // --- Tool Definitions ---
 
-const businessToolDef = {
-  name: "get_business_data",
-  description: "Calculates specific business metrics (revenue, profit, expenses, inventory) for a given date range. Can also provide breakdowns by day, product, or category.",
-  parameters: {
-    type: "OBJECT",
-    properties: {
-      metric: {
-        type: "STRING",
-        description: "The metric to calculate.",
-        enum: ["revenue", "profit", "expenses", "inventory_count"]
-      },
-      startDate: { type: "STRING", description: "Start date (YYYY-MM-DD)." },
-      endDate: { type: "STRING", description: "End date (YYYY-MM-DD)." },
-      breakdownBy: {
-        type: "STRING",
-        description: "Optional breakdown for the data.",
-        enum: ["day", "product", "category"]
-      }
-    },
-    required: ["metric"]
-  }
-};
-
-const mapsToolDef = {
-  name: "MapsApp",
-  description: "Navigates the user to a specific screen within the application.",
-  parameters: {
-    type: "OBJECT",
-    properties: {
-      screenName: {
-        type: "STRING",
-        description: "The name of the screen to navigate to.",
-        enum: ["Sales", "Inventory", "Settings", "Invoice", "Dashboard", "Expenditure", "History"]
-      }
-    },
-    required: ["screenName"]
-  }
-};
-
 const tools = [
-  { functionDeclarations: [businessToolDef, mapsToolDef] }
+  {
+    type: "function",
+    function: {
+      name: "get_business_data",
+      description: "Calculates specific business metrics (revenue, profit, expenses, inventory) for a given date range. Can also provide breakdowns by day, product, or category.",
+      parameters: {
+        type: "object",
+        properties: {
+          metric: {
+            type: "string",
+            description: "The metric to calculate.",
+            enum: ["revenue", "profit", "expenses", "inventory_count"]
+          },
+          startDate: { type: "string", description: "Start date (YYYY-MM-DD)." },
+          endDate: { type: "string", description: "End date (YYYY-MM-DD)." },
+          breakdownBy: {
+            type: "string",
+            description: "Optional breakdown for the data.",
+            enum: ["day", "product", "category"]
+          }
+        },
+        required: ["metric"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "MapsApp",
+      description: "Navigates the user to a specific screen within the application.",
+      parameters: {
+        type: "object",
+        properties: {
+          screenName: {
+            type: "string",
+            description: "The name of the screen to navigate to.",
+            enum: ["Sales", "Inventory", "Settings", "Invoice", "Dashboard", "Expenditure", "History"]
+          }
+        },
+        required: ["screenName"]
+      }
+    }
+  }
 ];
 
 // --- Tool Logic ---
