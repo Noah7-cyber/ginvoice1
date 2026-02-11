@@ -9,7 +9,7 @@ const SUPPORT_WHATSAPP = 'https://wa.me/2348051763431';
 
 interface SupportBotProps {
   embed?: boolean;
-  onNavigate?: (tab: TabId) => void;
+  onNavigate?: (tab: TabId, params?: any) => void;
 }
 
 const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate }) => {
@@ -20,7 +20,7 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate }) =>
 
   // State
   const [messages, setMessages] = useState<{ from: 'bot' | 'user'; text: string; isAction?: boolean }[]>([
-    { from: 'bot', text: 'Hello! I am your Ginvoice Assistant. I can help with business questions, math, or navigating the app.' }
+    { from: 'bot', text: 'Hello! I am your Ginvoice Market OS Assistant. I can help with business questions, math, or navigating the app.' }
   ]);
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -56,23 +56,64 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate }) =>
 
           let botText = response.text || "I'm having trouble connecting right now.";
 
-          // Navigation Logic
+          // --- 1. Structured Action Handler (Priority) ---
+          if (response.action && response.action.type === 'NAVIGATE') {
+              const payload = response.action.payload;
+              const params = response.action.params; // Get params if any
+
+              if (onNavigate) {
+                  // Pass params to onNavigate if supported, or just navigate
+                  onNavigate(payload as TabId, params);
+
+                  // Use message from server if available, or fallback
+                  const toastMsg = response.text || `Taking you to ${payload}...`;
+                  addToast(toastMsg, 'info');
+              }
+          }
+
+          // --- 2. Fallback: JSON in Text (Legacy/Backup) ---
+          const jsonNavMatch = botText.match(/\{[\s\S]*"type":\s*"NAVIGATE"[\s\S]*\}/);
+          if (jsonNavMatch) {
+             try {
+                const command = JSON.parse(jsonNavMatch[0]);
+                if (command.type === 'NAVIGATE' && command.payload) {
+                   const screen = command.payload.toLowerCase();
+                   let targetTab: TabId | null = null;
+
+                   // Map payload to valid tabs
+                   if (['sales', 'inventory', 'history', 'dashboard', 'expenditure', 'settings'].includes(screen)) {
+                      targetTab = screen as TabId;
+                   }
+
+                   if (targetTab && onNavigate) {
+                      onNavigate(targetTab);
+                      addToast(command.message || `Taking you to ${targetTab}...`, 'info');
+                   }
+
+                   // Strip the JSON from the text shown to user
+                   botText = botText.replace(jsonNavMatch[0], '').trim();
+                   // If text became empty, show the message from JSON
+                   if (!botText) botText = command.message || `Navigating to ${command.payload}...`;
+                }
+             } catch (e) {
+                console.error("JSON Parse Error", e);
+             }
+          }
+
+          // --- 3. Fallback: Tag in Text (Legacy) ---
           const navMatch = botText.match(/\[\[NAVIGATE:([a-zA-Z]+)\]\]/);
           if (navMatch && navMatch[1]) {
               const screen = navMatch[1].toLowerCase();
-              // Validate screen is a valid TabId if possible, or cast it
-              // We accept common variations
               let targetTab: TabId | null = null;
               if (['sales', 'inventory', 'history', 'dashboard', 'expenditure', 'settings'].includes(screen)) {
                   targetTab = screen as TabId;
               }
 
-              // Strip the tag
               botText = botText.replace(navMatch[0], '').trim();
 
               if (targetTab && onNavigate) {
                   onNavigate(targetTab);
-                  // Optional: add a small delay or message about navigating
+                  addToast(`Taking you to ${targetTab}...`, 'info');
               }
           }
 
@@ -108,7 +149,7 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate }) =>
                     <LifeBuoy size={18} />
                 </div>
                 <div>
-                    <h3 className="font-bold text-sm">AI Assistant</h3>
+                    <h3 className="font-bold text-sm">Market OS Assistant</h3>
                     <div className="flex items-center gap-1.5 opacity-80">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
                         <span className="text-[10px] font-medium uppercase tracking-wide">Online</span>
