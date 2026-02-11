@@ -29,15 +29,35 @@ const sanitizeData = (doc) => {
             createdAt,
             updatedAt,
             __proto__,
+            image, // Remove image data
             ...rest
         } = data;
 
         // Recursively sanitize nested objects/arrays
         Object.keys(rest).forEach(key => {
             if (typeof rest[key] === 'object' && rest[key] !== null) {
-                rest[key] = sanitizeData(rest[key]);
+                // Check if it's a Decimal128 (often has .toString())
+                if (rest[key].constructor && rest[key].constructor.name === 'Decimal128') {
+                    rest[key] = parseFloat(rest[key].toString());
+                } else {
+                    rest[key] = sanitizeData(rest[key]);
+                }
             }
         });
+
+        // Explicitly handle common numeric fields that might be Decimal128 or Strings
+        ['sellingPrice', 'costPrice', 'amount', 'totalAmount', 'balance', 'unitPrice', 'discount'].forEach(field => {
+             if (rest[field] !== undefined && rest[field] !== null) {
+                 // Convert to float if it has toString (Decimal128) or just parse it
+                 const val = rest[field].toString ? rest[field].toString() : rest[field];
+                 rest[field] = parseFloat(val);
+             }
+        });
+
+        // Ensure stock/quantity is number
+        if (rest.stock !== undefined) rest.stock = Number(rest.stock);
+        if (rest.currentStock !== undefined) rest.currentStock = Number(rest.currentStock);
+        if (rest.quantity !== undefined) rest.quantity = Number(rest.quantity);
 
         return rest;
     }
@@ -181,9 +201,13 @@ const product_search = async ({ query }, { businessId }) => {
         };
     } else if (count > 0) {
         const results = await Product.find(criteria).limit(5);
+
+        // Ensure sanitizeData handles the conversion, so the AI gets clean numbers
+        const cleanItems = sanitizeData(results);
+
         return {
             message: `Found ${count} items.`,
-            items: sanitizeData(results)
+            items: cleanItems
         };
     } else {
         return { message: `No products found matching "${query}".` };
