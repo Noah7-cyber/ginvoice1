@@ -1,18 +1,15 @@
 const express = require('express');
 const router = express.Router();
-const Groq = require('groq-sdk');
 const auth = require('../middleware/auth');
 const { sendSupportEmail } = require('../services/mail');
-const { tools, executeTool } = require('../services/aiTools');
-
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const { client, MODEL_NAME, tools, executeTool } = require('../services/aiTools');
 
 // --- THE CHAT ROUTE ---
 router.post('/chat', auth, async (req, res) => {
   try {
     // A. Critical API Key Check
-    if (!process.env.GROQ_API_KEY) {
-      console.error("CRITICAL: GROQ_API_KEY is missing in environment variables.");
+    if (!process.env.DEEPSEEK_API_KEY) {
+      console.error("CRITICAL: DEEPSEEK_API_KEY is missing.");
       return res.status(503).json({ text: "System Error: AI Service not configured." });
     }
 
@@ -27,18 +24,7 @@ router.post('/chat', auth, async (req, res) => {
     // B. Initialize System Prompt
     const systemPrompt = {
       role: "system",
-      content: `You are the GInvoice Market OS Assistant. You speak like a savvy Nigerian business partner—witty, professional, and focused on growth.
-
-Knowledge Context:
-- Typical retail margins in Nigeria: 15-20%.
-- Healthy inventory turnover: 4-6x per year.
-- Use these benchmarks to analyze the user's data (e.g., "Your margin is 10%, which is below the 15% industry average").
-
-Tools:
-- Use 'get_business_data' for financial metrics (revenue, profit, expenses, inventory).
-- Use 'MapsApp' to navigate the user to specific screens. CRITICAL: You must ALSO provide a helpful sentence telling the user what to do on that screen (e.g., 'Taking you to Inventory so you can restock items.'). Never send the JSON command alone.
-
-Current Date: ${new Date().toDateString()}`
+      content: "You are a witty, professional Nigerian store manager for GInvoice. You analyze data and help navigate the app. Keep answers short."
     };
 
     // C. Construct Messages Array
@@ -58,94 +44,95 @@ Current Date: ${new Date().toDateString()}`
         messages.push({ role: "user", content: userMessage });
     }
 
-    // Variable to capture client-side action
-    let clientAction = null;
+    // D. Execution Loop with Timeout
+    const callAI = async (msgs) => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
-    // D. Execution Loop with Retry
-    const makeRequest = async (msgs, retryCount = 0) => {
         try {
-            return await groq.chat.completions.create({
-                model: "llama-3.3-70b-versatile",
+            const completion = await client.chat.completions.create({
+                model: MODEL_NAME,
                 messages: msgs,
                 tools: tools,
-                tool_choice: "auto"
-            });
+                tool_choice: "auto",
+            }, { signal: controller.signal });
+
+            clearTimeout(timeoutId);
+            return completion;
         } catch (error) {
-            if (error.status === 429 && retryCount < 1) {
-                console.warn("Rate limit hit, retrying in 2 seconds...");
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                return makeRequest(msgs, retryCount + 1);
+            clearTimeout(timeoutId);
+            if (error.name === 'AbortError') {
+                throw new Error("Timeout");
             }
             throw error;
         }
     };
 
-    // First Call
-    const completion = await makeRequest(messages);
-    const responseMessage = completion.choices[0].message;
+    try {
+        // First Call
+        const completion = await callAI(messages);
+        const responseMessage = completion.choices[0].message;
 
-    // E. Handle Tool Calls
-    if (responseMessage.tool_calls) {
-        // Append assistant's message with tool calls to history
-        messages.push(responseMessage);
+        // E. Handle Tool Calls
+        if (responseMessage.tool_calls) {
+            // Append assistant's message with tool calls to history
+            messages.push(responseMessage);
 
-        for (const toolCall of responseMessage.tool_calls) {
-            const functionName = toolCall.function.name;
-            let functionArgs;
-            try {
-                functionArgs = JSON.parse(toolCall.function.arguments);
-            } catch (e) {
-                console.error("Failed to parse tool arguments", e);
-                functionArgs = {};
-            }
+            for (const toolCall of responseMessage.tool_calls) {
+                const functionName = toolCall.function.name;
+                let functionArgs;
+                try {
+                    functionArgs = JSON.parse(toolCall.function.arguments);
+                } catch (e) {
+                    console.error("Failed to parse tool arguments", e);
+                    functionArgs = {};
+                }
 
-            // Execute Tool
-            const toolResult = await executeTool({ name: functionName, args: functionArgs }, businessId);
+                // Execute Tool
+                const toolResult = await executeTool({ name: functionName, args: functionArgs }, businessId);
 
-            // SPECIAL INTERCEPTION: Large Data Sets / Direct Navigation
-            if (toolResult && toolResult.special_action === 'NAVIGATE') {
-                return res.json({
-                    text: toolResult.message,
-                    action: {
-                        type: "NAVIGATE",
-                        payload: toolResult.screen,
-                        params: { filter: toolResult.filter, search: toolResult.search },
-                        message: toolResult.message
-                    }
+                // SPECIAL INTERCEPTION: Large Data Sets / Direct Navigation
+                if (toolResult && toolResult.special_action === 'NAVIGATE') {
+                    // STOP immediately and return action to client
+                    return res.json({
+                        text: toolResult.message,
+                        action: {
+                            type: "NAVIGATE",
+                            payload: toolResult.screen,
+                            params: toolResult.params
+                        }
+                    });
+                }
+
+                // Append Tool Result
+                messages.push({
+                    tool_call_id: toolCall.id,
+                    role: "tool",
+                    name: functionName,
+                    content: JSON.stringify(toolResult)
                 });
             }
 
-            // Capture Navigation Action (Standard)
-            if (toolResult && toolResult.type === 'NAVIGATE') {
-                clientAction = toolResult;
-            }
-
-            // Append Tool Result
-            messages.push({
-                tool_call_id: toolCall.id,
-                role: "tool",
-                name: functionName,
-                content: JSON.stringify(toolResult)
+            // Second Call (Final Response)
+            const finalCompletion = await callAI(messages);
+            return res.json({
+                text: finalCompletion.choices[0].message.content,
+                action: null
             });
         }
 
-        // Second Call (Final Response)
-        const finalCompletion = await makeRequest(messages);
+        // F. Standard Response (No Tool Calls)
+        return res.json({ text: responseMessage.content, action: null });
 
-        return res.json({
-            text: finalCompletion.choices[0].message.content,
-            action: clientAction || null
-        });
+    } catch (error) {
+        if (error.message === "Timeout") {
+            return res.json({ text: "Market is busy right now. Please try again in a moment." });
+        }
+        console.error('AI Execution Error:', error);
+        return res.json({ text: "I'm having trouble connecting right now. Please try again." });
     }
-
-    // F. Standard Response (No Tool Calls)
-    return res.json({ text: responseMessage.content, action: null });
 
   } catch (error) {
-    if (error.status === 400 || error.status === 422) {
-        console.warn('AI Context/Request Error (likely token limit):', error.status, error.message);
-        return res.json({ text: "I'm having trouble remembering everything. Let's start a fresh topic!" });
-    }
     console.error('AI Route Error:', error);
     res.status(500).json({ text: "I'm having trouble connecting right now. Please try again." });
   }

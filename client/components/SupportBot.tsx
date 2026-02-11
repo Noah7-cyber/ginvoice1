@@ -1,11 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, LifeBuoy, Send, User, Bot, Mail, MessageSquare } from 'lucide-react';
+import { X, LifeBuoy, Send, User, Bot, MessageSquare } from 'lucide-react';
 import { useToast } from './ToastProvider';
 import { sendChat } from '../services/api';
-import { loadState } from '../services/storage';
 import { TabId } from '../types';
-
-const SUPPORT_WHATSAPP = 'https://wa.me/2348051763431';
 
 interface SupportBotProps {
   embed?: boolean;
@@ -52,64 +49,20 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate }) =>
       setIsSending(true);
 
       try {
+          // Send chat to backend
           const response = await sendChat(userMessage, messages);
 
           let botText = response.text || "I'm having trouble connecting right now.";
 
-          // --- 1. Structured Action Handler (Priority) ---
+          // --- Structured Action Handler ---
           if (response.action && response.action.type === 'NAVIGATE') {
               const payload = response.action.payload;
               const params = response.action.params;
+
               if (onNavigate) {
-                  // We assume payload is already a valid route from server
+                  // We assume payload is already a valid route from server (e.g., 'inventory', 'history')
                   onNavigate(payload as TabId, params);
-                  addToast(response.action.message || `Taking you to ${payload}...`, 'info');
-              }
-          }
-
-          // --- 2. Fallback: JSON in Text (Legacy/Backup) ---
-          const jsonNavMatch = botText.match(/\{[\s\S]*"type":\s*"NAVIGATE"[\s\S]*\}/);
-          if (jsonNavMatch) {
-             try {
-                const command = JSON.parse(jsonNavMatch[0]);
-                if (command.type === 'NAVIGATE' && command.payload) {
-                   const screen = command.payload.toLowerCase();
-                   let targetTab: TabId | null = null;
-
-                   // Map payload to valid tabs
-                   if (['sales', 'inventory', 'history', 'dashboard', 'expenditure', 'settings'].includes(screen)) {
-                      targetTab = screen as TabId;
-                   }
-
-                   if (targetTab && onNavigate) {
-                      onNavigate(targetTab);
-                      addToast(command.message || `Taking you to ${targetTab}...`, 'info');
-                   }
-
-                   // Strip the JSON from the text shown to user
-                   botText = botText.replace(jsonNavMatch[0], '').trim();
-                   // If text became empty, show the message from JSON
-                   if (!botText) botText = command.message || `Navigating to ${command.payload}...`;
-                }
-             } catch (e) {
-                console.error("JSON Parse Error", e);
-             }
-          }
-
-          // --- 3. Fallback: Tag in Text (Legacy) ---
-          const navMatch = botText.match(/\[\[NAVIGATE:([a-zA-Z]+)\]\]/);
-          if (navMatch && navMatch[1]) {
-              const screen = navMatch[1].toLowerCase();
-              let targetTab: TabId | null = null;
-              if (['sales', 'inventory', 'history', 'dashboard', 'expenditure', 'settings'].includes(screen)) {
-                  targetTab = screen as TabId;
-              }
-
-              botText = botText.replace(navMatch[0], '').trim();
-
-              if (targetTab && onNavigate) {
-                  onNavigate(targetTab);
-                  addToast(`Taking you to ${targetTab}...`, 'info');
+                  addToast(botText || `Taking you to ${payload}...`, 'info');
               }
           }
 
