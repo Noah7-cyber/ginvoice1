@@ -56,9 +56,17 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate }) =>
 
           let botText = response.text || "I'm having trouble connecting right now.";
 
-          // --- Navigation Logic ---
+          // --- 1. Structured Action Handler (Priority) ---
+          if (response.action && response.action.type === 'NAVIGATE') {
+              const payload = response.action.payload;
+              if (onNavigate) {
+                  // We assume payload is already a valid route from server
+                  onNavigate(payload as TabId);
+                  addToast(response.action.message || `Taking you to ${payload}...`, 'info');
+              }
+          }
 
-          // 1. JSON Command Handler (New Standard)
+          // --- 2. Fallback: JSON in Text (Legacy/Backup) ---
           const jsonNavMatch = botText.match(/\{[\s\S]*"type":\s*"NAVIGATE"[\s\S]*\}/);
           if (jsonNavMatch) {
              try {
@@ -87,7 +95,7 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate }) =>
              }
           }
 
-          // 2. Legacy Tag Handler (Fallback)
+          // --- 3. Fallback: Tag in Text (Legacy) ---
           const navMatch = botText.match(/\[\[NAVIGATE:([a-zA-Z]+)\]\]/);
           if (navMatch && navMatch[1]) {
               const screen = navMatch[1].toLowerCase();

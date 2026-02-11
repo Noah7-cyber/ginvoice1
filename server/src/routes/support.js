@@ -58,6 +58,9 @@ Current Date: ${new Date().toDateString()}`
         messages.push({ role: "user", content: userMessage });
     }
 
+    // Variable to capture client-side action
+    let clientAction = null;
+
     // D. Execution Loop with Retry
     const makeRequest = async (msgs, retryCount = 0) => {
         try {
@@ -99,6 +102,11 @@ Current Date: ${new Date().toDateString()}`
             // Execute Tool
             const toolResult = await executeTool({ name: functionName, args: functionArgs }, businessId);
 
+            // Capture Navigation Action
+            if (toolResult && toolResult.type === 'NAVIGATE') {
+                clientAction = toolResult;
+            }
+
             // Append Tool Result
             messages.push({
                 tool_call_id: toolCall.id,
@@ -110,11 +118,15 @@ Current Date: ${new Date().toDateString()}`
 
         // Second Call (Final Response)
         const finalCompletion = await makeRequest(messages);
-        return res.json({ text: finalCompletion.choices[0].message.content });
+
+        return res.json({
+            text: finalCompletion.choices[0].message.content,
+            action: clientAction || null
+        });
     }
 
     // F. Standard Response (No Tool Calls)
-    return res.json({ text: responseMessage.content });
+    return res.json({ text: responseMessage.content, action: null });
 
   } catch (error) {
     if (error.status === 400 || error.status === 422) {
