@@ -9,7 +9,7 @@ const SUPPORT_WHATSAPP = 'https://wa.me/2348051763431';
 
 interface SupportBotProps {
   embed?: boolean;
-  onNavigate?: (tab: TabId) => void;
+  onNavigate?: (tab: TabId, params?: any) => void;
 }
 
 const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate }) => {
@@ -59,9 +59,10 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate }) =>
           // --- 1. Structured Action Handler (Priority) ---
           if (response.action && response.action.type === 'NAVIGATE') {
               const payload = response.action.payload;
+              const params = response.action.params;
               if (onNavigate) {
                   // We assume payload is already a valid route from server
-                  onNavigate(payload as TabId);
+                  onNavigate(payload as TabId, params);
                   addToast(response.action.message || `Taking you to ${payload}...`, 'info');
               }
           }

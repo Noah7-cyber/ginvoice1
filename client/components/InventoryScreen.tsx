@@ -16,7 +16,7 @@ interface InventoryScreenProps {
   isOwner: boolean;
   isReadOnly?: boolean;
   isOnline: boolean;
-  initialParams?: { id?: string };
+  initialParams?: { id?: string; search?: string; filter?: string };
 }
 
 const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdateProducts, isOwner, isReadOnly, isOnline, initialParams }) => {
@@ -77,6 +77,14 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
   // Sync with URL params
   useEffect(() => {
+    if (initialParams?.search) {
+        setSearchTerm(initialParams.search);
+    }
+
+    if (initialParams?.filter === 'low_stock') {
+        setFilterLowStock(true);
+    }
+
     if (initialParams?.id) {
        const product = products.find(p => p.id === initialParams.id);
        if (product) {
