@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Sparkles, ShieldCheck, Box, User, Receipt, CheckCircle, ArrowRight, Star, Globe, Lock, Play, Layers, WifiOff, Cloud, Database, MessageCircle, ShoppingBag, Scissors, Wrench, Pill, ShoppingCart, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Sparkles, ShieldCheck, Box, User, Receipt, CheckCircle, ArrowRight, Star, Globe, Lock, Play, Layers, WifiOff, Cloud, Database, ShoppingBag, Scissors, Wrench, Pill, ShoppingCart, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { getBusinessCount } from '../services/api';
 
 interface WelcomeScreenProps {
@@ -8,6 +8,7 @@ interface WelcomeScreenProps {
 }
 
 const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onRegister, onLogin }) => {
+  const BOT_BRAND_IMAGE = 'https://api.dicebear.com/9.x/bottts/svg?seed=Ginvoice%20Bot&backgroundColor=b6e3f4,c0aede,d1d4f9';
   const [businessCount, setBusinessCount] = useState<number | null>(null);
 
   useEffect(() => {
@@ -233,6 +234,32 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onRegister, onLogin }) =>
          </div>
       </section>
 
+      {/* AI Copilot Preview */}
+      <section className="py-20 px-4 bg-gradient-to-b from-white to-indigo-50/40">
+         <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-10 items-center">
+            <div className="space-y-5">
+               <div className="inline-flex items-center gap-2 bg-indigo-100 px-4 py-1.5 rounded-full text-indigo-700 text-xs font-black uppercase tracking-widest">
+                  <img src={BOT_BRAND_IMAGE} alt="gBot avatar" className="w-4 h-4 rounded-full" /> gBot Assistant
+               </div>
+               <h2 className="text-3xl md:text-4xl font-black text-gray-900">Chat with a support bot that understands your business.</h2>
+               <p className="text-gray-600 text-lg">From stock questions to sales guidance, gBot is built to feel like your dedicated in-app assistant.</p>
+               <ul className="space-y-3 text-gray-700 font-medium">
+                  <li>• Ask for sales summaries and stock updates in plain language.</li>
+                  <li>• Jump straight to Inventory, Sales, or Reports from chat.</li>
+                  <li>• Get support quickly with a familiar bot experience.</li>
+               </ul>
+            </div>
+
+            <div className="rounded-3xl overflow-hidden border-4 border-white shadow-2xl shadow-indigo-200">
+               <img
+                 src="https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
+                 alt="AI support assistant visual"
+                 className="w-full h-full object-cover min-h-[320px]"
+               />
+            </div>
+         </div>
+      </section>
+
       {/* Pricing Section */}
       <section className="py-24 px-4 bg-gray-900 text-white">
          <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-center gap-12 bg-white/5 rounded-[3rem] p-8 md:p-12 border border-white/10 relative overflow-hidden">
@@ -421,14 +448,15 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onRegister, onLogin }) =>
         }
       `}</style>
 
-      {/* Floating WhatsApp Button */}
+      {/* Floating gBot Support Button */}
       <a
         href="https://wa.me/2348051763431"
         target="_blank"
         rel="noopener noreferrer"
-        className="fixed bottom-6 right-6 z-50 p-4 bg-green-500 text-white rounded-full shadow-lg hover:bg-green-600 transition-all hover:scale-110"
+        className="fixed bottom-6 right-6 z-50 bg-white rounded-full p-1.5 shadow-xl ring-2 ring-indigo-200 hover:ring-indigo-400 transition-all hover:scale-110"
+        aria-label="Chat with gBot support"
       >
-        <MessageCircle size={24} />
+        <img src={BOT_BRAND_IMAGE} alt="gBot support" className="w-12 h-12 rounded-full" />
       </a>
     </div>
   );
