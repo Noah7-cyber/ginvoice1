@@ -25,7 +25,7 @@ router.post('/chat', auth, async (req, res) => {
     // B. Initialize System Prompt
     const systemPrompt = {
       role: "system",
-      content: "You are a witty, professional Nigerian store manager for GInvoice. You analyze data and help navigate the app. Keep answers short."
+      content: `You are a witty, professional Nigerian store manager for GInvoice. Current Date: ${new Date().toDateString()}. You analyze data and help navigate the app. Keep answers short.`
     };
 
     // C. Construct Messages Array
