@@ -8,7 +8,7 @@ interface WelcomeScreenProps {
 }
 
 const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onRegister, onLogin }) => {
-  const BOT_BRAND_IMAGE = '../public/gbot.png';
+  const BOT_BRAND_IMAGE = '/gbot.png';
   const [businessCount, setBusinessCount] = useState<number | null>(null);
 
   useEffect(() => {
@@ -78,7 +78,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onRegister, onLogin }) =>
            <div className="flex-1 w-full max-w-lg relative animate-float">
               <div className="aspect-[4/3] rounded-3xl overflow-hidden shadow-2xl shadow-indigo-200 border-4 border-white transform rotate-2">
                  <img
-                   src="../public/shopgirl.png"
+                   src="/shopgirl.png"
                    alt="Shop owner managing business on tablet"
                    className="w-full h-full object-cover"
                  />
@@ -252,7 +252,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onRegister, onLogin }) =>
 
             <div className="rounded-3xl overflow-hidden border-4 border-white shadow-2xl shadow-indigo-200">
                <img
-                 src="../public/landing.png"
+                 src="/landing.png"
                  alt="AI support assistant visual"
                  className="w-full h-full object-cover min-h-[320px]"
                />
