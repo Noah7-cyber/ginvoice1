@@ -10,7 +10,7 @@ interface SupportBotProps {
 }
 
 const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate }) => {
-  const BOT_BRAND_IMAGE = '/ginvoice.png';
+  const BOT_BRAND_IMAGE = '/gbot.png';
   const { addToast } = useToast();
   const [open, setOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
