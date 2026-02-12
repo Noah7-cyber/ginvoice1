@@ -70,17 +70,20 @@ const tools = [
         type: "function",
         function: {
             name: "get_business_report",
-            description: "Generates a business report for a specific period (revenue, profit, expenses, top items).",
+            description: "Generates a business report for a specific date range (revenue, profit, expenses, top items).",
             parameters: {
                 type: "object",
                 properties: {
-                    period: {
+                    startDate: {
                         type: "string",
-                        description: "The time period for the report.",
-                        enum: ["today", "this_week", "this_month", "last_month", "year_to_date", "all_time"]
+                        description: "The start date for the report (ISO format YYYY-MM-DD)."
+                    },
+                    endDate: {
+                        type: "string",
+                        description: "The end date for the report (ISO format YYYY-MM-DD)."
                     }
                 },
-                required: ["period"],
+                required: ["startDate", "endDate"],
                 additionalProperties: false
             }
         }
@@ -143,45 +146,26 @@ const tools = [
 
 // --- Tool Logic ---
 
-const get_business_report = async ({ period }, { businessId, userRole }) => {
+const get_business_report = async ({ startDate, endDate }, { businessId, userRole }) => {
     if (!businessId) return { error: "Login required." };
 
     // 1. Determine Date Range
-    const now = new Date();
-    let startDate = new Date(0); // Default all time
-    let endDate = new Date(); // Now
+    // Parse ISO strings
+    const start = new Date(startDate);
+    const end = new Date(endDate);
 
-    if (period === 'today') {
-        startDate = new Date(now.setHours(0,0,0,0));
-    } else if (period === 'this_week') {
-        const day = now.getDay() || 7; // Get current day number, make Sunday 7
-        if (day !== 1) now.setHours(-24 * (day - 1));
-        startDate = new Date(now.setHours(0,0,0,0));
-    } else if (period === 'this_month') {
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-    } else if (period === 'last_month') {
-        startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        endDate = new Date(now.getFullYear(), now.getMonth(), 0);
-    } else if (period === 'year_to_date') {
-        startDate = new Date(now.getFullYear(), 0, 1);
-    }
+    // Set end of day for the end date to capture full day's transactions
+    end.setHours(23, 59, 59, 999);
 
     const businessObjectId = new mongoose.Types.ObjectId(businessId);
 
-    // 2. Aggregations
-
-    // Revenue & Top Product (Transactions)
+    // 2. Aggregations (Common)
     const transactionMatch = {
         businessId: businessObjectId,
-        transactionDate: { $gte: startDate, $lte: endDate }
+        transactionDate: { $gte: start, $lte: end }
     };
 
-    const revenueResult = await Transaction.aggregate([
-        { $match: transactionMatch },
-        { $group: { _id: null, total: { $sum: '$totalAmount' } } }
-    ]);
-    const totalRevenue = revenueResult[0]?.total || 0;
-
+    // Top Product (Always accessible)
     const topProductResult = await Transaction.aggregate([
         { $match: transactionMatch },
         { $unwind: '$items' },
@@ -191,44 +175,28 @@ const get_business_report = async ({ period }, { businessId, userRole }) => {
     ]);
     const topSellingProduct = topProductResult[0] ? { name: topProductResult[0]._id, sold: topProductResult[0].sold } : null;
 
+    // 3. RBAC Check (Revenue, Profit, Expenses)
+    if (userRole !== 'owner') {
+        return {
+            period: { start: startDate, end: endDate },
+            topSellingProduct,
+            message: "Financial totals (Revenue, Profit, Expenses) are restricted to Owner accounts."
+        };
+    }
+
+    // Owner-Only Calculations
+    const revenueResult = await Transaction.aggregate([
+        { $match: transactionMatch },
+        { $group: { _id: null, total: { $sum: '$totalAmount' } } }
+    ]);
+    const totalRevenue = revenueResult[0]?.total || 0;
+
     // Expenses (Expenditures)
-    const expenditureMatch = {
-        businessId: businessObjectId, // Assuming Expenditure also uses ObjectId for businessId, matching Transaction pattern
-        // Or if it uses 'business' field as Ref. Previous code in get_business_data used 'business: businessObjectId'.
-        // Let's assume 'business' is the field for ObjectId based on typical Mongoose Ref.
-        // Wait, looking at Transaction schema it uses 'businessId'.
-        // Let's check Expenditure schema to be sure?
-        // I'll stick to 'businessId' if consistent, but previous legacy code used 'business'.
-        // Let's try to handle both or check schema.
-        // Since I can't check schema right now easily without another tool call and I want to be fast:
-        // I will assume it follows the newer 'businessId' pattern OR 'business'.
-        // I'll try to match both if possible or just guess.
-        // Actually, I can check previous aiTools.js content I read.
-        // It had: `const expenseMatch = { business: businessObjectId, ... }`
-        // So it likely uses `business`.
-        // BUT, `check_debtors` used `businessId`.
-        // I will use `businessId` as the likely unified field, but if `Expenditure` is old it might be `business`.
-        // I will use `businessId` but also check `business` if `businessId` yields 0? No that's risky.
-        // I'll assume standard `businessId` for now as I saw `Transaction` has it.
-    };
-
-    // To be safe, I will use a query that checks both if I could, but aggregation match is strict.
-    // I will check Expenditure schema in next step if this fails, but for now let's assume `businessId` is used or `business`.
-    // I'll use `business` based on previous file content I read earlier (`get_business_data` used `business`).
-    // Wait, the previous file content for `get_business_data` in `aiTools.js` (Step 1) showed:
-    // `const expenseMatch = { business: businessObjectId, ... };`
-    // So I will use `business` for Expenditure.
-
-    // Wait, I am replacing `aiTools.js`.
-    // I should check `Expenditure` schema.
-    // I'll take a quick peek at `Expenditure.js` to be 100% sure.
-    // But I can't right now in this turn.
-    // I will use `business` for Expenditure because the old code used it.
-
+    // Using 'business' field as per previous assumption/fix in earlier step
     const expensesResult = await Expenditure.aggregate([
         { $match: {
-            business: businessObjectId, // Using 'business' based on legacy code
-            date: { $gte: startDate, $lte: endDate },
+            business: businessObjectId,
+            date: { $gte: start, $lte: end },
             flowType: 'out'
         } },
         { $group: { _id: null, total: { $sum: '$amount' } } }
@@ -237,19 +205,13 @@ const get_business_report = async ({ period }, { businessId, userRole }) => {
 
     const totalProfit = totalRevenue - totalExpenses;
 
-    // 3. RBAC & Return
-    const report = {
-        period,
+    return {
+        period: { start: startDate, end: endDate },
         totalRevenue,
+        totalExpenses,
+        totalProfit,
         topSellingProduct
     };
-
-    if (userRole === 'owner') {
-        report.totalProfit = totalProfit;
-        report.totalExpenses = totalExpenses;
-    }
-
-    return report;
 };
 
 const check_debtors = async ({}, { businessId }) => {
