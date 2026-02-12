@@ -1,3 +1,5 @@
+const RULESET_VERSION = 'ng-cit-v1.0';
+
 class NigeriaSmallBusinessStrategy {
   calculate(revenue, expenses, businessProfile, categories = []) {
     // 1. Calculate Business Expenses (100% Deductible)
@@ -40,6 +42,7 @@ class NigeriaSmallBusinessStrategy {
     // Prevents app from running PIT bands on exempt revenue
     if (revenue <= 50000000) {
         return {
+            rulesetVersion: RULESET_VERSION,
             revenue,
             deductibleExpenses: businessExpenses,
             personalRelief: cra,
@@ -93,6 +96,7 @@ class NigeriaSmallBusinessStrategy {
     const safeToSpend = Math.max(0, revenue - totalCashExpenses - estimatedTax);
 
     return {
+      rulesetVersion: RULESET_VERSION,
       revenue,
       deductibleExpenses: businessExpenses,
       personalRelief: cra,

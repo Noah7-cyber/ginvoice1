@@ -333,6 +333,19 @@ export const sendChat = async (message: string, history: any[]) => {
   });
 };
 
+
+export const exportBusinessData = async (scope: 'lite' | 'full' = 'lite') => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request(`/api/support/export-data?scope=${scope}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+};
+
 // Admin API
 export const adminLogin = async (email: string, password: string) => {
     return request('/api/admin/login', {

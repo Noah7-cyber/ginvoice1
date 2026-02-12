@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Store, Save, RefreshCw, CloudCheck, Upload, Trash2, Image as ImageIcon, MessageSquare, HeadphonesIcon, HelpCircle, Lock, AlertTriangle, X, Ticket, ToggleLeft, ToggleRight, Loader2, CreditCard, ShieldCheck, CheckCircle2, Palette, Database, Download } from 'lucide-react';
 import { BusinessProfile, DiscountCode } from '../types';
 import { THEME_COLORS, FONTS } from '../constants';
-import { changeBusinessPins, deleteAccount, uploadFile, updateSettings, generateDiscountCode, verifyPayment, getEntitlements, cancelSubscription, pauseSubscription, resumeSubscription } from '../services/api';
+import { changeBusinessPins, deleteAccount, uploadFile, updateSettings, generateDiscountCode, verifyPayment, getEntitlements, cancelSubscription, pauseSubscription, resumeSubscription, exportBusinessData } from '../services/api';
 import api from '../services/api';
 import SupportBot from './SupportBot';
 import { useToast } from './ToastProvider';
@@ -42,6 +42,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
   // Payment Verification State
   const [paystackReference, setPaystackReference] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
+  const [isExportingFull, setIsExportingFull] = useState(false);
 
   // Polling for Subscription Status (Hot Reload)
   const [isPollingSubscription, setIsPollingSubscription] = useState(false);
@@ -340,6 +341,38 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
       link.click();
       document.body.removeChild(link);
       addToast(`${type.charAt(0).toUpperCase() + type.slice(1)} exported!`, 'success');
+  };
+
+
+  const handleExportFullBackup = async () => {
+      if (!isOnline) {
+          addToast('Internet connection required for full backup export.', 'error');
+          return;
+      }
+
+      setIsExportingFull(true);
+      try {
+          const payload = await exportBusinessData('full');
+          const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.setAttribute('download', `ginvoice_backup_${new Date().toISOString().split('T')[0]}.json`);
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+
+          if (payload?.meta?.truncated) {
+             addToast('Backup exported with size limits. Use date filters for very large history.', 'info');
+          } else {
+             addToast('Full backup exported successfully!', 'success');
+          }
+      } catch (err: any) {
+          addToast(err?.message || 'Failed to export full backup', 'error');
+      } finally {
+          setIsExportingFull(false);
+      }
   };
 
   // handleCancelSubscription removed
@@ -731,6 +764,10 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                            <button onClick={() => handleExport('expenses')} className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors group">
                              <span className="font-bold text-gray-700">Export Expenses (CSV)</span>
                              <Download className="text-gray-400 group-hover:text-blue-600" size={20} />
+                          </button>
+                          <button onClick={handleExportFullBackup} disabled={isExportingFull || !isOnline} className="w-full flex items-center justify-between p-4 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors group disabled:opacity-60 disabled:cursor-not-allowed">
+                             <span className="font-bold text-blue-800">Export Full Cloud Backup (JSON)</span>
+                             {isExportingFull ? <Loader2 className="animate-spin text-blue-500" size={20} /> : <Download className="text-blue-500" size={20} />}
                           </button>
                       </div>
                   </div>
