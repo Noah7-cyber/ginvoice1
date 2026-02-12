@@ -29,6 +29,15 @@ const parseDecimal = (val) => {
   return Number(val);
 };
 
+const normalizeCustomerName = (value) => {
+  const clean = String(value || '').trim().replace(/\s+/g, ' ');
+  if (!clean) return 'Walk-in Customer';
+  return clean
+    .split(' ')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(' ');
+};
+
 // --- ROUTES ---
 
 // 1. GET Full State (Online-Only Mode) - EMERGENCY VERSION
@@ -238,7 +247,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
               businessId,
               id: t.id,
               transactionDate: t.transactionDate ? new Date(t.transactionDate) : null,
-              customerName: t.customerName,
+              customerName: normalizeCustomerName(t.customerName),
               items: (t.items || []).map((item) => ({
                 productId: item.productId,
                 productName: item.productName,

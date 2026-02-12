@@ -7,6 +7,15 @@ import { formatCurrency } from '../utils/currency';
 import SignaturePad from './SignaturePad';
 import { uploadFile, validateDiscountCode } from '../services/api';
 
+const normalizeCustomerName = (value: string) => {
+  const clean = (value || '').trim().replace(/\s+/g, ' ');
+  if (!clean) return 'Walk-in Customer';
+  return clean
+    .split(' ')
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(' ');
+};
+
 interface CurrentOrderSidebarProps {
   cart: SaleItem[];
   setCart: React.Dispatch<React.SetStateAction<SaleItem[]>>;
@@ -101,7 +110,7 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
     const transaction: Transaction = {
       id: `TX-${Date.now()}`,
       transactionDate: new Date().toISOString(),
-      customerName: customerName || 'Walk-in Customer',
+      customerName: normalizeCustomerName(customerName),
       customerPhone: customerPhone || undefined,
       items: cart,
       subtotal: cartSubtotal,

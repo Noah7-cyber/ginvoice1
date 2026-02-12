@@ -10,7 +10,7 @@ interface SupportBotProps {
 }
 
 const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate }) => {
-  const BOT_BRAND_IMAGE = 'https://api.dicebear.com/9.x/bottts/svg?seed=Ginvoice%20Bot&backgroundColor=b6e3f4,c0aede,d1d4f9';
+  const BOT_BRAND_IMAGE = '/ginvoice.png';
   const { addToast } = useToast();
   const [open, setOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
