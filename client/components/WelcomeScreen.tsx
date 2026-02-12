@@ -8,7 +8,7 @@ interface WelcomeScreenProps {
 }
 
 const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onRegister, onLogin }) => {
-  const BOT_BRAND_IMAGE = 'https://api.dicebear.com/9.x/bottts/svg?seed=Ginvoice%20Bot&backgroundColor=b6e3f4,c0aede,d1d4f9';
+  const BOT_BRAND_IMAGE = '../public/gbot.png';
   const [businessCount, setBusinessCount] = useState<number | null>(null);
 
   useEffect(() => {
@@ -78,7 +78,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onRegister, onLogin }) =>
            <div className="flex-1 w-full max-w-lg relative animate-float">
               <div className="aspect-[4/3] rounded-3xl overflow-hidden shadow-2xl shadow-indigo-200 border-4 border-white transform rotate-2">
                  <img
-                   src="https://images.unsplash.com/photo-1556742049-0cfed4f7a07d?auto=format&fit=crop&w=800&q=80"
+                   src="../public/shopgirl.png"
                    alt="Shop owner managing business on tablet"
                    className="w-full h-full object-cover"
                  />
@@ -252,7 +252,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onRegister, onLogin }) =>
 
             <div className="rounded-3xl overflow-hidden border-4 border-white shadow-2xl shadow-indigo-200">
                <img
-                 src="https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
+                 src="../public/landing.png"
                  alt="AI support assistant visual"
                  className="w-full h-full object-cover min-h-[320px]"
                />
