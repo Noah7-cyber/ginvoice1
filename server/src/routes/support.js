@@ -96,6 +96,78 @@ const tryHandleCheapIntent = async (message, businessId, userRole) => {
   return null;
 };
 
+const MAX_HISTORY_TURNS = 8;
+const MAX_MESSAGE_LENGTH = 500;
+
+const normalizeText = (value) => (typeof value === 'string' ? value.trim().toLowerCase() : '');
+
+const formatToolResult = (result, fallbackMessage) => {
+  if (!result || typeof result !== 'object') return fallbackMessage;
+  if (result.error) return result.error;
+  if (result.message) return result.message;
+
+  if (result.topSellingProduct?.name) {
+    return `Top product: ${result.topSellingProduct.name} (${result.topSellingProduct.sold} sold).`;
+  }
+
+  return fallbackMessage;
+};
+
+const tryHandleCheapIntent = async (message, businessId, userRole) => {
+  const text = normalizeText(message);
+  if (!text) return null;
+
+  if (/low\s*stock|out\s*of\s*stock|stock\s*running\s*low/.test(text)) {
+    const result = await executeTool({ name: 'check_low_stock', args: {} }, businessId, userRole);
+    return {
+      text: formatToolResult(result, 'Stock check complete.'),
+      action: result?.special_action === 'NAVIGATE'
+        ? { type: 'NAVIGATE', payload: result.screen, params: result.params }
+        : null
+    };
+  }
+
+  if (/debtor|owe|owing|unpaid|credit\s*sales?/.test(text)) {
+    const result = await executeTool({ name: 'check_debtors', args: {} }, businessId, userRole);
+    return {
+      text: formatToolResult(result, 'Debtor check complete.'),
+      action: result?.special_action === 'NAVIGATE'
+        ? { type: 'NAVIGATE', payload: result.screen, params: result.params }
+        : null
+    };
+  }
+
+  if (/last\s*sale|recent\s*sale|most\s*recent\s*transaction/.test(text)) {
+    const result = await executeTool({ name: 'get_recent_transaction', args: {} }, businessId, userRole);
+    if (result?.customerName || result?.totalAmount != null) {
+      const customer = result.customerName || 'Walk-in customer';
+      const total = Number(result.totalAmount || 0);
+      return { text: `Latest sale was to ${customer} for ₦${total.toLocaleString()}.`, action: null };
+    }
+    return { text: formatToolResult(result, 'No recent sale found.'), action: null };
+  }
+
+  if (/today.*(sales?|revenue|profit)|(sales?|revenue|profit).*today/.test(text)) {
+    const today = new Date().toISOString().slice(0, 10);
+    const result = await executeTool({ name: 'get_business_report', args: { startDate: today, endDate: today } }, businessId, userRole);
+    if (result?.message && !result?.totalRevenue) {
+      return { text: result.message, action: null };
+    }
+    if (result && typeof result === 'object') {
+      const revenue = Number(result.totalRevenue || 0).toLocaleString();
+      const expenses = Number(result.totalExpenses || 0).toLocaleString();
+      const profit = Number(result.totalProfit || 0).toLocaleString();
+      return {
+        text: `Today's summary — Revenue: ₦${revenue}, Expenses: ₦${expenses}, Profit: ₦${profit}.`,
+        action: null
+      };
+    }
+    return { text: "I could not generate today's summary right now.", action: null };
+  }
+
+  return null;
+};
+
 // --- THE CHAT ROUTE ---
 router.post('/chat', auth, async (req, res) => {
   try {
