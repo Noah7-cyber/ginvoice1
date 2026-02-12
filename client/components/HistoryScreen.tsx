@@ -43,6 +43,16 @@ interface HistoryScreenProps {
 
 type ViewMode = 'invoices' | 'debtors';
 
+const normalizeCustomerKey = (value: string) => (value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+const formatCustomerName = (value: string) => {
+  const clean = (value || '').trim().replace(/\s+/g, ' ');
+  if (!clean) return 'Walk-in Customer';
+  return clean
+    .split(' ')
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(' ');
+};
+
 const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, business, onDeleteTransaction, onUpdateTransaction, isSubscriptionExpired, onRenewSubscription, isReadOnly, isOnline, initialParams }) => {
   const { addToast } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>('invoices');
@@ -122,24 +132,35 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
 
   // Aggregated Debtors Ledger
   const debtorsLedger = useMemo(() => {
-    const map = new Map<string, { totalOwed: number, invoiceCount: number, lastTxDate: string, transactions: Transaction[], phone?: string }>();
+    const map = new Map<string, { name: string, totalOwed: number, invoiceCount: number, lastTxDate: string, transactions: Transaction[], phone?: string }>();
     
     transactions.forEach(t => {
       if (t.balance > 0) {
-        const existing = map.get(t.customerName) || { totalOwed: 0, invoiceCount: 0, lastTxDate: t.transactionDate, transactions: [], phone: t.customerPhone };
+        const key = normalizeCustomerKey(t.customerName);
+        if (!key) return;
+
+        const existing = map.get(key) || {
+          name: formatCustomerName(t.customerName),
+          totalOwed: 0,
+          invoiceCount: 0,
+          lastTxDate: t.transactionDate,
+          transactions: [],
+          phone: t.customerPhone
+        };
+
         existing.totalOwed += t.balance;
         existing.invoiceCount += 1;
         if (new Date(t.transactionDate) > new Date(existing.lastTxDate)) {
           existing.lastTxDate = t.transactionDate;
+          existing.name = formatCustomerName(t.customerName);
         }
         existing.transactions.push(t);
         if (!existing.phone && t.customerPhone) existing.phone = t.customerPhone;
-        map.set(t.customerName, existing);
+        map.set(key, existing);
       }
     });
 
-    return Array.from(map.entries())
-      .map(([name, data]) => ({ name, ...data }))
+    return Array.from(map.values())
       .filter(d => d.name.toLowerCase().includes(searchTerm.toLowerCase()))
       .sort((a, b) => b.totalOwed - a.totalOwed);
   }, [transactions, searchTerm]);

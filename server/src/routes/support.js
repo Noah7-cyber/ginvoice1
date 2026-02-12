@@ -16,10 +16,47 @@ const MAX_MESSAGE_LENGTH = 500;
 const MAX_EXPORT_DOCS = 20000;
 
 const normalizeText = (value) => (typeof value === 'string' ? value.trim().toLowerCase() : '');
+const normalizeCustomerKey = (value) => normalizeText(value).replace(/\s+/g, ' ');
+const formatCustomerDisplayName = (value) => {
+  const clean = normalizeCustomerKey(value);
+  if (!clean) return 'Walk-in Customer';
+  return clean
+    .split(' ')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+};
 
 const formatToolResult = (result, fallbackMessage) => {
   if (!result || typeof result !== 'object') return fallbackMessage;
   if (result.error) return result.error;
+
+  if (Array.isArray(result.debtors) && result.debtors.length > 0) {
+    const summary = new Map();
+    result.debtors.forEach((tx) => {
+      const key = normalizeCustomerKey(tx?.customerName);
+      if (!key) return;
+      const existing = summary.get(key) || { label: formatCustomerDisplayName(tx?.customerName), total: 0 };
+      existing.total += Number(tx?.balance || 0);
+      summary.set(key, existing);
+    });
+
+    const lines = Array.from(summary.values())
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5)
+      .map((item, index) => `${index + 1}. ${item.label} — ₦${item.total.toLocaleString()} outstanding`);
+
+    if (lines.length > 0) {
+      return `Found ${summary.size} debtor${summary.size > 1 ? 's' : ''}:\n${lines.join('\n')}`;
+    }
+  }
+
+  if (Array.isArray(result.items) && result.items.length > 0) {
+    const lines = result.items
+      .slice(0, 5)
+      .map((item) => `• ${item.name} (${Number(item.stock || item.currentStock || 0)} left)`);
+    return `${result.message || 'Low stock items found.'}\n${lines.join('\n')}`;
+  }
+
   if (result.message) return result.message;
 
   if (result.topSellingProduct?.name) {
@@ -61,6 +98,16 @@ const tryHandleCheapIntent = async (message, businessId, userRole) => {
       return { text: `Latest sale was to ${customer} for ₦${total.toLocaleString()}.`, action: null };
     }
     return { text: formatToolResult(result, 'No recent sale found.'), action: null };
+  }
+
+  if (/(record|add|create|enter).*(sale|invoice|bill)|(sale|invoice|bill).*(record|add|create|enter)|how.*(sell|record)/.test(text)) {
+    return {
+      text: "To record a sale in this app:\n1) Open Sales tab.\n2) Tap any product under ‘Select Items’ to add it to cart.\n3) In the right Order panel, enter customer name/phone (optional).\n4) Choose payment method (Cash, Transfer, POS, or Debt).\n5) Confirm totals, then tap ‘Confirm Bill’.",
+      action: {
+        type: 'NAVIGATE',
+        payload: 'sales'
+      }
+    };
   }
 
   if (/today.*(sales?|revenue|profit)|(sales?|revenue|profit).*today/.test(text)) {
@@ -111,7 +158,7 @@ router.post('/chat', auth, async (req, res) => {
     // A. Initialize System Prompt
     const systemPrompt = {
       role: "system",
-      content: `You are a witty, professional Nigerian store manager for GInvoice. Current Date: ${new Date().toDateString()}. You analyze data and help navigate the app. Keep answers short.`
+      content: `You are gBot, a concise Nigerian store manager + financial analyst inside the GInvoice app. Current Date: ${new Date().toDateString()}.\n\nAPP REALITY (STRICT): The user can only navigate these in-app tabs: sales, inventory, history, expenditure, dashboard, settings. Do NOT mention screens/buttons that do not exist (e.g., “New Invoice”, “Create Sale”, barcode scanner).\n\nNAVIGATION RULES: When giving instructions, reference visible labels in the current app UX like ‘Sales tab’, ‘Select Items’, right-side order panel, and ‘Confirm Bill’.\n\nRESPONSE STYLE: short, practical, numbers-first, and owner-focused. If asked strategy, provide 2-4 actionable financial steps tied to their data. If uncertain, ask one clarifying question instead of guessing.`
     };
 
     // B. Construct Messages Array
