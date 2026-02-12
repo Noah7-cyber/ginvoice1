@@ -6,7 +6,8 @@ const Expenditure = require('../models/Expenditure');
 
 const client = new OpenAI({
     baseURL: 'https://api.deepseek.com',
-    apiKey: process.env.DEEPSEEK_API_KEY
+    // Keep module load safe in test/offline envs; route guards prevent real calls when key is missing.
+    apiKey: process.env.DEEPSEEK_API_KEY || 'disabled'
 });
 
 const MODEL_NAME = "deepseek-chat";

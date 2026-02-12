@@ -21,6 +21,7 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate }) =>
   ]);
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const responseCacheRef = useRef<Map<string, { at: number; payload: any }>>(new Map());
 
   // Auto-scroll
   useEffect(() => {
@@ -41,16 +42,29 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate }) =>
   };
 
   const handleSendMessage = async (text: string) => {
-      if (!text.trim()) return;
+      if (!text.trim() || isSending) return;
 
-      const userMessage = text.trim();
+      const userMessage = text.trim().slice(0, 500);
       addMessage('user', userMessage);
       setInputText('');
       setIsSending(true);
 
       try {
+          const cacheKey = userMessage.toLowerCase();
+          const cached = responseCacheRef.current.get(cacheKey);
+          if (cached && Date.now() - cached.at < 60_000) {
+              const cachedResponse = cached.payload;
+              if (cachedResponse.action?.type === 'NAVIGATE' && onNavigate) {
+                  onNavigate(cachedResponse.action.payload as TabId, cachedResponse.action.params);
+                  addToast(cachedResponse.text || `Taking you to ${cachedResponse.action.payload}...`, 'info');
+              }
+              addMessage('bot', cachedResponse.text || "I'm having trouble connecting right now.");
+              return;
+          }
+
           // Send chat to backend
           const response = await sendChat(userMessage, messages);
+          responseCacheRef.current.set(cacheKey, { at: Date.now(), payload: response });
 
           let botText = response.text || "I'm having trouble connecting right now.";
 
@@ -147,6 +161,7 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate }) =>
                         <button
                             key={i}
                             onClick={() => handleSendMessage(action)}
+                            disabled={isSending}
                             className="whitespace-nowrap px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-full text-xs font-bold border border-indigo-100 hover:bg-indigo-100 transition-colors"
                         >
                             {action}
