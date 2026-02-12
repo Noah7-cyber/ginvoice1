@@ -15,6 +15,12 @@ const MAX_HISTORY_TURNS = 8;
 const MAX_MESSAGE_LENGTH = 500;
 const MAX_EXPORT_DOCS = 20000;
 
+const BOT_DAILY_LIMITS = {
+  free: 15,
+  trial: 40,
+  paid: 500
+};
+
 const normalizeText = (value) => (typeof value === 'string' ? value.trim().toLowerCase() : '');
 const normalizeCustomerKey = (value) => normalizeText(value).replace(/\s+/g, ' ');
 const formatCustomerDisplayName = (value) => {
@@ -24,6 +30,34 @@ const formatCustomerDisplayName = (value) => {
     .split(' ')
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');
+};
+
+const getBotTier = (business) => {
+  const now = new Date();
+  const subEnd = business?.subscriptionExpiresAt ? new Date(business.subscriptionExpiresAt) : null;
+  const trialEnd = business?.trialEndsAt ? new Date(business.trialEndsAt) : null;
+
+  const subscriptionActive = Boolean(subEnd && subEnd >= now);
+  if (subscriptionActive) return 'paid';
+
+  const trialActive = Boolean(trialEnd && trialEnd >= now);
+  if (trialActive) return 'trial';
+
+  return 'free';
+};
+
+const buildQuotaMessage = (tier, remaining) => {
+  if (remaining > 0) return null;
+
+  if (tier === 'paid') {
+    return "You've reached your daily gBot limit (500/500). Please try again tomorrow.";
+  }
+
+  if (tier === 'trial') {
+    return "You've used all 40 trial prompts for today. Upgrade to keep chatting up to 500 prompts/day.";
+  }
+
+  return "You've used all 15 free prompts for today. Start a trial or subscribe to continue with gBot.";
 };
 
 const formatToolResult = (result, fallbackMessage) => {
@@ -100,6 +134,16 @@ const tryHandleCheapIntent = async (message, businessId, userRole) => {
     return { text: formatToolResult(result, 'No recent sale found.'), action: null };
   }
 
+  if (/(share|send|print|download).*(receipt|invoice|bill)|(receipt|invoice|bill).*(share|send|print|download)/.test(text)) {
+    return {
+      text: "To share or print a receipt in this app:\n1) Open History tab (Past Sales).\n2) Tap the transaction you want.\n3) In the Invoice preview header, tap ‘Share’ to send PDF or ‘Print / PDF’ to print/save.\n4) If you only need the old invoice again, use History and open the same transaction ID.",
+      action: {
+        type: 'NAVIGATE',
+        payload: 'history'
+      }
+    };
+  }
+
   if (/(record|add|create|enter).*(sale|invoice|bill)|(sale|invoice|bill).*(record|add|create|enter)|how.*(sell|record)/.test(text)) {
     return {
       text: "To record a sale in this app:\n1) Open Sales tab.\n2) Tap any product under ‘Select Items’ to add it to cart.\n3) In the right Order panel, enter customer name/phone (optional).\n4) Choose payment method (Cash, Transfer, POS, or Debt).\n5) Confirm totals, then tap ‘Confirm Bill’.",
@@ -155,6 +199,45 @@ router.post('/chat', auth, async (req, res) => {
        return res.json({ text: "I'm having trouble identifying your business account. Please try logging in again." });
     }
 
+
+    const trimmedMessage = userMessage.trim();
+
+    const businessDoc = await Business.findById(businessId).select('trialEndsAt subscriptionExpiresAt botUsage').lean();
+    if (!businessDoc) {
+      return res.status(404).json({ text: "Business not found." });
+    }
+
+    const tier = getBotTier(businessDoc);
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const currentUsageDate = businessDoc.botUsage?.date || '';
+    const currentUsageCount = currentUsageDate === todayKey ? Number(businessDoc.botUsage?.count || 0) : 0;
+    const limit = BOT_DAILY_LIMITS[tier] || BOT_DAILY_LIMITS.free;
+
+    if (trimmedMessage) {
+      const remainingBefore = Math.max(0, limit - currentUsageCount);
+      const quotaMessage = buildQuotaMessage(tier, remainingBefore);
+
+      if (quotaMessage) {
+        return res.status(429).json({
+          text: quotaMessage,
+          action: null,
+          usage: { tier, used: currentUsageCount, limit, remaining: 0 }
+        });
+      }
+
+      if (currentUsageDate === todayKey) {
+        await Business.updateOne(
+          { _id: businessId },
+          { $inc: { 'botUsage.count': 1 } }
+        );
+      } else {
+        await Business.updateOne(
+          { _id: businessId },
+          { $set: { 'botUsage.date': todayKey, 'botUsage.count': 1 } }
+        );
+      }
+    }
+
     // A. Initialize System Prompt
     const systemPrompt = {
       role: "system",
@@ -181,13 +264,13 @@ router.post('/chat', auth, async (req, res) => {
     // C. Fast path for predictable intents to reduce AI usage/cost.
     const cheapIntentResponse = await tryHandleCheapIntent(userMessage, businessId, userRole);
     if (cheapIntentResponse) {
-      return res.json(cheapIntentResponse);
+      return res.json({ ...cheapIntentResponse, usage: null });
     }
 
     // E. Critical API Key Check for full AI path
     if (!process.env.DEEPSEEK_API_KEY) {
       console.error("CRITICAL: DEEPSEEK_API_KEY is missing.");
-      return res.status(503).json({ text: "System Error: AI Service not configured." });
+      return res.status(503).json({ text: "System Error: AI Service not configured.", action: null, usage: null });
     }
 
     // F. Execution Loop with Timeout
@@ -246,7 +329,8 @@ router.post('/chat', auth, async (req, res) => {
                             type: "NAVIGATE",
                             payload: toolResult.screen,
                             params: toolResult.params
-                        }
+                        },
+                        usage: null
                     });
                 }
 
@@ -263,24 +347,25 @@ router.post('/chat', auth, async (req, res) => {
             const finalCompletion = await callAI(messages);
             return res.json({
                 text: finalCompletion.choices[0].message.content,
-                action: null
+                action: null,
+                usage: null
             });
         }
 
         // G. Standard Response (No Tool Calls)
-        return res.json({ text: responseMessage.content, action: null });
+        return res.json({ text: responseMessage.content, action: null, usage: null });
 
     } catch (error) {
         if (error.message === "Timeout") {
-            return res.json({ text: "Market is busy right now. Please try again in a moment." });
+            return res.json({ text: "Market is busy right now. Please try again in a moment.", action: null, usage: null });
         }
         console.error('AI Execution Error:', error);
-        return res.json({ text: "I'm having trouble connecting right now. Please try again." });
+        return res.json({ text: "I'm having trouble connecting right now. Please try again.", action: null, usage: null });
     }
 
   } catch (error) {
     console.error('AI Route Error:', error);
-    res.status(500).json({ text: "I'm having trouble connecting right now. Please try again." });
+    res.status(500).json({ text: "I'm having trouble connecting right now. Please try again.", action: null, usage: null });
   }
 });
 

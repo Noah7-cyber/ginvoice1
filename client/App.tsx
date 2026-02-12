@@ -78,6 +78,7 @@ const App: React.FC = () => {
   const { addToast } = useToast();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isMobileView, setIsMobileView] = useState(window.innerWidth < 768);
   const [isLoading, setIsLoading] = useState(false);
   const wasOnlineRef = useRef(navigator.onLine);
   
@@ -342,6 +343,12 @@ const App: React.FC = () => {
   useEffect(() => {
     wasOnlineRef.current = isOnline;
   }, [isOnline]);
+
+  useEffect(() => {
+    const onResize = () => setIsMobileView(window.innerWidth < 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   useEffect(() => {
     if (state.isLoggedIn && navigator.onLine) {
@@ -997,7 +1004,9 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      <SupportBot onNavigate={handleBotNavigate} />
+      {!(activeTab === 'expenditure' && isMobileView) && (
+        <SupportBot onNavigate={handleBotNavigate} />
+      )}
     </div>
   );
 };

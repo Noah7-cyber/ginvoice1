@@ -83,9 +83,13 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate }) =>
 
           addMessage('bot', botText);
 
-      } catch (err) {
+      } catch (err: any) {
           console.error(err);
-          addMessage('bot', "Sorry, I'm having trouble connecting to the server. Please check your internet connection.");
+          if (err?.status === 429) {
+              addMessage('bot', err?.message || "You've reached today's chat limit.");
+          } else {
+              addMessage('bot', "Sorry, I'm having trouble connecting to the server. Please check your internet connection.");
+          }
       } finally {
           setIsSending(false);
       }

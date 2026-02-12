@@ -31,6 +31,11 @@ const BusinessSchema = new mongoose.Schema({
   credentialsVersion: { type: Number, default: 1 },
   dataVersion: { type: Number, default: 0 },
 
+  botUsage: {
+    date: { type: String, default: '' },
+    count: { type: Number, default: 0 }
+  },
+
   // New Centralized Settings
   settings: {
     currency: { type: String, default: '₦' },
