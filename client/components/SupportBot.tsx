@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, LifeBuoy, Send, User, Bot, MessageSquare } from 'lucide-react';
+import { X, Send, User, Bot } from 'lucide-react';
 import { useToast } from './ToastProvider';
 import { sendChat } from '../services/api';
 import { TabId } from '../types';
@@ -10,6 +10,7 @@ interface SupportBotProps {
 }
 
 const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate }) => {
+  const BOT_BRAND_IMAGE = 'https://api.dicebear.com/9.x/bottts/svg?seed=Ginvoice%20Bot&backgroundColor=b6e3f4,c0aede,d1d4f9';
   const { addToast } = useToast();
   const [open, setOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -108,11 +109,9 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate }) =>
         {/* Header */}
         <div className="bg-gradient-to-r from-indigo-600 to-violet-600 p-4 text-white flex justify-between items-center shrink-0">
             <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-sm">
-                    <LifeBuoy size={18} />
-                </div>
+                <img src={BOT_BRAND_IMAGE} alt="gBot avatar" className="w-9 h-9 rounded-full border border-white/40 bg-white/15 p-1.5 shadow-sm" />
                 <div>
-                    <h3 className="font-bold text-sm">Market OS Assistant</h3>
+                    <h3 className="font-bold text-sm">gBot Assistant</h3>
                     <div className="flex items-center gap-1.5 opacity-80">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
                         <span className="text-[10px] font-medium uppercase tracking-wide">Online</span>
@@ -200,7 +199,7 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate }) =>
             onClick={() => setOpen(true)}
             className="w-full py-4 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-2xl font-black text-sm shadow-lg flex items-center justify-center gap-2 hover:opacity-95 transition-opacity"
           >
-            <LifeBuoy size={20} /> NEED HELP? OPEN CHAT
+            <img src={BOT_BRAND_IMAGE} alt="gBot avatar" className="w-5 h-5 rounded-full bg-white/20 p-0.5" /> NEED HELP? OPEN CHAT
           </button>
         ) : (
           <div className="mt-4">{ChatWindow}</div>
@@ -214,9 +213,10 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate }) =>
     return (
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-24 md:bottom-10 right-4 z-[9999] p-4 bg-indigo-600 text-white rounded-full shadow-xl hover:bg-indigo-700 transition-all hover:scale-105 active:scale-95"
+        className="fixed bottom-24 md:bottom-10 right-4 z-[9999] p-1.5 bg-white rounded-full shadow-xl ring-2 ring-indigo-200 hover:ring-indigo-400 transition-all hover:scale-105 active:scale-95"
+        aria-label="Open gBot support chat"
       >
-        <MessageSquare size={24} />
+        <img src={BOT_BRAND_IMAGE} alt="gBot avatar" className="w-12 h-12 rounded-full" />
       </button>
     );
   }
