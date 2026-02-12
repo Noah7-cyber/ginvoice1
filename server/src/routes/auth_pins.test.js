@@ -79,7 +79,7 @@ describe('Auth Routes - PIN Updates', () => {
     expect(res.status).toBe(401);
   });
 
-  it('should enforce 40 day trial duration on registration', async () => {
+  it('should enforce 30 day trial duration on registration', async () => {
       const business = await Business.findOne({ email: 'test@business.com' });
       expect(business).toBeTruthy();
       const createdAt = new Date(business.createdAt).getTime();

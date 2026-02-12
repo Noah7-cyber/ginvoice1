@@ -6,7 +6,8 @@ const Expenditure = require('../models/Expenditure');
 
 const client = new OpenAI({
     baseURL: 'https://api.deepseek.com',
-    apiKey: process.env.DEEPSEEK_API_KEY
+    // Keep module load safe in test/offline envs; route guards prevent real calls when key is missing.
+    apiKey: process.env.DEEPSEEK_API_KEY || 'disabled'
 });
 
 const MODEL_NAME = "deepseek-chat";
@@ -126,6 +127,25 @@ const tools = [
                     }
                 },
                 required: ["query"],
+                additionalProperties: false
+            }
+        }
+    },
+
+    {
+        type: "function",
+        function: {
+            name: "query_transactions",
+            description: "Query transactions with optional filters and return summary + sample rows (Excel-like).",
+            parameters: {
+                type: "object",
+                properties: {
+                    startDate: { type: "string", description: "Optional ISO date YYYY-MM-DD" },
+                    endDate: { type: "string", description: "Optional ISO date YYYY-MM-DD" },
+                    customerName: { type: "string", description: "Optional customer name contains filter" },
+                    paymentStatus: { type: "string", enum: ["paid", "credit"], description: "Optional payment status filter" },
+                    limit: { type: "number", description: "Rows to return, max 50" }
+                },
                 additionalProperties: false
             }
         }
@@ -304,6 +324,69 @@ const product_search = async ({ query }, { businessId }) => {
     }
 };
 
+
+const query_transactions = async ({ startDate, endDate, customerName, paymentStatus, limit = 20 }, { businessId, userRole }) => {
+    if (!businessId) return { error: "Login required." };
+
+    const parsedLimit = Math.min(Math.max(Number(limit) || 20, 1), 50);
+    const criteria = { businessId };
+
+    if (startDate || endDate) {
+        criteria.transactionDate = {};
+        if (startDate) criteria.transactionDate.$gte = new Date(startDate);
+        if (endDate) {
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999);
+            criteria.transactionDate.$lte = end;
+        }
+    }
+
+    if (customerName && customerName.trim()) {
+        criteria.customerName = { $regex: customerName.trim(), $options: 'i' };
+    }
+
+    if (paymentStatus === 'paid' || paymentStatus === 'credit') {
+        criteria.paymentStatus = paymentStatus;
+    }
+
+    const [rows, metrics] = await Promise.all([
+        Transaction.find(criteria)
+            .sort({ transactionDate: -1 })
+            .limit(parsedLimit),
+        Transaction.aggregate([
+            { $match: criteria },
+            {
+                $group: {
+                    _id: null,
+                    count: { $sum: 1 },
+                    totalRevenue: { $sum: '$totalAmount' },
+                    totalOutstanding: { $sum: '$balance' }
+                }
+            }
+        ])
+    ]);
+
+    const summary = metrics[0] || { count: 0, totalRevenue: 0, totalOutstanding: 0 };
+    const baseResult = {
+        filters: { startDate, endDate, customerName: customerName || null, paymentStatus: paymentStatus || null },
+        count: Number(summary.count || 0),
+        totalRevenue: Number(summary.totalRevenue || 0),
+        totalOutstanding: Number(summary.totalOutstanding || 0),
+        rows: sanitizeData(rows)
+    };
+
+    if (userRole !== 'owner') {
+        return {
+            ...baseResult,
+            totalRevenue: undefined,
+            totalOutstanding: undefined,
+            message: 'Financial totals are restricted to Owner accounts; showing transaction rows only.'
+        };
+    }
+
+    return baseResult;
+};
+
 const get_recent_transaction = async ({}, { businessId }) => {
     if (!businessId) return { error: "Login required." };
 
@@ -330,6 +413,8 @@ const executeTool = async ({ name, args }, businessId, userRole = 'staff') => {
                 return await check_low_stock(args, context);
             case 'product_search':
                 return await product_search(args, context);
+            case 'query_transactions':
+                return await query_transactions(args, context);
             case 'get_recent_transaction':
                 return await get_recent_transaction(args, context);
             default:

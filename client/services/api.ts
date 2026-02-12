@@ -315,12 +315,34 @@ export const sendChat = async (message: string, history: any[]) => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');
 
+  // Keep payload small to reduce backend memory usage and AI token cost.
+  const compactHistory = (Array.isArray(history) ? history : [])
+    .slice(-8)
+    .map((item) => ({
+      from: item?.from === 'bot' ? 'bot' : 'user',
+      text: typeof item?.text === 'string' ? item.text.slice(0, 400) : ''
+    }))
+    .filter((item) => item.text.trim().length > 0);
+
   return request('/api/support/chat', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`
     },
-    body: JSON.stringify({ message, history })
+    body: JSON.stringify({ message: message.slice(0, 500), history: compactHistory })
+  });
+};
+
+
+export const exportBusinessData = async (scope: 'lite' | 'full' = 'lite') => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request(`/api/support/export-data?scope=${scope}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
   });
 };
 

@@ -19,6 +19,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { InventoryState, UserRole, Product, ProductUnit, Transaction, BusinessProfile, TabId, SaleItem, PaymentMethod, Expenditure, ActivityLog } from './types';
+import useTabRouting from './hooks/useTabRouting';
 import { INITIAL_PRODUCTS } from './constants';
 import { safeCalculate } from './utils/math';
 import { saveState, loadState, pushToBackend, getDataVersion, saveDataVersion, getLastSync, saveLastSync } from './services/storage';
@@ -123,57 +124,12 @@ const App: React.FC = () => {
   }, [state.products, state.business.settings?.enableLowStockAlerts]);
   */
 
-  // Routing / Deep Linking Logic
-  useEffect(() => {
-    const syncURL = () => {
-      const path = window.location.pathname;
-      const parts = path.split('/').filter(Boolean); // e.g. ['inventory', '123']
-
-      if (parts.length > 0) {
-        if (parts[0] === 'admin-portal') {
-          setActiveTab('admin-portal');
-          return;
-        }
-
-        const tab = parts[0] as TabId;
-        // Simple check if tab is valid, or at least exists in our map
-        if (TAB_LABELS[tab] || ['sales', 'inventory', 'history', 'dashboard', 'expenditure', 'settings'].includes(tab)) {
-           setActiveTab(tab);
-           setVisitedTabs(prev => new Set(prev).add(tab));
-
-           if (parts.length > 1) {
-             setDeepLinkParams({ id: parts[1] });
-           } else {
-             setDeepLinkParams({});
-           }
-        }
-      }
-    };
-
-    // Run on mount
-    syncURL();
-
-    // Listen for back/forward
-    window.addEventListener('popstate', syncURL);
-    return () => window.removeEventListener('popstate', syncURL);
-  }, []);
-
-  const handleTabChange = (tab: TabId) => {
-    setActiveTab(tab);
-    setVisitedTabs(prev => new Set(prev).add(tab));
-    setDeepLinkParams({}); // Clear deep link params on tab switch
-    window.history.pushState(null, '', `/${tab}`);
-  };
-
-  const handleBotNavigate = (tab: TabId, params?: any) => {
-      setActiveTab(tab);
-      setVisitedTabs(prev => new Set(prev).add(tab));
-      if (params) {
-          setDeepLinkParams(params);
-      } else {
-          setDeepLinkParams({});
-      }
-  };
+  const { handleTabChange, handleBotNavigate } = useTabRouting({
+    setActiveTab,
+    setVisitedTabs,
+    setDeepLinkParams,
+    tabLabels: TAB_LABELS
+  });
 
   // Email Verification Feedback
   useEffect(() => {

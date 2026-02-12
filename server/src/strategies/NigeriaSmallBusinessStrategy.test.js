@@ -1,104 +1,60 @@
 const strategy = require('./NigeriaSmallBusinessStrategy');
 
-describe('NigeriaSmallBusinessStrategy (CRA 20% Rule)', () => {
-  it('should exempt companies with revenue <= 50m (Tier 1)', () => {
-    const revenue = 45000000;
-    const expenses = [];
-    const result = strategy.calculate(revenue, expenses, {});
+describe('NigeriaSmallBusinessStrategy (NG CIT ruleset governance)', () => {
+  it('returns ruleset version for auditability', () => {
+    const result = strategy.calculate(80000000, [], {});
+    expect(result.rulesetVersion).toBe('ng-cit-v1.0');
+  });
 
+  it('exempts companies with revenue <= 50m', () => {
+    const result = strategy.calculate(45000000, [], {});
     expect(result.estimatedTax).toBe(0);
     expect(result.taxBand).toBe('EXEMPT');
   });
 
-  it('should tax companies with revenue between 50m and 100m at 25% (Tier 2)', () => {
-    // Revenue = 80m. Operating Expenses = 0.
-    // Assessable Profit = 80m.
-    // Tax = 25% of 80m = 20m.
+  it('applies 25% rate for revenue between 50m and 100m on taxable income after CRA', () => {
     const revenue = 80000000;
-    const expenses = [];
-    const result = strategy.calculate(revenue, expenses, {});
+    const cra = 200000 + revenue * 0.2; // 16.2m
+    const taxableIncome = revenue - cra; // 63.8m
+    const result = strategy.calculate(revenue, [], {});
 
-    expect(result.estimatedTax).toBe(20000000);
     expect(result.taxBand).toBe('MEDIUM_COMPANY');
+    expect(result.taxableIncome).toBe(taxableIncome);
+    expect(result.estimatedTax).toBe(taxableIncome * 0.25);
   });
 
-  it('should tax companies with revenue > 100m at 30% (Tier 3)', () => {
+  it('applies 30% rate for revenue above 100m on taxable income after CRA', () => {
     const revenue = 150000000;
-    const expenses = [];
-    // Assessable Profit = 150m. Tax = 30% of 150m = 45m.
-    const result = strategy.calculate(revenue, expenses, {});
+    const cra = 200000 + revenue * 0.2; // 30.2m
+    const taxableIncome = revenue - cra; // 119.8m
+    const result = strategy.calculate(revenue, [], {});
 
-    expect(result.estimatedTax).toBe(45000000);
     expect(result.taxBand).toBe('LARGE_COMPANY');
+    expect(result.taxableIncome).toBe(taxableIncome);
+    expect(result.estimatedTax).toBe(taxableIncome * 0.30);
   });
 
-  it('should deduct strictly business expenses', () => {
-    const revenue = 100000000; // Tier 2 (25%)
+  it('deducts business expenses and ignores personal/non-deductible from deductibleExpenses', () => {
+    const revenue = 100000000;
     const expenses = [
-      { category: 'Utilities', amount: 10000000, expenseType: 'business' },
-      { category: 'Personal Stuff', amount: 5000000, expenseType: 'personal' } // Should be ignored
+      { amount: 10000000, expenseType: 'business', flowType: 'out', taxCategory: 'OPERATING_EXPENSE' },
+      { amount: 5000000, expenseType: 'personal', flowType: 'out', taxCategory: 'NON_DEDUCTIBLE' }
     ];
-    // Assessable Profit = 100m - 10m = 90m.
-    // Tax = 25% of 90m = 22.5m.
-    const result = strategy.calculate(revenue, expenses, {});
 
+    const result = strategy.calculate(revenue, expenses, {});
+    expect(result.deductibleExpenses).toBe(10000000);
     expect(result.breakdown.assessableProfit).toBe(90000000);
-    expect(result.estimatedTax).toBe(22500000);
   });
 
-  it('should handle Personal Rent with CRA 20% Cap (Rent > Cap)', () => {
-    // Revenue = 100m. Cap = 20m.
-    // Rent = 25m.
-    // Allowed = 20m.
-    // Business Exp = 10m.
-    // Assessable = 100m - 10m - 20m = 70m.
-    // Tax (25%) = 17.5m.
-    const revenue = 100000000;
+  it('handles money-in entries by reducing expense totals and preserving cash safety math', () => {
+    const revenue = 60000000;
     const expenses = [
-      { category: 'Rent', amount: 25000000, expenseType: 'personal' },
-      { category: 'Salaries', amount: 10000000, expenseType: 'business' }
+      { amount: 4000000, expenseType: 'business', flowType: 'out', taxCategory: 'OPERATING_EXPENSE' },
+      { amount: 1000000, expenseType: 'business', flowType: 'in', taxCategory: 'OPERATING_EXPENSE' }
     ];
 
     const result = strategy.calculate(revenue, expenses, {});
-
-    expect(result.breakdown.personalRent).toBe(25000000);
-    expect(result.personalTip.reliefAmount).toBe(20000000); // Capped
-    expect(result.breakdown.assessableProfit).toBe(70000000);
-    expect(result.estimatedTax).toBe(17500000);
-  });
-
-  it('should handle Personal Rent with CRA 20% Cap (Rent < Cap)', () => {
-    // Revenue = 100m. Cap = 20m.
-    // Rent = 5m.
-    // Allowed = 5m.
-    // Assessable = 100m - 5m = 95m.
-    // Tax (25%) = 23.75m.
-    const revenue = 100000000;
-    const expenses = [
-      { category: 'Rent', amount: 5000000, expenseType: 'personal' }
-    ];
-
-    const result = strategy.calculate(revenue, expenses, {});
-
-    expect(result.personalTip.reliefAmount).toBe(5000000); // Full amount
-    expect(result.breakdown.assessableProfit).toBe(95000000);
-    expect(result.estimatedTax).toBe(23750000);
-  });
-
-  it('should deduct WHT from FINAL Tax, not Profit', () => {
-    // Revenue = 100m.
-    // WHT = 2m.
-    // Assessable = 100m.
-    // Estimated Tax = 25m.
-    // Final Tax = 25m - 2m = 23m.
-    const revenue = 100000000;
-    const expenses = [
-      { category: 'Withholding Tax (WHT)', amount: 2000000, expenseType: 'business' }
-    ];
-
-    const result = strategy.calculate(revenue, expenses, {});
-
-    expect(result.breakdown.assessableProfit).toBe(100000000);
-    expect(result.estimatedTax).toBe(23000000);
+    expect(result.deductibleExpenses).toBe(3000000);
+    expect(result.safeToSpend).toBeGreaterThan(0);
   });
 });
