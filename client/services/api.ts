@@ -52,7 +52,7 @@ const request = async (path: string, options: RequestInit = {}) => {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     console.error('[API] Request returned error status:', res.status, data);
-    const message = data?.message || 'Request failed';
+    const message = data?.message || data?.text || 'Request failed';
 
     // Global Handling for Permission/Auth Issues
     if (res.status === 401 || res.status === 403) {
