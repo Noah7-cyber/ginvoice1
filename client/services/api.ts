@@ -311,7 +311,7 @@ export const deleteExpenditure = async (id: string) => {
   });
 };
 
-export const sendChat = async (message: string, history: any[]) => {
+export const sendChat = async (message: string, history: any[], uiContext?: any) => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');
 
@@ -324,12 +324,44 @@ export const sendChat = async (message: string, history: any[]) => {
     }))
     .filter((item) => item.text.trim().length > 0);
 
+  const compactUiContext = uiContext && typeof uiContext === 'object'
+    ? {
+        tab: typeof uiContext.tab === 'string' ? uiContext.tab : undefined,
+        cart: uiContext.cart
+          ? {
+              itemCount: Number(uiContext.cart.itemCount || 0),
+              subtotal: Number(uiContext.cart.subtotal || 0),
+              items: Array.isArray(uiContext.cart.items)
+                ? uiContext.cart.items.slice(0, 8).map((item: any) => ({
+                    name: String(item?.name || '').slice(0, 80),
+                    quantity: Number(item?.quantity || 0),
+                    unitPrice: Number(item?.unitPrice || 0),
+                    total: Number(item?.total || 0)
+                  }))
+                : []
+            }
+          : undefined,
+        selectedInvoice: uiContext.selectedInvoice
+          ? {
+              id: String(uiContext.selectedInvoice.id || '').slice(0, 50),
+              customerName: String(uiContext.selectedInvoice.customerName || '').slice(0, 80),
+              totalAmount: Number(uiContext.selectedInvoice.totalAmount || 0),
+              amountPaid: Number(uiContext.selectedInvoice.amountPaid || 0),
+              balance: Number(uiContext.selectedInvoice.balance || 0),
+              paymentStatus: String(uiContext.selectedInvoice.paymentStatus || '').slice(0, 20),
+              itemCount: Number(uiContext.selectedInvoice.itemCount || 0),
+              transactionDate: String(uiContext.selectedInvoice.transactionDate || '').slice(0, 40)
+            }
+          : undefined
+      }
+    : undefined;
+
   return request('/api/support/chat', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`
     },
-    body: JSON.stringify({ message: message.slice(0, 500), history: compactHistory })
+    body: JSON.stringify({ message: message.slice(0, 500), history: compactHistory, uiContext: compactUiContext })
   });
 };
 

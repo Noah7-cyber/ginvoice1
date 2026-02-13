@@ -15,6 +15,30 @@ const MAX_HISTORY_TURNS = 8;
 const MAX_MESSAGE_LENGTH = 500;
 const MAX_EXPORT_DOCS = 20000;
 
+const summarizeUiContextForPrompt = (uiContext) => {
+  if (!uiContext || typeof uiContext !== 'object') return '';
+
+  const tab = typeof uiContext.tab === 'string' ? uiContext.tab : 'unknown';
+  const parts = [`The user is currently on the ${tab} screen.`];
+
+  if (tab === 'sales' && uiContext.cart && typeof uiContext.cart === 'object') {
+    const itemCount = Number(uiContext.cart.itemCount || 0);
+    const subtotal = Number(uiContext.cart.subtotal || 0);
+    const items = Array.isArray(uiContext.cart.items) ? uiContext.cart.items.slice(0, 5) : [];
+    const itemSummary = items.map(item => `${item?.name || 'Item'} x${Number(item?.quantity || 0)}`).join(', ');
+    parts.push(`Current cart has ${itemCount} item(s), subtotal ₦${subtotal.toLocaleString()}${itemSummary ? `, including: ${itemSummary}.` : '.'}`);
+  }
+
+  if (tab === 'history' && uiContext.selectedInvoice && typeof uiContext.selectedInvoice === 'object') {
+    const invoice = uiContext.selectedInvoice;
+    parts.push(
+      `Selected invoice: ID ${invoice.id || 'N/A'}, customer ${invoice.customerName || 'Unknown'}, total ₦${Number(invoice.totalAmount || 0).toLocaleString()}, paid ₦${Number(invoice.amountPaid || 0).toLocaleString()}, balance ₦${Number(invoice.balance || 0).toLocaleString()}, status ${invoice.paymentStatus || 'unknown'}.`
+    );
+  }
+
+  return parts.join(' ');
+};
+
 const BOT_DAILY_LIMITS = {
   free: 15,
   trial: 40,
@@ -192,6 +216,7 @@ router.post('/chat', auth, async (req, res) => {
   try {
     const userMessage = typeof req.body.message === 'string' ? req.body.message.slice(0, MAX_MESSAGE_LENGTH) : '';
     const history = Array.isArray(req.body.history) ? req.body.history : [];
+    const uiContext = req.body.uiContext && typeof req.body.uiContext === 'object' ? req.body.uiContext : null;
     const businessId = req.business?._id || req.businessId;
     const userRole = req.user?.role || 'staff';
 
@@ -239,9 +264,20 @@ router.post('/chat', auth, async (req, res) => {
     }
 
     // A. Initialize System Prompt
+    const contextSummary = summarizeUiContextForPrompt(uiContext);
+
     const systemPrompt = {
       role: "system",
-      content: `You are gBot, a concise Nigerian store manager + financial analyst inside the GInvoice app. Current Date: ${new Date().toDateString()}.\n\nAPP REALITY (STRICT): The user can only navigate these in-app tabs: sales, inventory, history, expenditure, dashboard, settings. Do NOT mention screens/buttons that do not exist (e.g., “New Invoice”, “Create Sale”, barcode scanner).\n\nNAVIGATION RULES: When giving instructions, reference visible labels in the current app UX like ‘Sales tab’, ‘Select Items’, right-side order panel, and ‘Confirm Bill’.\n\nRESPONSE STYLE: short, practical, numbers-first, and owner-focused. If asked strategy, provide 2-4 actionable financial steps tied to their data. If uncertain, ask one clarifying question instead of guessing.`
+      content: `You are gBot, a concise Nigerian store manager + financial analyst inside the GInvoice app. Current Date: ${new Date().toDateString()}.
+
+APP REALITY (STRICT): The user can only navigate these in-app tabs: sales, inventory, history, expenditure, dashboard, settings. Do NOT mention screens/buttons that do not exist (e.g., “New Invoice”, “Create Sale”, barcode scanner).
+
+NAVIGATION RULES: When giving instructions, reference visible labels in the current app UX like ‘Sales tab’, ‘Select Items’, right-side order panel, and ‘Confirm Bill’.
+
+CURRENT UI CONTEXT: ${contextSummary || 'No specific in-app context was provided for this message.'}
+Use this UI context to answer directly when possible. If the question requires data outside this context, use available tools.
+
+RESPONSE STYLE: short, practical, numbers-first, and owner-focused. If asked strategy, provide 2-4 actionable financial steps tied to their data. If uncertain, ask one clarifying question instead of guessing.`
     };
 
     // B. Construct Messages Array
