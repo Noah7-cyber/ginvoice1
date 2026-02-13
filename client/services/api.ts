@@ -714,3 +714,51 @@ export const deleteTransaction = async (id: string, restock: boolean) => {
     }
   });
 };
+
+export const getStockVerificationQueue = async () => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/audit/queue', {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+};
+
+export const verifyStockItem = async (payload: {
+  productId: string;
+  countedQty: number;
+  expectedQtyAtOpen: number;
+  reasonCode?: 'CYCLE_COUNT' | 'MANUAL_CHECK' | 'FOLLOW_UP';
+  notes?: string;
+  confirmChangedExpected?: boolean;
+}) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/audit/verify', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload)
+  });
+};
+
+export const snoozeStockVerification = async () => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/audit/snooze', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+};
+
+export const dismissNotification = async (notificationId: string) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request(`/api/audit/dismiss/${notificationId}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+};

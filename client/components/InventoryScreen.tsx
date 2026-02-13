@@ -3,7 +3,7 @@ import { Plus, Search, Edit3, Trash2, CheckCircle2, X, ListTodo, Layers, Tag, Do
 import { Product, Category } from '../types';
 import { CURRENCY } from '../constants';
 import { formatCurrency } from '../utils/currency';
-import { deleteProduct, createProduct, updateProduct, getCategories } from '../services/api';
+import { deleteProduct, createProduct, updateProduct, getCategories, getStockVerificationQueue, verifyStockItem } from '../services/api';
 import { useToast } from './ToastProvider';
 import CategoryManager from './CategoryManager';
 import AlphabetScrubber from './AlphabetScrubber';
@@ -44,6 +44,11 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const [verificationQueue, setVerificationQueue] = useState<any[]>([]);
+  const [isVerifyOpen, setIsVerifyOpen] = useState(false);
+  const [verifyIndex, setVerifyIndex] = useState(0);
+  const [countedQty, setCountedQty] = useState<number | ''>('');
+  const [verifyNotes, setVerifyNotes] = useState('');
 
   // Category Management
   const [categories, setCategories] = useState<Category[]>([]);
@@ -83,6 +88,9 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
     if (initialParams?.filter === 'low_stock') {
         setFilterLowStock(true);
+    }
+    if (initialParams?.filter === 'stock_verify') {
+      handleStartVerification();
     }
 
     if (initialParams?.id) {
@@ -388,6 +396,79 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     }
   };
 
+
+  const handleStartVerification = async () => {
+    if (!isOnline) {
+      addToast('Please connect to the internet to verify stock.', 'error');
+      return;
+    }
+    try {
+      const result = await getStockVerificationQueue();
+      const queue = Array.isArray(result?.queue) ? result.queue : [];
+      if (!queue.length) {
+        addToast('No verification needed right now.', 'success');
+        return;
+      }
+      setVerificationQueue(queue);
+      setVerifyIndex(0);
+      setCountedQty(queue[0]?.expectedQty ?? 0);
+      setVerifyNotes('');
+      setIsVerifyOpen(true);
+    } catch {
+      addToast('Failed to load verification queue.', 'error');
+    }
+  };
+
+  const handleVerifySaveNext = async () => {
+    const current = verificationQueue[verifyIndex];
+    if (!current || countedQty === '') return;
+
+    try {
+      await verifyStockItem({
+        productId: current.productId,
+        countedQty: Number(countedQty),
+        expectedQtyAtOpen: Number(current.expectedQty || 0),
+        reasonCode: 'CYCLE_COUNT',
+        notes: verifyNotes
+      });
+      addToast('Verification saved.', 'success');
+      if (verifyIndex + 1 >= verificationQueue.length) {
+        setIsVerifyOpen(false);
+      } else {
+        const nextIndex = verifyIndex + 1;
+        setVerifyIndex(nextIndex);
+        setCountedQty(verificationQueue[nextIndex]?.expectedQty ?? 0);
+        setVerifyNotes('');
+      }
+    } catch (err: any) {
+      if (err?.status === 409) {
+        const confirmApply = window.confirm('Expected quantity changed while counting. Use latest expected quantity and continue?');
+        if (!confirmApply) return;
+        await verifyStockItem({
+          productId: current.productId,
+          countedQty: Number(countedQty),
+          expectedQtyAtOpen: Number(current.expectedQty || 0),
+          reasonCode: 'CYCLE_COUNT',
+          notes: verifyNotes,
+          confirmChangedExpected: true
+        });
+      } else {
+        addToast('Failed to save verification.', 'error');
+      }
+    }
+  };
+
+  const handleVerifySkip = () => {
+    if (verifyIndex + 1 >= verificationQueue.length) {
+      setIsVerifyOpen(false);
+      return;
+    }
+    const nextIndex = verifyIndex + 1;
+    setVerifyIndex(nextIndex);
+    setCountedQty(verificationQueue[nextIndex]?.expectedQty ?? 0);
+    setVerifyNotes('');
+  };
+
   return (
     <div className="max-w-7xl mx-auto h-full flex flex-col overflow-hidden relative">
         {/* New Invisible Scrubber - Position fixed relative to viewport is fine, but it needs to call our hook */}
@@ -454,6 +535,9 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
               <ListTodo size={20} /> Edit Many ({selectedIds.size})
             </button>
           )}
+          <button onClick={handleStartVerification} className="bg-blue-50 text-blue-700 px-4 py-3 rounded-xl flex items-center gap-2 font-bold border border-blue-200 hover:bg-blue-100 transition-all">
+            <CheckCircle2 size={18} /> <span className="hidden md:inline">Verify Stock</span>
+          </button>
           {!safeReadOnly && (
             <button 
               onClick={handleAddNew}
@@ -1090,6 +1174,29 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
           </div>
         </div>
       )}
+
+      {isVerifyOpen && (
+        <div className="fixed inset-0 z-[80] bg-black/50 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-5 space-y-4">
+            <h3 className="text-lg font-bold">Stock verification recommended</h3>
+            {verificationQueue[verifyIndex] && (
+              <div className="space-y-2">
+                <p className="font-semibold text-gray-900">{verificationQueue[verifyIndex].name}</p>
+                <p className="text-sm text-gray-600">Expected: {verificationQueue[verifyIndex].expectedQty}</p>
+                <input type="number" className="w-full px-3 py-2 border rounded-lg" value={countedQty} onChange={(e) => setCountedQty(e.target.value ? Number(e.target.value) : '')} placeholder="Counted quantity" />
+                <textarea className="w-full px-3 py-2 border rounded-lg" value={verifyNotes} onChange={(e) => setVerifyNotes(e.target.value)} placeholder="Notes (optional)" />
+                <p className="text-xs text-gray-500">Item {verifyIndex + 1} of {verificationQueue.length}</p>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button onClick={handleVerifySkip} className="flex-1 py-2 rounded-lg border font-semibold">Skip</button>
+              <button onClick={handleVerifySaveNext} className="flex-1 py-2 rounded-lg bg-primary text-white font-semibold">Save & Next</button>
+            </div>
+            <button onClick={() => setIsVerifyOpen(false)} className="w-full text-sm text-gray-500">Count later</button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

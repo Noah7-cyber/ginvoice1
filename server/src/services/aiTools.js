@@ -3,6 +3,7 @@ const OpenAI = require('openai');
 const Transaction = require('../models/Transaction');
 const Product = require('../models/Product');
 const Expenditure = require('../models/Expenditure');
+const { generateVerificationQueue } = require('./stockVerification');
 
 const client = new OpenAI({
     baseURL: 'https://api.deepseek.com',
@@ -155,6 +156,18 @@ const tools = [
         function: {
             name: "get_recent_transaction",
             description: "Find the single most recent transaction.",
+            parameters: {
+                type: "object",
+                properties: {},
+                additionalProperties: false
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "get_stock_verification_queue",
+            description: "Get recommended micro-count items for stock verification today.",
             parameters: {
                 type: "object",
                 properties: {},
@@ -445,6 +458,16 @@ const get_recent_transaction = async ({}, { businessId }) => {
     return sanitizeData(result);
 };
 
+
+const get_stock_verification_queue = async ({}, { businessId }) => {
+    if (!businessId) return { error: "Login required." };
+    const result = await generateVerificationQueue(businessId);
+    return {
+        message: result.queue.length ? `Recommended ${result.queue.length} item(s) to verify today.` : 'No verification needed right now.',
+        items: result.queue
+    };
+};
+
 // --- Executor ---
 const executeTool = async ({ name, args }, businessId, userRole = 'staff') => {
     try {
@@ -462,6 +485,8 @@ const executeTool = async ({ name, args }, businessId, userRole = 'staff') => {
                 return await query_transactions(args, context);
             case 'get_recent_transaction':
                 return await get_recent_transaction(args, context);
+            case 'get_stock_verification_queue':
+                return await get_stock_verification_queue(args, context);
             default:
                 return { error: `Unknown tool: ${name}` };
         }

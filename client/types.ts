@@ -39,6 +39,19 @@ export interface BusinessProfile {
     enableSound: boolean;
     printReceipts: boolean;
     footerText: string;
+    stockVerification?: {
+      enabled?: boolean;
+      maxQueuePerDay?: number;
+      minDaysBetweenPrompts?: number;
+      verifyCooldownHours?: number;
+      ageHalfLifeDays?: number;
+      velocityWindowDays?: number;
+      riskDecayOnVerify?: number;
+      highVarianceBoost?: number;
+      riskThreshold?: number;
+      snoozeUntil?: string | null;
+      lastNotificationAt?: string | null;
+    };
   };
 
   taxSettings?: {
@@ -77,6 +90,10 @@ export interface Product {
   baseUnit: string;      // Renamed from 'unit'
   units: ProductUnit[];  // Alternative units (e.g., Packs)
   isManualUpdate?: boolean; // Flag to indicate if stock was manually adjusted
+  lastVerifiedAt?: string | null;
+  lastVerifiedQty?: number | null;
+  varianceCount?: number;
+  lastAbsVar?: number;
 }
 
 export type PaymentMethod = 'cash' | 'transfer' | 'pos' | 'bank' | 'credit';
@@ -144,10 +161,13 @@ export interface ActivityLog {
 
 export interface Notification {
   id: string;
+  title?: string;
   message: string;
-  type: 'deletion';
+  body?: string;
+  type: 'deletion' | 'modification' | 'stock_verification' | 'stock_variance';
   amount: number;
   performedBy: string;
+  payload?: any;
   timestamp: string;
 }
 
