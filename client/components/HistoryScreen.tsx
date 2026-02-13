@@ -17,6 +17,7 @@ import {
   Phone,
   AlertCircle,
   CheckCircle2,
+  Loader2,
   Plus,
   Minus,
   ShoppingBag
@@ -33,12 +34,13 @@ interface HistoryScreenProps {
   products: Product[];
   business: BusinessProfile;
   onDeleteTransaction: (id: string, restockItems: boolean) => void;
-  onUpdateTransaction: (transaction: Transaction) => void;
+  onUpdateTransaction: (transaction: Transaction, options?: { skipSync?: boolean }) => void;
   isSubscriptionExpired?: boolean;
   onRenewSubscription?: () => void;
   isReadOnly?: boolean;
   isOnline: boolean;
   initialParams?: { id?: string; filter?: string; search?: string };
+  onSelectedInvoiceChange?: (transaction: Transaction | null) => void;
 }
 
 type ViewMode = 'invoices' | 'debtors';
@@ -53,7 +55,17 @@ const formatCustomerName = (value: string) => {
     .join(' ');
 };
 
-const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, business, onDeleteTransaction, onUpdateTransaction, isSubscriptionExpired, onRenewSubscription, isReadOnly, isOnline, initialParams }) => {
+const buildSettledTransaction = (transaction: Transaction): Transaction => ({
+  ...transaction,
+  balance: 0,
+  amountPaid: transaction.totalAmount,
+  paymentStatus: 'paid'
+});
+
+const debtorKeyForTransactions = (transactions: Transaction[]) =>
+  transactions.map(tx => tx.id).sort().join('|');
+
+const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, business, onDeleteTransaction, onUpdateTransaction, isSubscriptionExpired, onRenewSubscription, isReadOnly, isOnline, initialParams, onSelectedInvoiceChange }) => {
   const { addToast } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>('invoices');
   const [searchTerm, setSearchTerm] = useState('');
@@ -64,6 +76,10 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
   const [selectedInvoice, setSelectedInvoice] = useState<Transaction | null>(null);
+
+  useEffect(() => {
+    onSelectedInvoiceChange?.(selectedInvoice);
+  }, [selectedInvoice, onSelectedInvoiceChange]);
 
   // Sync with URL Params
   useEffect(() => {
@@ -101,7 +117,10 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
   // Modal State for Delete
   const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [deletingTransactionIds, setDeletingTransactionIds] = useState<Set<string>>(new Set());
   const [shouldRestock, setShouldRestock] = useState(true);
+  const [settlingTransactionIds, setSettlingTransactionIds] = useState<Set<string>>(new Set());
+  const [settlingDebtorKeys, setSettlingDebtorKeys] = useState<Set<string>>(new Set());
 
   const [expandedDebtor, setExpandedDebtor] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(50);
@@ -174,6 +193,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
   };
 
   const handleDeleteRequest = (t: Transaction) => {
+    if (deletingTransactionIds.has(t.id)) return;
      if (!isOnline) {
       addToast('Please connect to the internet to perform this action.', 'error');
       return;
@@ -183,13 +203,15 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
   };
 
   const confirmDelete = async () => {
-    if (!transactionToDelete) return;
+    if (!transactionToDelete || isDeleting) return;
 
+    const txId = transactionToDelete.id;
     setIsDeleting(true);
+    setDeletingTransactionIds(prev => new Set(prev).add(txId));
     try {
       // @ts-ignore
-      await api.delete(`/transactions/${transactionToDelete.id}?restock=${shouldRestock}`);
-      onDeleteTransaction(transactionToDelete.id, shouldRestock);
+      await api.delete(`/transactions/${txId}?restock=${shouldRestock}`);
+      onDeleteTransaction(txId, shouldRestock);
       const msg = shouldRestock ? 'Transaction deleted and stock restored' : 'Transaction deleted (Stock NOT restored)';
       addToast(msg, 'success');
       setTransactionToDelete(null);
@@ -198,6 +220,11 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
       addToast('Failed to delete. You might be offline.', 'error');
     } finally {
       setIsDeleting(false);
+      setDeletingTransactionIds(prev => {
+        const next = new Set(prev);
+        next.delete(txId);
+        return next;
+      });
     }
   };
 
@@ -225,47 +252,80 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
   };
 
   const handleSettle = async (t: Transaction) => {
+      if (settlingTransactionIds.has(t.id)) return;
+
+      const updatedTx = buildSettledTransaction(t);
       if (!isOnline) {
-          addToast('Online connection required to settle debt.', 'error');
+          onUpdateTransaction(updatedTx);
+          addToast('Debt marked as paid locally. Will sync when online.', 'success');
           return;
       }
 
-      // Optimistic Update
-      const updatedTx = { ...t, balance: 0, amountPaid: t.totalAmount, paymentStatus: 'paid' as const };
-      onUpdateTransaction(updatedTx);
-      addToast('Debt marked as paid!', 'success');
-
+      setSettlingTransactionIds(prev => new Set(prev).add(t.id));
       try {
-          await settleTransaction(t.id);
+          const settledFromApi = await settleTransaction(t.id);
+          onUpdateTransaction(settledFromApi?.id ? settledFromApi : updatedTx, { skipSync: true });
+          addToast('Debt marked as paid!', 'success');
       } catch (err) {
           console.error(err);
-          addToast('Failed to sync payment status.', 'error');
+          addToast('Failed to mark debt as paid. Please try again.', 'error');
+      } finally {
+          setSettlingTransactionIds(prev => {
+            const next = new Set(prev);
+            next.delete(t.id);
+            return next;
+          });
       }
   };
 
   const handleSettleDebtor = async (debtorTransactions: Transaction[]) => {
-      if (!isOnline) {
-          addToast('Online connection required to settle debt.', 'error');
-          return;
-      }
+      if (debtorTransactions.length === 0) return;
+      const debtorKey = debtorKeyForTransactions(debtorTransactions);
+      if (settlingDebtorKeys.has(debtorKey)) return;
 
       if (!confirm(`Mark all debts for this customer as paid?`)) return;
 
-      // Optimistic Update Loop
-      debtorTransactions.forEach(t => {
-         const updatedTx = { ...t, balance: 0, amountPaid: t.totalAmount, paymentStatus: 'paid' as const };
-         onUpdateTransaction(updatedTx);
-      });
-      addToast('All debts marked as paid!', 'success');
+      if (!isOnline) {
+        debtorTransactions.forEach(t => {
+          onUpdateTransaction(buildSettledTransaction(t));
+        });
+        addToast('All debts marked as paid locally. Will sync when online.', 'success');
+        return;
+      }
 
+      setSettlingDebtorKeys(prev => new Set(prev).add(debtorKey));
       try {
-          // Sequential Settle (to avoid race conditions or complex bulk API)
-          for (const t of debtorTransactions) {
-             await settleTransaction(t.id);
+          let successful = 0;
+          for (const tx of debtorTransactions) {
+            try {
+              const settledFromApi = await settleTransaction(tx.id);
+              onUpdateTransaction(settledFromApi?.id ? settledFromApi : buildSettledTransaction(tx), { skipSync: true });
+              successful += 1;
+            } catch (error) {
+              console.error('Settle failed for transaction:', tx.id, error);
+            }
           }
+
+          if (successful === debtorTransactions.length) {
+            addToast('All debts marked as paid!', 'success');
+            return;
+          }
+
+          if (successful > 0) {
+            addToast(`${successful} invoice(s) marked paid. Some failed — please retry.`, 'error');
+            return;
+          }
+
+          addToast('Failed to mark debts as paid. Please try again.', 'error');
       } catch (err) {
           console.error(err);
-          addToast('Failed to sync some payments.', 'error');
+          addToast('Failed to mark debts as paid. Please try again.', 'error');
+      } finally {
+          setSettlingDebtorKeys(prev => {
+            const next = new Set(prev);
+            next.delete(debtorKey);
+            return next;
+          });
       }
   };
 
@@ -421,7 +481,14 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
                       {!isReadOnly && (
                         <>
                           <button onClick={() => handleEditClick(t)} className="p-2 text-gray-400 hover:text-indigo-600 rounded-lg"><Edit3 size={18} /></button>
-                          <button onClick={() => handleDeleteRequest(t)} className="p-2 text-gray-400 hover:text-red-600 rounded-lg"><Trash2 size={18} /></button>
+                          <button
+                            onClick={() => handleDeleteRequest(t)}
+                            disabled={deletingTransactionIds.has(t.id)}
+                            className="p-2 text-gray-400 hover:text-red-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                            title={deletingTransactionIds.has(t.id) ? 'Deleting...' : 'Delete'}
+                          >
+                            {deletingTransactionIds.has(t.id) ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
+                          </button>
                         </>
                       )}
                     </div>
@@ -448,7 +515,10 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
               <p>Excellent! All your customers are currently up to date.</p>
             </div>
           ) : (
-            debtorsLedger.map(debtor => (
+            debtorsLedger.map(debtor => {
+                const debtorKey = debtorKeyForTransactions(debtor.transactions);
+                const isSettlingDebtor = settlingDebtorKeys.has(debtorKey);
+                return (
               <div key={debtor.name} className="bg-white rounded-2xl shadow-sm border-l-8 border-l-red-500 border group hover:shadow-lg transition-all overflow-hidden">
                 <div
                   className="p-6 flex flex-col md:flex-row justify-between gap-6 items-center cursor-pointer"
@@ -531,10 +601,11 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
                                        {!isReadOnly && (
                                            <button
                                               onClick={() => handleSettle(tx)}
-                                              className="p-2 bg-green-50 text-green-600 rounded-lg border border-green-200 hover:bg-green-100"
-                                              title="Mark Paid"
+                                              disabled={settlingTransactionIds.has(tx.id) || isSettlingDebtor}
+                                              className="p-2 bg-green-50 text-green-600 rounded-lg border border-green-200 hover:bg-green-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                                              title={(settlingTransactionIds.has(tx.id) || isSettlingDebtor) ? 'Marking Paid...' : 'Mark Paid'}
                                            >
-                                               <CheckCircle2 size={18} />
+                                               {(settlingTransactionIds.has(tx.id) || isSettlingDebtor) ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
                                            </button>
                                        )}
                                    </div>
@@ -546,16 +617,18 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
                            {!isReadOnly && (
                                <button
                                   onClick={() => handleSettleDebtor(debtor.transactions)}
-                                  className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg font-bold text-xs hover:bg-black transition-all"
+                                  disabled={isSettlingDebtor}
+                                  className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg font-bold text-xs hover:bg-black transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                                >
-                                  <CheckCircle2 size={14} /> Settle All ({debtor.transactions.length})
+                                  {isSettlingDebtor ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} {isSettlingDebtor ? 'Settling...' : `Settle All (${debtor.transactions.length})`}
                                </button>
                            )}
                        </div>
                    </div>
                 )}
               </div>
-            ))
+                );
+              })
           )
         )}
       </div>
@@ -607,9 +680,9 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
               <button
                 onClick={confirmDelete}
                 disabled={isDeleting}
-                className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-colors shadow-lg shadow-red-200 flex items-center justify-center gap-2"
+                className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-colors shadow-lg shadow-red-200 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {isDeleting ? 'Deleting...' : 'Confirm'}
+                {isDeleting ? <><Loader2 size={16} className="animate-spin" /> Deleting...</> : 'Confirm'}
               </button>
             </div>
           </div>

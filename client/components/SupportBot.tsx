@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { X, Send, User, Bot } from 'lucide-react';
 import { useToast } from './ToastProvider';
 import { sendChat } from '../services/api';
@@ -7,9 +7,10 @@ import { TabId } from '../types';
 interface SupportBotProps {
   embed?: boolean;
   onNavigate?: (tab: TabId, params?: any) => void;
+  uiContext?: Record<string, any>;
 }
 
-const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate }) => {
+const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate, uiContext }) => {
   const BOT_BRAND_IMAGE = '/gbot.png';
   const { addToast } = useToast();
   const [open, setOpen] = useState(false);
@@ -23,6 +24,14 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate }) =>
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const responseCacheRef = useRef<Map<string, { at: number; payload: any }>>(new Map());
+
+  const localCommandMap = useMemo(() => ([
+    { pattern: /(take me to|go to|open)\s+(inventory|stock)/i, tab: 'inventory' as TabId, text: 'Opening Inventory for you.' },
+    { pattern: /(take me to|go to|open)\s+(history|sales history|past sales|debtors)/i, tab: 'history' as TabId, text: 'Opening Sales & Debtors for you.' },
+    { pattern: /(take me to|go to|open)\s+(dashboard|report|analytics)/i, tab: 'dashboard' as TabId, text: 'Opening Dashboard for you.' },
+    { pattern: /(take me to|go to|open)\s+(settings)/i, tab: 'settings' as TabId, text: 'Opening Settings for you.' },
+    { pattern: /(take me to|go to|open)\s+(expenses|expenditure)/i, tab: 'expenditure' as TabId, text: 'Opening Expenditure for you.' }
+  ]), []);
 
   // Auto-scroll
   useEffect(() => {
@@ -39,7 +48,10 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate }) =>
   }, [open]);
 
   const addMessage = (from: 'bot' | 'user', text: string, isAction = false) => {
-    setMessages(prev => [...prev, { from, text, isAction }]);
+    setMessages(prev => {
+      const next = [...prev, { from, text, isAction }];
+      return next.slice(-40);
+    });
   };
 
   const handleSendMessage = async (text: string) => {
@@ -51,9 +63,17 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate }) =>
       setIsSending(true);
 
       try {
+          const localMatch = localCommandMap.find(entry => entry.pattern.test(userMessage));
+          if (localMatch && onNavigate) {
+              onNavigate(localMatch.tab);
+              addToast(localMatch.text, 'info');
+              addMessage('bot', localMatch.text);
+              return;
+          }
+
           const cacheKey = userMessage.toLowerCase();
           const cached = responseCacheRef.current.get(cacheKey);
-          if (cached && Date.now() - cached.at < 60_000) {
+          if (cached && Date.now() - cached.at < 5 * 60_000) {
               const cachedResponse = cached.payload;
               if (cachedResponse.action?.type === 'NAVIGATE' && onNavigate) {
                   onNavigate(cachedResponse.action.payload as TabId, cachedResponse.action.params);
@@ -64,7 +84,7 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate }) =>
           }
 
           // Send chat to backend
-          const response = await sendChat(userMessage, messages);
+          const response = await sendChat(userMessage, messages, uiContext);
           responseCacheRef.current.set(cacheKey, { at: Date.now(), payload: response });
 
           let botText = response.text || "I'm having trouble connecting right now.";

@@ -23,7 +23,7 @@ import useTabRouting from './hooks/useTabRouting';
 import { INITIAL_PRODUCTS } from './constants';
 import { safeCalculate } from './utils/math';
 import { saveState, loadState, pushToBackend, getDataVersion, saveDataVersion, getLastSync, saveLastSync } from './services/storage';
-import { login, registerBusiness, saveAuthToken, clearAuthToken, deleteTransaction, getEntitlements, initializePayment, fetchRemoteState, deleteExpenditure } from './services/api';
+import { login, registerBusiness, saveAuthToken, clearAuthToken, getEntitlements, initializePayment, fetchRemoteState, deleteExpenditure } from './services/api';
 import { useToast } from './components/ToastProvider';
 import SalesScreen from './components/SalesScreen';
 import InventoryScreen from './components/InventoryScreen';
@@ -203,6 +203,7 @@ const App: React.FC = () => {
   });
 
   const [cart, setCart] = useState<SaleItem[]>([]);
+  const [historySelectedInvoice, setHistorySelectedInvoice] = useState<Transaction | null>(null);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
@@ -221,6 +222,45 @@ const App: React.FC = () => {
     const names = new Set(state.transactions.map(t => t.customerName).filter(Boolean));
     return Array.from(names).sort();
   }, [state.transactions]);
+
+  const botUiContext = useMemo(() => {
+    if (activeTab === 'sales') {
+      const cartSubtotal = cart.reduce((sum, item) => sum + (item.total || 0), 0);
+      return {
+        tab: 'sales',
+        cart: {
+          itemCount: cart.length,
+          subtotal: Number(cartSubtotal.toFixed(2)),
+          items: cart.slice(0, 8).map(item => ({
+            name: item.productName,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            total: item.total
+          }))
+        }
+      };
+    }
+
+    if (activeTab === 'history') {
+      return {
+        tab: 'history',
+        selectedInvoice: historySelectedInvoice
+          ? {
+              id: historySelectedInvoice.id,
+              customerName: historySelectedInvoice.customerName,
+              transactionDate: historySelectedInvoice.transactionDate,
+              totalAmount: historySelectedInvoice.totalAmount,
+              amountPaid: historySelectedInvoice.amountPaid,
+              balance: historySelectedInvoice.balance,
+              paymentStatus: historySelectedInvoice.paymentStatus,
+              itemCount: historySelectedInvoice.items?.length || 0
+            }
+          : null
+      };
+    }
+
+    return { tab: activeTab };
+  }, [activeTab, cart, historySelectedInvoice]);
 
   const refreshData = useCallback(async (overrideState?: InventoryState) => {
     if (!navigator.onLine) return;
@@ -541,25 +581,8 @@ const App: React.FC = () => {
       return;
     }
     try {
-      // If restockItems is true, we assume the backend (new API) handled it OR the old API handled it.
-      // However, with the new flow in HistoryScreen, this function is called with restockItems=false
-      // primarily to update the local state after the API call succeeds there.
-      // If this function is called from elsewhere (legacy), we might still want the old behavior.
-      // For now, we'll keep the optimistic local update for stock if requested,
-      // but if the caller already handled the API (like HistoryScreen), we skip the API call here.
-
-      // NOTE: HistoryScreen now calls api.delete directly.
-      // To prevent double API calls, we rely on the caller to manage the API interaction
-      // OR we check if the caller intends for us to do it.
-      // Given the refactor, we will assume this function is now primarily for State Update.
-      // But to be safe for other callers, we only skip API if we detect it's already done? No easy way.
-      // Let's rely on the fact that HistoryScreen passes restockItems=false,
-      // and we will REMOVE the deleteTransaction() call to avoid double deletes.
-
-      // Wait, if we remove deleteTransaction(), other callers might break.
-      // But currently HistoryScreen is the main caller.
-      // We will perform the local state update. The API call responsibility is shifting to the caller (HistoryScreen).
-      // If there are other callers, they need to be updated. (Searching codebase... only HistoryScreen calls this usually).
+      // API delete is handled by HistoryScreen to avoid duplicate delete requests.
+      // This handler is responsible for local state mutation + activity logging only.
 
       // Create deletion log
       const deleteLog: ActivityLog = {
@@ -577,12 +600,8 @@ const App: React.FC = () => {
         activities: [deleteLog, ...(prev.activities || [])]
       }));
 
-      // We also verify if we need to locally restore stock (Optimistic UI)
+      // Optional local stock restoration if caller requests it.
       if (restockItems) {
-         // This block handles local stock restoration if the caller indicates it wasn't done yet?
-         // Actually, since HistoryScreen calls the API which does the work, we should probably fetch fresh data
-         // OR optimistically update.
-         // Let's keep optimistic update for responsiveness.
          setState(prev => {
           const tx = prev.transactions.find(t => t.id === id);
           if (!tx) return prev;
@@ -902,20 +921,21 @@ const App: React.FC = () => {
                 products={state.products}
                 business={state.business}
                 onDeleteTransaction={handleDeleteTransaction}
-                onUpdateTransaction={t => {
+                onUpdateTransaction={(t, options) => {
                   setState(prev => ({
                     ...prev,
                     transactions: prev.transactions.map(tx => tx.id === t.id ? { ...t, updatedAt: new Date().toISOString() } : tx)
                   }));
-                  if (navigator.onLine) {
+                  if (navigator.onLine && !options?.skipSync) {
                     pushToBackend({ transactions: [t] }).catch(err => console.error("Failed to sync edit", err));
                   }
                 }}
                 isSubscriptionExpired={subscriptionLocked}
                 onRenewSubscription={openPaymentLink}
-                isReadOnly={!canManageHistory || subscriptionLocked}
-                isOnline={isOnline}
-                initialParams={deepLinkParams}
+               isReadOnly={!canManageHistory || subscriptionLocked}
+               isOnline={isOnline}
+               initialParams={deepLinkParams}
+               onSelectedInvoiceChange={setHistorySelectedInvoice}
               />
             </div>
           )}
@@ -1005,7 +1025,7 @@ const App: React.FC = () => {
       </div>
 
       {!(activeTab === 'expenditure' && isMobileView) && (
-        <SupportBot onNavigate={handleBotNavigate} />
+        <SupportBot onNavigate={handleBotNavigate} uiContext={botUiContext} />
       )}
     </div>
   );
