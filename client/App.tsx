@@ -231,6 +231,7 @@ const App: React.FC = () => {
         cart: {
           itemCount: cart.length,
           subtotal: Number(cartSubtotal.toFixed(2)),
+          customerName: customerName || undefined,
           items: cart.slice(0, 8).map(item => ({
             name: item.productName,
             quantity: item.quantity,
@@ -239,6 +240,62 @@ const App: React.FC = () => {
           }))
         }
       };
+    }
+
+    if (activeTab === 'inventory') {
+      const lowStockThreshold = state.business.settings?.lowStockThreshold || 10;
+      const lowStockCount = state.products.filter(p => p.currentStock < lowStockThreshold).length;
+      // Estimate value using Cost Price if available, else 0.
+      const totalValue = state.products.reduce((sum, p) => sum + (p.currentStock * (p.costPrice || 0)), 0);
+
+      return {
+        tab: 'inventory',
+        inventory: {
+            totalProducts: state.products.length,
+            lowStockCount,
+            totalValue
+        }
+      };
+    }
+
+    if (activeTab === 'expenditure') {
+        const currentMonth = new Date().getMonth();
+        const currentYear = new Date().getFullYear();
+        const thisMonthExpenses = state.expenditures.filter(e => {
+            const d = new Date(e.date);
+            return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+        });
+        const thisMonthTotal = thisMonthExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+
+        return {
+            tab: 'expenditure',
+            expenditure: {
+                totalCount: state.expenditures.length,
+                thisMonthTotal
+            }
+        };
+    }
+
+    if (activeTab === 'dashboard') {
+        const totalRevenue = state.transactions.reduce((sum, t) => sum + (t.totalAmount || 0), 0);
+        return {
+            tab: 'dashboard',
+            dashboard: {
+                totalRevenue,
+                totalProfit: 0, // Placeholder as costly to calc here
+                topProduct: '' // Placeholder
+            }
+        };
+    }
+
+    if (activeTab === 'settings') {
+        return {
+            tab: 'settings',
+            settings: {
+                plan: entitlements?.plan || (state.business.isSubscribed ? 'PRO' : 'FREE'),
+                businessName: state.business.name
+            }
+        };
     }
 
     if (activeTab === 'history') {
@@ -260,7 +317,7 @@ const App: React.FC = () => {
     }
 
     return { tab: activeTab };
-  }, [activeTab, cart, historySelectedInvoice]);
+  }, [activeTab, cart, historySelectedInvoice, customerName, state.products, state.transactions, state.expenditures, state.business, entitlements]);
 
   const refreshData = useCallback(async (overrideState?: InventoryState) => {
     if (!navigator.onLine) return;

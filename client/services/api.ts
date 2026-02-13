@@ -331,6 +331,7 @@ export const sendChat = async (message: string, history: any[], uiContext?: any)
           ? {
               itemCount: Number(uiContext.cart.itemCount || 0),
               subtotal: Number(uiContext.cart.subtotal || 0),
+              customerName: uiContext.cart.customerName ? String(uiContext.cart.customerName).slice(0, 50) : undefined,
               items: Array.isArray(uiContext.cart.items)
                 ? uiContext.cart.items.slice(0, 8).map((item: any) => ({
                     name: String(item?.name || '').slice(0, 80),
@@ -339,6 +340,32 @@ export const sendChat = async (message: string, history: any[], uiContext?: any)
                     total: Number(item?.total || 0)
                   }))
                 : []
+            }
+          : undefined,
+        inventory: uiContext.inventory
+          ? {
+              totalProducts: Number(uiContext.inventory.totalProducts || 0),
+              lowStockCount: Number(uiContext.inventory.lowStockCount || 0),
+              totalValue: Number(uiContext.inventory.totalValue || 0)
+            }
+          : undefined,
+        expenditure: uiContext.expenditure
+          ? {
+              totalCount: Number(uiContext.expenditure.totalCount || 0),
+              thisMonthTotal: Number(uiContext.expenditure.thisMonthTotal || 0)
+            }
+          : undefined,
+        dashboard: uiContext.dashboard
+          ? {
+              totalRevenue: Number(uiContext.dashboard.totalRevenue || 0),
+              totalProfit: Number(uiContext.dashboard.totalProfit || 0),
+              topProduct: String(uiContext.dashboard.topProduct || '').slice(0, 50)
+            }
+          : undefined,
+        settings: uiContext.settings
+          ? {
+              plan: String(uiContext.settings.plan || '').slice(0, 20),
+              businessName: String(uiContext.settings.businessName || '').slice(0, 50)
             }
           : undefined,
         selectedInvoice: uiContext.selectedInvoice

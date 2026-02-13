@@ -26,7 +26,28 @@ const summarizeUiContextForPrompt = (uiContext) => {
     const subtotal = Number(uiContext.cart.subtotal || 0);
     const items = Array.isArray(uiContext.cart.items) ? uiContext.cart.items.slice(0, 5) : [];
     const itemSummary = items.map(item => `${item?.name || 'Item'} x${Number(item?.quantity || 0)}`).join(', ');
-    parts.push(`Current cart has ${itemCount} item(s), subtotal ₦${subtotal.toLocaleString()}${itemSummary ? `, including: ${itemSummary}.` : '.'}`);
+    const customer = uiContext.cart.customerName ? ` for customer '${uiContext.cart.customerName}'` : '';
+    parts.push(`Current cart has ${itemCount} item(s), subtotal ₦${subtotal.toLocaleString()}${customer}${itemSummary ? `, including: ${itemSummary}.` : '.'}`);
+  }
+
+  if (tab === 'inventory' && uiContext.inventory) {
+    const { totalProducts, lowStockCount, totalValue } = uiContext.inventory;
+    parts.push(`User is viewing their Stock List: ${totalProducts} total products, ${lowStockCount} items low on stock. Total inventory value is approx ₦${(totalValue || 0).toLocaleString()}.`);
+  }
+
+  if (tab === 'expenditure' && uiContext.expenditure) {
+    const { totalCount, thisMonthTotal } = uiContext.expenditure;
+    parts.push(`User is viewing their Expenses: ${totalCount} total records. This month's expenses sum to ₦${(thisMonthTotal || 0).toLocaleString()}.`);
+  }
+
+  if (tab === 'dashboard' && uiContext.dashboard) {
+    const { totalRevenue, totalProfit, topProduct } = uiContext.dashboard;
+    parts.push(`User is on the Dashboard. Key Stats: Revenue ₦${(totalRevenue || 0).toLocaleString()}, Profit ₦${(totalProfit || 0).toLocaleString()}. Top product: ${topProduct || 'N/A'}.`);
+  }
+
+  if (tab === 'settings' && uiContext.settings) {
+    const { plan, businessName } = uiContext.settings;
+    parts.push(`User is in Settings. Business Name: '${businessName}'. Current Plan: ${plan}.`);
   }
 
   if (tab === 'history' && uiContext.selectedInvoice && typeof uiContext.selectedInvoice === 'object') {
@@ -34,6 +55,8 @@ const summarizeUiContextForPrompt = (uiContext) => {
     parts.push(
       `Selected invoice: ID ${invoice.id || 'N/A'}, customer ${invoice.customerName || 'Unknown'}, total ₦${Number(invoice.totalAmount || 0).toLocaleString()}, paid ₦${Number(invoice.amountPaid || 0).toLocaleString()}, balance ₦${Number(invoice.balance || 0).toLocaleString()}, status ${invoice.paymentStatus || 'unknown'}.`
     );
+  } else if (tab === 'history') {
+    parts.push("User is viewing the list of Past Sales (Transaction History).");
   }
 
   return parts.join(' ');
@@ -273,6 +296,8 @@ router.post('/chat', auth, async (req, res) => {
 APP REALITY (STRICT): The user can only navigate these in-app tabs: sales, inventory, history, expenditure, dashboard, settings. Do NOT mention screens/buttons that do not exist (e.g., “New Invoice”, “Create Sale”, barcode scanner).
 
 NAVIGATION RULES: When giving instructions, reference visible labels in the current app UX like ‘Sales tab’, ‘Select Items’, right-side order panel, and ‘Confirm Bill’.
+
+CRITICAL: You CAN 'see' the user's screen through the CURRENT UI CONTEXT provided below. NEVER say 'I cannot see your screen', 'I don't have eyes', or 'Based on the app structure'. Speak confidently as if you are standing next to the user looking at the exact same screen.
 
 CURRENT UI CONTEXT: ${contextSummary || 'No specific in-app context was provided for this message.'}
 Use this UI context to answer directly when possible. If the question requires data outside this context, use available tools.
