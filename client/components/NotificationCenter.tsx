@@ -6,6 +6,9 @@ import { CURRENCY } from '../constants';
 interface NotificationCenterProps {
   isOpen: boolean;
   onClose: () => void;
+  onStartVerification?: () => void;
+  onSnoozeVerification?: () => void;
+  onDismissVerification?: (id: string) => void;
   transactions: Transaction[];
   activities: ActivityLog[];
   notifications: Notification[];
@@ -22,7 +25,10 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
   notifications = [],
   products,
   business,
-  lowStockThreshold
+  lowStockThreshold,
+  onStartVerification,
+  onSnoozeVerification,
+  onDismissVerification
 }) => {
   const [activeTab, setActiveTab] = useState<'transactions' | 'system'>('transactions');
 
@@ -118,8 +124,18 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
         }
     }
 
-    return alerts;
-  }, [products, lowStockThreshold, business]);
+    const stockVerifyAlerts = notifications
+      .filter(n => n.type === 'stock_verification')
+      .map(n => ({
+        id: n.id,
+        title: n.title || 'Stock verification recommended',
+        body: n.body || n.message,
+        type: 'action' as const,
+        notificationId: n.id
+      }));
+
+    return [...stockVerifyAlerts, ...alerts];
+  }, [products, lowStockThreshold, business, notifications]);
 
   // Effect to mark trial as seen when opened
   React.useEffect(() => {
@@ -199,11 +215,19 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
                     <div className="flex-1">
                         <div className="flex justify-between items-start">
                         <h4 className="text-sm font-black text-gray-900">{item.title}</h4>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${item.type === 'urgent' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${item.type === 'urgent' ? 'bg-red-100 text-red-700' : item.type === 'action' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
                             {item.type === 'urgent' ? 'Urgent' : 'Action'}
                         </span>
                         </div>
                         <p className="text-xs text-gray-500 mt-0.5">{item.body}</p>
+                        {item.type === 'action' && (
+                          <div className="flex gap-2 mt-2">
+                            <button onClick={() => onStartVerification && onStartVerification()} className="text-xs px-2 py-1 rounded bg-blue-600 text-white">Start verification</button>
+                            <button onClick={() => onSnoozeVerification && onSnoozeVerification()} className="text-xs px-2 py-1 rounded bg-gray-100">Snooze 24h</button>
+                            <button onClick={() => onDismissVerification && onDismissVerification((item as any).notificationId)} className="text-xs px-2 py-1 rounded bg-gray-100">Dismiss</button>
+                          </div>
+                        )}
+
                     </div>
                     </div>
                 ))

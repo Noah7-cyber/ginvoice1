@@ -28,6 +28,7 @@ const discountsRouter = require('./routes/discounts');
 const settingsRouter = require('./routes/settings');
 const supportRouter = require('./routes/support');
 const statsRouter = require('./routes/stats');
+const auditRouter = require('./routes/audit');
 
 const app = express();
 
@@ -68,6 +69,7 @@ app.use('/api/discounts', discountsRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/support', supportRouter);
 app.use('/api/stats', statsRouter);
+app.use('/api/audit', auditRouter);
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/transactions', require('./routes/transactions'));
 app.use('/api/tax', require('./routes/tax'));

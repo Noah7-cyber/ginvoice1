@@ -134,8 +134,10 @@ const formatToolResult = (result, fallbackMessage) => {
   if (Array.isArray(result.items) && result.items.length > 0) {
     const lines = result.items
       .slice(0, 5)
-      .map((item) => `• ${item.name} (${Number(item.stock || item.currentStock || 0)} left)`);
-    return `${result.message || 'Low stock items found.'}\n${lines.join('\n')}`;
+      .map((item) => item.riskScore != null
+        ? `• ${item.name} (expected ${Number(item.expectedQty || 0)}, risk ${Number(item.riskScore || 0)}/100)`
+        : `• ${item.name} (${Number(item.stock || item.currentStock || 0)} left)`);
+    return `${result.message || 'Items found.'}\n${lines.join('\n')}`;
   }
 
   if (result.message) return result.message;
@@ -151,6 +153,14 @@ const tryHandleCheapIntent = async (message, businessId, userRole) => {
   const text = normalizeText(message);
   if (!text) return null;
 
+
+  if (/what\s*should\s*i\s*count\s*today|stock\s*verification|cycle\s*count|verify\s*stock/.test(text)) {
+    const result = await executeTool({ name: 'get_stock_verification_queue', args: {} }, businessId, userRole);
+    return {
+      text: formatToolResult(result, 'No stock verification needed right now.'),
+      action: { type: 'NAVIGATE', payload: 'inventory', params: { filter: 'stock_verify' } }
+    };
+  }
   if (/low\s*stock|out\s*of\s*stock|stock\s*running\s*low/.test(text)) {
     const result = await executeTool({ name: 'check_low_stock', args: {} }, businessId, userRole);
     return {

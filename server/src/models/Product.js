@@ -23,7 +23,11 @@ const productSchema = new mongoose.Schema({
 
   image: { type: String },
   updatedAt: { type: Date, default: Date.now },
-  isManualUpdate: { type: Boolean, default: false } // Keeping for schema compatibility if needed, though unused in logic
+  isManualUpdate: { type: Boolean, default: false }, // Keeping for schema compatibility if needed, though unused in logic
+  lastVerifiedAt: { type: Date, default: null },
+  lastVerifiedQty: { type: Number, default: null },
+  varianceCount: { type: Number, default: 0 },
+  lastAbsVar: { type: Number, default: 0 }
 }, { timestamps: true });
 
 // Compound index for uniqueness

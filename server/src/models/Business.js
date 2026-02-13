@@ -43,7 +43,20 @@ const BusinessSchema = new mongoose.Schema({
     lowStockThreshold: { type: Number, default: 10 },
     enableSound: { type: Boolean, default: true },
     printReceipts: { type: Boolean, default: true },
-    footerText: { type: String, default: 'Thank you for your patronage!' }
+    footerText: { type: String, default: 'Thank you for your patronage!' },
+    stockVerification: {
+      enabled: { type: Boolean, default: true },
+      maxQueuePerDay: { type: Number, default: 5 },
+      minDaysBetweenPrompts: { type: Number, default: 1 },
+      verifyCooldownHours: { type: Number, default: 24 },
+      ageHalfLifeDays: { type: Number, default: 14 },
+      velocityWindowDays: { type: Number, default: 7 },
+      riskDecayOnVerify: { type: Number, default: 0.6 },
+      highVarianceBoost: { type: Number, default: 15 },
+      riskThreshold: { type: Number, default: 35 },
+      snoozeUntil: { type: Date, default: null },
+      lastNotificationAt: { type: Date, default: null }
+    }
   },
 
   taxSettings: {
