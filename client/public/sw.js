@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ginvoice-v35-bot-context-vision';
+const CACHE_NAME = 'ginvoice-v36-cfo-integrity';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
