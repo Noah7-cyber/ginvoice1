@@ -186,20 +186,42 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
     };
 
     // Top Product (Always accessible)
+    // Now with $lookup to get category name for context
     const topProductResult = await Transaction.aggregate([
         { $match: transactionMatch },
         { $unwind: '$items' },
-        { $group: { _id: '$items.productName', sold: { $sum: '$items.quantity' } } },
+        {
+            $lookup: {
+                from: 'products',
+                let: { pId: { $toObjectId: '$items.productId' } }, // Convert productId string to ObjectId for lookup
+                pipeline: [
+                    { $match: { $expr: { $eq: ['$_id', '$$pId'] } } }
+                ],
+                as: 'productDetails'
+            }
+        },
+        { $unwind: { path: '$productDetails', preserveNullAndEmptyArrays: true } },
+        {
+             $group: {
+                 _id: '$items.productName',
+                 sold: { $sum: '$items.quantity' },
+                 category: { $first: '$productDetails.category' } // Capture category from looked-up product
+             }
+        },
         { $sort: { sold: -1 } },
-        { $limit: 1 }
+        { $limit: 3 }
     ]);
-    const topSellingProduct = topProductResult[0] ? { name: topProductResult[0]._id, sold: topProductResult[0].sold } : null;
+    const topSellingProducts = topProductResult.map(p => ({
+        name: p._id,
+        category: p.category || 'Uncategorized',
+        sold: p.sold
+    }));
 
     // 3. RBAC Check (Revenue, Profit, Expenses)
     if (userRole !== 'owner') {
         return {
             period: { start: startDate, end: endDate },
-            topSellingProduct,
+            topSellingProducts,
             message: "Financial totals (Revenue, Profit, Expenses) are restricted to Owner accounts."
         };
     }
@@ -209,28 +231,51 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
         { $match: transactionMatch },
         { $group: { _id: null, total: { $sum: '$totalAmount' } } }
     ]);
-    const totalRevenue = revenueResult[0]?.total || 0;
+    const totalSalesRevenue = revenueResult[0]?.total || 0;
 
-    // Expenses (Expenditures)
-    // Using 'business' field as per previous assumption/fix in earlier step
-    const expensesResult = await Expenditure.aggregate([
+    // Expenses & Income Breakdown (Financial Integrity Layer)
+    // We group by flowType AND Category to give AI full visibility of money movement
+    const cashFlowBreakdown = await Expenditure.aggregate([
         { $match: {
             business: businessObjectId,
-            date: { $gte: start, $lte: end },
-            flowType: 'out'
+            date: { $gte: start, $lte: end }
         } },
-        { $group: { _id: null, total: { $sum: '$amount' } } }
+        {
+            $group: {
+                _id: {
+                    flow: { $ifNull: ['$flowType', 'out'] }, // Default to 'out' if missing
+                    category: { $ifNull: ['$category', 'Uncategorized'] }
+                },
+                total: { $sum: '$amount' }
+            }
+        },
+        { $sort: { '_id.flow': 1, total: -1 } } // Sort by flow (in/out) then amount
     ]);
-    const totalExpenses = expensesResult[0]?.total || 0;
 
-    const totalProfit = totalRevenue - totalExpenses;
+    // Transform into clean array for AI consumption
+    const cashFlow = cashFlowBreakdown.map(item => ({
+        flow: item._id.flow,
+        category: item._id.category,
+        amount: item.total
+    }));
+
+    // Calculate totals for report summary
+    const totalCashIn = cashFlow.filter(i => i.flow === 'in').reduce((acc, curr) => acc + curr.amount, 0);
+    const totalCashOut = cashFlow.filter(i => i.flow === 'out').reduce((acc, curr) => acc + curr.amount, 0);
+
+    // True Operational Profit = (Sales Revenue + Cash Inflows) - Cash Outflows
+    const netCashFlow = (totalSalesRevenue + totalCashIn) - totalCashOut;
 
     return {
         period: { start: startDate, end: endDate },
-        totalRevenue,
-        totalExpenses,
-        totalProfit,
-        topSellingProduct
+        totalSalesRevenue,
+        cashFlow, // AI can now see "Grant" vs "Personal Expense"
+        financials: {
+            totalCashIn,
+            totalCashOut,
+            netCashFlow
+        },
+        topSellingProducts
     };
 };
 
