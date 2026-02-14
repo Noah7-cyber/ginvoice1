@@ -72,7 +72,7 @@ const tools = [
         type: "function",
         function: {
             name: "get_business_report",
-            description: "Generates a business report for a specific date range (revenue, profit, expenses, top items).",
+            description: "THE FINANCIAL AUTHORITY. Calculates Net Profit, Total Revenue vs Expenses, and Cash Flow. MUST use this for questions like 'how much did I make', 'daily performance', 'profit', or 'summary'.",
             parameters: {
                 type: "object",
                 properties: {
@@ -136,8 +136,8 @@ const tools = [
     {
         type: "function",
         function: {
-            name: "query_transactions",
-            description: "Query transactions with optional filters and return summary + sample rows (Excel-like).",
+            name: "search_sales_records",
+            description: "Search for specific PAST SALES or RECEIPT records by customer name or ID. DO NOT use this for calculating profit or daily totals.",
             parameters: {
                 type: "object",
                 properties: {
@@ -147,6 +147,23 @@ const tools = [
                     paymentStatus: { type: "string", enum: ["paid", "credit"], description: "Optional payment status filter" },
                     limit: { type: "number", description: "Rows to return, max 50" }
                 },
+                additionalProperties: false
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "search_expenses",
+            description: "Search for specific EXPENSE records by description or category. DO NOT use this for calculating totals.",
+            parameters: {
+                type: "object",
+                properties: {
+                    query: { type: "string", description: "Search term for description or category" },
+                    startDate: { type: "string", description: "Optional ISO date YYYY-MM-DD" },
+                    endDate: { type: "string", description: "Optional ISO date YYYY-MM-DD" }
+                },
+                required: ["query"],
                 additionalProperties: false
             }
         }
@@ -382,8 +399,44 @@ const product_search = async ({ query }, { businessId }) => {
     }
 };
 
+const search_expenses = async ({ query, startDate, endDate }, { businessId }) => {
+    if (!businessId) return { error: "Login required." };
 
-const query_transactions = async ({ startDate, endDate, customerName, paymentStatus, limit = 20 }, { businessId, userRole }) => {
+    const criteria = {
+        business: businessId,
+        $or: [
+            { description: { $regex: query, $options: 'i' } },
+            { title: { $regex: query, $options: 'i' } },
+            { category: { $regex: query, $options: 'i' } }
+        ]
+    };
+
+    if (startDate || endDate) {
+        criteria.date = {};
+        if (startDate) criteria.date.$gte = new Date(startDate);
+        if (endDate) {
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999);
+            criteria.date.$lte = end;
+        }
+    }
+
+    const results = await Expenditure.find(criteria)
+        .sort({ date: -1 })
+        .limit(20);
+
+    if (results.length === 0) {
+        return { message: `No expenses found matching "${query}".` };
+    }
+
+    return {
+        message: `Found ${results.length} expenses.`,
+        expenses: sanitizeData(results)
+    };
+};
+
+
+const search_sales_records = async ({ startDate, endDate, customerName, paymentStatus, limit = 20 }, { businessId, userRole }) => {
     if (!businessId) return { error: "Login required." };
 
     const parsedLimit = Math.min(Math.max(Number(limit) || 20, 1), 50);
@@ -481,8 +534,10 @@ const executeTool = async ({ name, args }, businessId, userRole = 'staff') => {
                 return await check_low_stock(args, context);
             case 'product_search':
                 return await product_search(args, context);
-            case 'query_transactions':
-                return await query_transactions(args, context);
+            case 'search_sales_records':
+                return await search_sales_records(args, context);
+            case 'search_expenses':
+                return await search_expenses(args, context);
             case 'get_recent_transaction':
                 return await get_recent_transaction(args, context);
             case 'get_stock_verification_queue':
