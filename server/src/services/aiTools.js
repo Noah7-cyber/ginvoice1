@@ -200,33 +200,25 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
     if (!businessId) return { error: "Login required." };
 
     // 1. Determine Date Range
-    // Parse ISO strings
     const start = new Date(startDate);
     const end = new Date(endDate);
-
-    // Set end of day for the end date to capture full day's transactions
     end.setHours(23, 59, 59, 999);
 
     const businessObjectId = new mongoose.Types.ObjectId(businessId);
-
-    // 2. Aggregations (Common)
     const transactionMatch = {
         businessId: businessObjectId,
         transactionDate: { $gte: start, $lte: end }
     };
 
-    // Top Product (Always accessible)
-    // Now with $lookup to get category name for context
+    // 2. Top Products
     const topProductResult = await Transaction.aggregate([
         { $match: transactionMatch },
         { $unwind: '$items' },
         {
             $lookup: {
                 from: 'products',
-                let: { pId: { $toObjectId: '$items.productId' } }, // Convert productId string to ObjectId for lookup
-                pipeline: [
-                    { $match: { $expr: { $eq: ['$_id', '$$pId'] } } }
-                ],
+                let: { pId: { $toObjectId: '$items.productId' } },
+                pipeline: [ { $match: { $expr: { $eq: ['$_id', '$$pId'] } } } ],
                 as: 'productDetails'
             }
         },
@@ -235,7 +227,7 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
              $group: {
                  _id: '$items.productName',
                  sold: { $sum: '$items.quantity' },
-                 category: { $first: '$productDetails.category' } // Capture category from looked-up product
+                 category: { $first: '$productDetails.category' }
              }
         },
         { $sort: { sold: -1 } },
@@ -247,7 +239,7 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
         sold: p.sold
     }));
 
-    // 3. RBAC Check (Revenue, Profit, Expenses)
+    // 3. RBAC Check
     if (userRole !== 'owner') {
         return {
             period: { start: startDate, end: endDate },
@@ -256,16 +248,15 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
         };
     }
 
-    // Owner-Only Calculations
+    // 4. Revenue (Transaction Sales)
     const revenueResult = await Transaction.aggregate([
         { $match: transactionMatch },
         { $group: { _id: null, total: { $sum: '$totalAmount' } } }
     ]);
-    const totalSalesRevenue = revenueResult[0]?.total || 0;
+    const totalRevenue = revenueResult[0]?.total || 0;
 
-    // Expenses & Income Breakdown (Financial Integrity Layer)
-    // We group by flowType AND Category to give AI full visibility of money movement
-    const cashFlowBreakdown = await Expenditure.aggregate([
+    // 5. Expenses (Net Expense Calculation: Out - In)
+    const expenseAggregation = await Expenditure.aggregate([
         { $match: {
             business: businessObjectId,
             date: { $gte: start, $lte: end }
@@ -273,39 +264,52 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
         {
             $group: {
                 _id: {
-                    flow: { $ifNull: ['$flowType', 'out'] }, // Default to 'out' if missing
-                    category: { $ifNull: ['$category', 'Uncategorized'] }
+                    category: { $ifNull: ['$category', 'Uncategorized'] },
+                    flow: { $ifNull: ['$flowType', 'out'] }
                 },
                 total: { $sum: '$amount' }
             }
-        },
-        { $sort: { '_id.flow': 1, total: -1 } } // Sort by flow (in/out) then amount
+        }
     ]);
 
-    // Transform into clean array for AI consumption
-    const cashFlow = cashFlowBreakdown.map(item => ({
-        flow: item._id.flow,
-        category: item._id.category,
-        amount: item.total
-    }));
+    // Process in JS to handle Decimal128 and Logic
+    let totalOut = 0;
+    let totalIn = 0;
+    const categoryMap = {}; // Map<CategoryName, number>
 
-    // Calculate totals for report summary
-    const totalCashIn = cashFlow.filter(i => i.flow === 'in').reduce((acc, curr) => acc + curr.amount, 0);
-    const totalCashOut = cashFlow.filter(i => i.flow === 'out').reduce((acc, curr) => acc + curr.amount, 0);
+    expenseAggregation.forEach(item => {
+        // Convert Decimal128 to number safely
+        const val = item.total.toString ? parseFloat(item.total.toString()) : Number(item.total);
+        const cat = item._id.category;
+        const flow = item._id.flow;
 
-    // True Operational Profit = (Sales Revenue + Cash Inflows) - Cash Outflows
-    const netCashFlow = (totalSalesRevenue + totalCashIn) - totalCashOut;
+        if (flow === 'out') {
+            totalOut += val;
+            categoryMap[cat] = (categoryMap[cat] || 0) + val;
+        } else if (flow === 'in') {
+            totalIn += val;
+            // Subtract 'in' from category expense (Refund reduces expense)
+            categoryMap[cat] = (categoryMap[cat] || 0) - val;
+        }
+    });
+
+    const totalExpenses = totalOut - totalIn;
+    const totalProfit = totalRevenue - totalExpenses;
+
+    // Format expensesByCategory
+    const expensesByCategory = Object.entries(categoryMap)
+        .map(([category, amount]) => ({ category, amount }))
+        // Filter out zero-amount categories if desired, or keep them. Keeping for now but sorting.
+        .filter(item => Math.abs(item.amount) > 0.01)
+        .sort((a, b) => b.amount - a.amount);
 
     return {
         period: { start: startDate, end: endDate },
-        totalSalesRevenue,
-        cashFlow, // AI can now see "Grant" vs "Personal Expense"
-        financials: {
-            totalCashIn,
-            totalCashOut,
-            netCashFlow
-        },
-        topSellingProducts
+        totalRevenue,
+        totalExpenses,
+        totalProfit,
+        topSellingProducts,
+        expensesByCategory
     };
 };
 
