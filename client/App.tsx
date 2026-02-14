@@ -23,7 +23,7 @@ import useTabRouting from './hooks/useTabRouting';
 import { INITIAL_PRODUCTS } from './constants';
 import { safeCalculate } from './utils/math';
 import { saveState, loadState, pushToBackend, getDataVersion, saveDataVersion, getLastSync, saveLastSync } from './services/storage';
-import { login, registerBusiness, saveAuthToken, clearAuthToken, getEntitlements, initializePayment, fetchRemoteState, deleteExpenditure } from './services/api';
+import { login, registerBusiness, saveAuthToken, clearAuthToken, getEntitlements, initializePayment, fetchRemoteState, deleteExpenditure, snoozeStockVerification, dismissNotification } from './services/api';
 import { useToast } from './components/ToastProvider';
 import SalesScreen from './components/SalesScreen';
 import InventoryScreen from './components/InventoryScreen';
@@ -853,6 +853,30 @@ const App: React.FC = () => {
     />;
   }
 
+
+  const startStockVerification = useCallback(() => {
+    handleBotNavigate('inventory', { filter: 'stock_verify' });
+    setIsNotificationOpen(false);
+  }, [handleBotNavigate]);
+
+  const snoozeVerification = useCallback(async () => {
+    try {
+      await snoozeStockVerification();
+      addToast('Verification reminder snoozed for 24h.', 'success');
+      await refreshData();
+    } catch {
+      addToast('Could not snooze reminder.', 'error');
+    }
+  }, [addToast, refreshData]);
+
+  const dismissVerification = useCallback(async (id: string) => {
+    try {
+      await dismissNotification(id);
+      await refreshData();
+    } catch {
+      addToast('Could not dismiss notification.', 'error');
+    }
+  }, [refreshData, addToast]);
   if (!state.isRegistered && showWelcome) {
     return (
       <WelcomeScreen
@@ -1071,6 +1095,9 @@ const App: React.FC = () => {
         products={state.products}
         business={state.business}
         lowStockThreshold={state.business.settings?.lowStockThreshold || 10}
+        onStartVerification={startStockVerification}
+        onSnoozeVerification={snoozeVerification}
+        onDismissVerification={dismissVerification}
       />
 
       {/* Cart Sidebar */}

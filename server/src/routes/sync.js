@@ -9,6 +9,7 @@ const Business = require('../models/Business');
 const Expenditure = require('../models/Expenditure');
 const Category = require('../models/Category');
 const Notification = require('../models/Notification');
+const { maybeCreateStockVerificationNotification } = require('../services/stockVerification');
 
 // Middleware
 const auth = require('../middleware/auth');
@@ -57,7 +58,7 @@ router.get('/', auth, async (req, res) => {
       Transaction.find({ businessId }).sort({ createdAt: -1 }).limit(1000).lean(),
       Expenditure.find({ business: businessId }).lean(),
       Category.find({ businessId }).sort({ usageCount: -1, name: 1 }).lean(),
-      Notification.find({ businessId }).sort({ timestamp: -1 }).limit(50).lean()
+      Notification.find({ businessId, dismissedAt: null }).sort({ timestamp: -1 }).limit(50).lean()
     ]);
 
     // --- DETECTIVE MODE: DIAGNOSE EMPTY PRODUCTS ---
@@ -153,12 +154,18 @@ router.get('/', auth, async (req, res) => {
 
     const notifications = (rawNotifications || []).map(n => ({
         id: n._id.toString(),
+        title: n.title || '',
         message: n.message,
+        body: n.body || '',
         type: n.type,
-        amount: n.amount, // Keep as Number (Notification model uses Number)
+        amount: n.amount,
         performedBy: n.performedBy,
+        payload: n.payload || null,
         timestamp: n.timestamp
     }));
+
+    // Keep proactive prompts low-noise (max once/day)
+    await maybeCreateStockVerificationNotification(businessId);
 
     return res.json({
       categories,
