@@ -168,8 +168,10 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate, uiCo
                     <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-gray-200 text-gray-600">
                         <Bot size={14} />
                     </div>
-                    <div className="bg-white text-gray-500 rounded-2xl rounded-tl-none border border-gray-100 p-3 text-sm italic">
-                        Thinking...
+                    <div className="bg-white text-gray-500 rounded-2xl rounded-tl-none border border-gray-100 p-4 flex items-center gap-1.5 w-fit">
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
                     </div>
                  </div>
             )}

@@ -149,100 +149,6 @@ const formatToolResult = (result, fallbackMessage) => {
   return fallbackMessage;
 };
 
-const tryHandleCheapIntent = async (message, businessId, userRole) => {
-  const text = normalizeText(message);
-  if (!text) return null;
-
-
-  if (/what\s*should\s*i\s*count\s*today|stock\s*verification|cycle\s*count|verify\s*stock/.test(text)) {
-    const result = await executeTool({ name: 'get_stock_verification_queue', args: {} }, businessId, userRole);
-    return {
-      text: formatToolResult(result, 'No stock verification needed right now.'),
-      action: { type: 'NAVIGATE', payload: 'inventory', params: { filter: 'stock_verify' } }
-    };
-  }
-  if (/low\s*stock|out\s*of\s*stock|stock\s*running\s*low/.test(text)) {
-    const result = await executeTool({ name: 'check_low_stock', args: {} }, businessId, userRole);
-    return {
-      text: formatToolResult(result, 'Stock check complete.'),
-      action: result?.special_action === 'NAVIGATE'
-        ? { type: 'NAVIGATE', payload: result.screen, params: result.params }
-        : null
-    };
-  }
-
-  if (/debtor|owe|owing|unpaid|credit\s*sales?/.test(text)) {
-    const result = await executeTool({ name: 'check_debtors', args: {} }, businessId, userRole);
-    return {
-      text: formatToolResult(result, 'Debtor check complete.'),
-      action: result?.special_action === 'NAVIGATE'
-        ? { type: 'NAVIGATE', payload: result.screen, params: result.params }
-        : null
-    };
-  }
-
-  if (/last\s*sale|recent\s*sale|most\s*recent\s*transaction/.test(text)) {
-    const result = await executeTool({ name: 'get_recent_transaction', args: {} }, businessId, userRole);
-    if (result?.customerName || result?.totalAmount != null) {
-      const customer = result.customerName || 'Walk-in customer';
-      const total = Number(result.totalAmount || 0);
-      return { text: `Latest sale was to ${customer} for ₦${total.toLocaleString()}.`, action: null };
-    }
-    return { text: formatToolResult(result, 'No recent sale found.'), action: null };
-  }
-
-  if (/(share|send|print|download).*(receipt|invoice|bill)|(receipt|invoice|bill).*(share|send|print|download)/.test(text)) {
-    return {
-      text: "To share or print a receipt in this app:\n1) Open History tab (Past Sales).\n2) Tap the transaction you want.\n3) In the Invoice preview header, tap ‘Share’ to send PDF or ‘Print / PDF’ to print/save.\n4) If you only need the old invoice again, use History and open the same transaction ID.",
-      action: {
-        type: 'NAVIGATE',
-        payload: 'history'
-      }
-    };
-  }
-
-  if (/(record|add|create|enter).*(sale|invoice|bill)|(sale|invoice|bill).*(record|add|create|enter)|how.*(sell|record)/.test(text)) {
-    return {
-      text: "To record a sale in this app:\n1) Open Sales tab.\n2) Tap any product under ‘Select Items’ to add it to cart.\n3) In the right Order panel, enter customer name/phone (optional).\n4) Choose payment method (Cash, Transfer, POS, or Debt).\n5) Confirm totals, then tap ‘Confirm Bill’.",
-      action: {
-        type: 'NAVIGATE',
-        payload: 'sales'
-      }
-    };
-  }
-
-  if (/today.*(sales?|revenue|profit)|(sales?|revenue|profit).*today/.test(text)) {
-    const today = new Date().toISOString().slice(0, 10);
-    const result = await executeTool({ name: 'get_business_report', args: { startDate: today, endDate: today } }, businessId, userRole);
-    if (result?.message && !result?.totalRevenue) {
-      return { text: result.message, action: null };
-    }
-    if (result && typeof result === 'object') {
-      const revenue = Number(result.totalRevenue || 0).toLocaleString();
-      const expenses = Number(result.totalExpenses || 0).toLocaleString();
-      const profit = Number(result.totalProfit || 0).toLocaleString();
-      return {
-        text: `Today's summary — Revenue: ₦${revenue}, Expenses: ₦${expenses}, Profit: ₦${profit}.`,
-        action: null
-      };
-    }
-    return { text: "I could not generate today's summary right now.", action: null };
-  }
-
-
-  if (/export|backup|download.*(data|transactions|records)|excel|csv/.test(text)) {
-    return {
-      text: "To export data, open Settings → Data, then tap Export Full Cloud Backup (JSON) or any CSV export button.",
-      action: {
-        type: 'NAVIGATE',
-        payload: 'settings',
-        params: { tab: 'data' }
-      }
-    };
-  }
-
-  return null;
-};
 
 // --- THE CHAT ROUTE ---
 router.post('/chat', auth, async (req, res) => {
@@ -338,11 +244,6 @@ RESPONSE STYLE: short, practical, numbers-first, and owner-focused. If asked str
         messages.push({ role: "user", content: userMessage });
     }
 
-    // C. Fast path for predictable intents to reduce AI usage/cost.
-    const cheapIntentResponse = await tryHandleCheapIntent(userMessage, businessId, userRole);
-    if (cheapIntentResponse) {
-      return res.json({ ...cheapIntentResponse, usage: null });
-    }
 
     // E. Critical API Key Check for full AI path
     if (!process.env.DEEPSEEK_API_KEY) {
