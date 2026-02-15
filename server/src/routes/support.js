@@ -281,7 +281,7 @@ FINANCIAL REPORTING STANDARDS:
 CURRENT UI CONTEXT: ${contextSummary || 'No specific in-app context was provided for this message.'}
 Use this UI context to answer directly when possible. If the question requires data outside this context, use available tools.
 
-RESPONSE STYLE: short, practical, numbers-first, and owner-focused. If asked strategy, provide 2-4 actionable financial steps tied to their data.`
+RESPONSE STYLE: Plain text only. Do NOT use markdown bolding (like **text**) or headers (###). Use CAPITAL LETTERS for section headers and simple dashes (-) for lists. Keep it short, practical, numbers-first, and owner-focused. If asked strategy, provide 2-4 actionable financial steps tied to their data.`
     };
 
     // B. Construct Messages Array

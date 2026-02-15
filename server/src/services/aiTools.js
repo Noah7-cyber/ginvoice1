@@ -273,38 +273,43 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
 
     let businessExpenses = 0;
     let personalExpenses = 0;
-    let cashInjections = 0;
+    let businessIncome = 0; // NEW: Track business grants/loans separately
+    let personalIncome = 0;
+    let totalCashInjections = 0;
     const categoryMap = {};
 
     expenseAggregation.forEach(item => {
         // FIX: Database stores expenses as negative. Force absolute value.
         const rawVal = item.total.toString ? parseFloat(item.total.toString()) : Number(item.total);
-        const val = Math.abs(rawVal);
+        const val = Math.abs(rawVal); // Keep the Math.abs() fix!
 
         const flow = item._id.flow;
         const type = item._id.type;
         const cat = item._id.category;
 
         if (flow === 'in') {
-            cashInjections += val; // Money put INTO the business (e.g. Loans, Grants)
+            totalCashInjections += val;
+            if (type === 'business') {
+                businessIncome += val; // Grant/Loan to business
+            } else {
+                personalIncome += val;
+            }
         } else if (flow === 'out') {
             if (type === 'personal') {
-                personalExpenses += val; // Money taken OUT for personal use
+                personalExpenses += val;
             } else {
-                businessExpenses += val; // Money spent ON the business (Stock, Rent, etc)
+                businessExpenses += val;
             }
-
-            // Add to category breakdown (track everything)
             categoryMap[cat] = (categoryMap[cat] || 0) + val;
         }
     });
 
     // 6. Explicit Summaries
-    // Metric 1: Business Performance (Revenue - Business Costs). Ignores personal withdrawals.
-    const netBusinessProfit = totalRevenue - businessExpenses;
+    // Metric 1: Business Performance = (Sales + Business Grants) - Business Costs
+    const netBusinessProfit = (totalRevenue + businessIncome) - businessExpenses;
 
-    // Metric 2: Wallet Reality (All Money In - All Money Out)
-    const netCashFlow = (totalRevenue + cashInjections) - (businessExpenses + personalExpenses);
+    // Metric 2: Wallet Reality = (Sales + All Money In) - (All Money Out)
+    const netCashFlow = (totalRevenue + totalCashInjections) - (businessExpenses + personalExpenses);
 
     const expensesByCategory = Object.entries(categoryMap)
         .map(([category, amount]) => ({ category, amount }))
@@ -314,7 +319,8 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
         period: { start: startDate, end: endDate },
         revenue: {
             sales: totalRevenue,
-            injections: cashInjections
+            businessInjections: businessIncome, // Explicitly show this
+            totalIn: totalCashInjections
         },
         expenses: {
             business: businessExpenses,
