@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ginvoice-v39-clean-text';
+const CACHE_NAME = 'ginvoice-v39-debt relif-text';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
