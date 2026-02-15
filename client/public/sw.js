@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ginvoice-v36-cfo-integrity';
+const CACHE_NAME = 'ginvoice-v37-cfo-integrity';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',

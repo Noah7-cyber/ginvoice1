@@ -253,9 +253,9 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
         { $match: transactionMatch },
         { $group: { _id: null, total: { $sum: '$totalAmount' } } }
     ]);
-    const totalRevenue = revenueResult[0]?.total || 0;
+    const revenue = revenueResult[0]?.total || 0;
 
-    // 5. Expenses (Net Expense Calculation: Out - In)
+    // 5. Expenses (Separate Out vs In)
     const expenseAggregation = await Expenditure.aggregate([
         { $match: {
             business: businessObjectId,
@@ -272,10 +272,13 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
         }
     ]);
 
-    // Process in JS to handle Decimal128 and Logic
-    let totalOut = 0;
-    let totalIn = 0;
-    const categoryMap = {}; // Map<CategoryName, number>
+    // Process in JS
+    let totalMoneyOut = 0;
+    let totalMoneyIn = 0;
+    const categoryBreakdown = [];
+
+    // Temporary map for category aggregation (Out only for breakdown as implied by 'operating' vs 'injections' split)
+    const categoryMapOut = {};
 
     expenseAggregation.forEach(item => {
         // Convert Decimal128 to number safely
@@ -284,32 +287,36 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
         const flow = item._id.flow;
 
         if (flow === 'out') {
-            totalOut += val;
-            categoryMap[cat] = (categoryMap[cat] || 0) + val;
+            totalMoneyOut += val;
+            categoryMapOut[cat] = (categoryMapOut[cat] || 0) + val;
         } else if (flow === 'in') {
-            totalIn += val;
-            // Subtract 'in' from category expense (Refund reduces expense)
-            categoryMap[cat] = (categoryMap[cat] || 0) - val;
+            totalMoneyIn += val;
         }
     });
 
-    const totalExpenses = totalOut - totalIn;
-    const totalProfit = totalRevenue - totalExpenses;
+    // Net Profit = Revenue - Money Out
+    const netProfit = revenue - totalMoneyOut;
 
-    // Format expensesByCategory
-    const expensesByCategory = Object.entries(categoryMap)
+    // Cash Flow = Revenue - Money Out + Money In
+    const cashFlow = revenue - totalMoneyOut + totalMoneyIn;
+
+    // Format breakdown
+    const breakdown = Object.entries(categoryMapOut)
         .map(([category, amount]) => ({ category, amount }))
-        // Filter out zero-amount categories if desired, or keep them. Keeping for now but sorting.
-        .filter(item => Math.abs(item.amount) > 0.01)
+        .filter(item => item.amount > 0.01)
         .sort((a, b) => b.amount - a.amount);
 
     return {
         period: { start: startDate, end: endDate },
-        totalRevenue,
-        totalExpenses,
-        totalProfit,
-        topSellingProducts,
-        expensesByCategory
+        revenue,
+        expenses: {
+            operating: totalMoneyOut,
+            injections: totalMoneyIn,
+            breakdown
+        },
+        netProfit,
+        cashFlow,
+        topSellingProducts
     };
 };
 
