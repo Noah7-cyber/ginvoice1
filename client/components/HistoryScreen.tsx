@@ -132,6 +132,8 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
     totalDebt: number;
   } | null>(null);
   const [autoPayAmount, setAutoPayAmount] = useState<number>(0);
+  const [isAutoSettling, setIsAutoSettling] = useState(false);
+  const [autoSettleResult, setAutoSettleResult] = useState<{ settledCount: number, remainingChange: number } | null>(null);
 
   const filteredInvoices = useMemo(() => transactions.filter(t => {
     const matchesSearch = t.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -340,65 +342,64 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
   const handleAutoSettle = async (customerName: string, amountPaid: number, customerTransactions: Transaction[]) => {
       if (!amountPaid || amountPaid <= 0) return;
 
-      // 1. Sort debts: Oldest First (FIFO)
-      // We only want unpaid invoices for this customer
-      const unpaidInvoices = customerTransactions
-        .filter(t => t.paymentStatus !== 'paid' && t.balance > 0)
-        .sort((a, b) => new Date(a.transactionDate).getTime() - new Date(b.transactionDate).getTime());
+      setIsAutoSettling(true);
 
-      let remainingMoney = amountPaid;
-      let updatedCount = 0;
+      try {
+        // 1. Sort debts: Oldest First (FIFO)
+        // We only want unpaid invoices for this customer
+        const unpaidInvoices = customerTransactions
+          .filter(t => t.paymentStatus !== 'paid' && t.balance > 0)
+          .sort((a, b) => new Date(a.transactionDate).getTime() - new Date(b.transactionDate).getTime());
 
-      for (const tx of unpaidInvoices) {
-        if (remainingMoney <= 0) break;
+        let remainingMoney = amountPaid;
+        let updatedCount = 0;
 
-        // How much can we pay on THIS invoice?
-        // (Either the full debt OR whatever money we have left)
-        const currentDebt = tx.balance;
-        const paymentForThisInvoice = Math.min(currentDebt, remainingMoney);
+        for (const tx of unpaidInvoices) {
+          if (remainingMoney <= 0) break;
 
-        // Calculate new state
-        const newPaidAmount = (tx.amountPaid || 0) + paymentForThisInvoice;
-        const newBalance = (tx.totalAmount) - newPaidAmount;
+          // How much can we pay on THIS invoice?
+          // (Either the full debt OR whatever money we have left)
+          const currentDebt = tx.balance;
+          const paymentForThisInvoice = Math.min(currentDebt, remainingMoney);
 
-        let newStatus: 'paid' | 'credit' = tx.paymentStatus || 'credit';
-        if (newBalance <= 1) { // Tolerance for tiny decimals
-           newStatus = 'paid';
-        } else {
-           newStatus = 'credit';
+          // Calculate new state
+          const newPaidAmount = (tx.amountPaid || 0) + paymentForThisInvoice;
+          const newBalance = (tx.totalAmount) - newPaidAmount;
+
+          let newStatus: 'paid' | 'credit' = tx.paymentStatus || 'credit';
+          if (newBalance <= 1) { // Tolerance for tiny decimals
+             newStatus = 'paid';
+          } else {
+             newStatus = 'credit';
+          }
+
+          // Prepare Update
+          const updatedTx: Transaction = {
+            ...tx,
+            amountPaid: newPaidAmount,
+            balance: Math.max(0, newBalance),
+            paymentStatus: newStatus
+          };
+
+          // 2. Fire Update
+          // Note: The parent component's onUpdateTransaction handles syncing (via pushToBackend)
+          // We await a small delay to prevent overwhelming the network with rapid requests
+          await onUpdateTransaction(updatedTx);
+
+          // Simulate async operation for smoother UI feedback
+          await new Promise(resolve => setTimeout(resolve, 50));
+
+          remainingMoney -= paymentForThisInvoice;
+          updatedCount++;
         }
 
-        // Prepare Update
-        const updatedTx: Transaction = {
-          ...tx,
-          amountPaid: newPaidAmount,
-          balance: Math.max(0, newBalance),
-          paymentStatus: newStatus
-        };
-
-        // 2. Fire Update
-        if (isOnline) {
-            try {
-                // @ts-ignore
-                const res = await api.put(`/transactions/${updatedTx.id}`, updatedTx);
-                if (res) {
-                    onUpdateTransaction(res, { skipSync: true });
-                }
-            } catch (e) {
-                console.error("Auto-settle failed for tx", tx.id, e);
-                // Fallback: update local state so user sees feedback, will sync later
-                onUpdateTransaction(updatedTx);
-            }
-        } else {
-            onUpdateTransaction(updatedTx);
-        }
-
-        remainingMoney -= paymentForThisInvoice;
-        updatedCount++;
+        setAutoSettleResult({ settledCount: updatedCount, remainingChange: remainingMoney });
+      } catch (err) {
+        console.error("Auto-settle error:", err);
+        addToast("An error occurred during auto-settlement.", "error");
+      } finally {
+        setIsAutoSettling(false);
       }
-
-      alert(`Settled ${updatedCount} invoices! Remaining change: ${formatCurrency(remainingMoney)}`);
-      setSettleModalData(null);
   };
 
   return (
@@ -793,47 +794,83 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
               <p className="text-sm text-gray-500">For {settleModalData.name}</p>
             </div>
 
-            <div className="p-6 space-y-4">
-              <div className="bg-red-50 p-3 rounded-lg border border-red-100 flex justify-between items-center">
-                <span className="text-red-600 text-sm font-medium">Total Owing</span>
-                <span className="text-xl font-bold text-red-700">
-                  {formatCurrency(settleModalData.totalDebt)}
-                </span>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Amount Received ({CURRENCY})
-                </label>
-                <input
-                  type="number"
-                  autoFocus
-                  className="w-full text-lg p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                  placeholder="0.00"
-                  onChange={(e) => setAutoPayAmount(parseFloat(e.target.value))}
-                />
-                <p className="text-xs text-gray-400 mt-2">
-                  System will clear oldest invoices first.
+            {autoSettleResult ? (
+              // SUCCESS VIEW
+              <div className="p-6 flex flex-col items-center text-center animate-in fade-in">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center text-green-600 mb-4">
+                   <CheckCircle2 size={32} />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">Settlement Complete!</h3>
+                <p className="text-gray-500 mb-6">
+                  Successfully paid off <strong className="text-gray-900">{autoSettleResult.settledCount}</strong> invoice(s).
                 </p>
-              </div>
-            </div>
 
-            <div className="p-4 bg-gray-50 flex justify-end gap-3">
-              <button
-                onClick={() => setSettleModalData(null)}
-                className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-lg font-medium"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  handleAutoSettle(settleModalData.name, autoPayAmount, settleModalData.transactions);
-                }}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 shadow-sm"
-              >
-                Confirm & Settle
-              </button>
-            </div>
+                <div className="bg-gray-50 p-4 rounded-xl border border-dashed w-full mb-6">
+                   <p className="text-xs font-bold text-gray-500 uppercase">Change to Return</p>
+                   <p className="text-2xl font-black text-gray-900">{formatCurrency(autoSettleResult.remainingChange)}</p>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setSettleModalData(null);
+                    setAutoSettleResult(null);
+                    setAutoPayAmount(0);
+                  }}
+                  className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold hover:bg-black transition-all"
+                >
+                  Done
+                </button>
+              </div>
+            ) : (
+              // INPUT VIEW
+              <>
+                <div className="p-6 space-y-4">
+                  <div className="bg-red-50 p-3 rounded-lg border border-red-100 flex justify-between items-center">
+                    <span className="text-red-600 text-sm font-medium">Total Owing</span>
+                    <span className="text-xl font-bold text-red-700">
+                      {formatCurrency(settleModalData.totalDebt)}
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Amount Received ({CURRENCY})
+                    </label>
+                    <input
+                      type="number"
+                      autoFocus
+                      disabled={isAutoSettling}
+                      className="w-full text-lg p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none disabled:bg-gray-100"
+                      placeholder="0.00"
+                      onChange={(e) => setAutoPayAmount(parseFloat(e.target.value))}
+                    />
+                    <p className="text-xs text-gray-400 mt-2">
+                      System will clear oldest invoices first.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-gray-50 flex justify-end gap-3">
+                  <button
+                    onClick={() => setSettleModalData(null)}
+                    disabled={isAutoSettling}
+                    className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-lg font-medium disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleAutoSettle(settleModalData.name, autoPayAmount, settleModalData.transactions);
+                    }}
+                    disabled={isAutoSettling || !autoPayAmount || autoPayAmount <= 0}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {isAutoSettling && <Loader2 size={18} className="animate-spin" />}
+                    {isAutoSettling ? 'Processing...' : 'Confirm & Settle'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
