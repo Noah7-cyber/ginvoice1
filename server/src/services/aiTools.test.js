@@ -1,6 +1,9 @@
 const mongoose = require('mongoose');
 const { MongoMemoryServer } = require('mongodb-memory-server');
-const { executeTool } = require('./aiTools');
+const { executeTool } = require('./aiTools'); // Ensure path is correct relative to this file
+// Note: In the original file it was require('./aiTools'), but since this file is IN services, it's correct.
+// However, in the read_file output it showed require('./aiTools') which is correct if both are in services.
+
 const Transaction = require('../models/Transaction');
 const Expenditure = require('../models/Expenditure');
 const Business = require('../models/Business');
@@ -9,7 +12,8 @@ let mongoServer;
 
 beforeAll(async () => {
     mongoServer = await MongoMemoryServer.create();
-    await mongoose.connect(mongoServer.getUri());
+    const uri = mongoServer.getUri();
+    await mongoose.connect(uri);
 });
 
 afterAll(async () => {
@@ -49,6 +53,7 @@ describe('get_business_report Logic Check', () => {
         });
 
         // 3. Create Personal Expense (Out) - Food - 100
+        // Note: New logic counts ALL 'out' flows as expenses, regardless of expenseType
         await Expenditure.create({
             id: 'exp-pers',
             business: businessId,
@@ -60,6 +65,7 @@ describe('get_business_report Logic Check', () => {
         });
 
         // 4. Create Business Injection (In) - Grant - 50
+        // Should be IGNORED in simple logic
         await Expenditure.create({
             id: 'exp-biz-in',
             business: businessId,
@@ -71,6 +77,7 @@ describe('get_business_report Logic Check', () => {
         });
 
         // 5. Create Personal Injection (In) - Gift - 20
+        // Should be IGNORED in simple logic
         await Expenditure.create({
             id: 'exp-pers-in',
             business: businessId,
@@ -91,28 +98,25 @@ describe('get_business_report Logic Check', () => {
         // Assertions
         console.log('Report Result:', result);
 
-        // Check new structure: revenue.sales, expenses.business, etc.
-        expect(result.revenue.sales).toBe(1000);
-        expect(result.revenue.businessInjections).toBe(50);
-        expect(result.revenue.totalIn).toBe(70); // 50 + 20
+        // Check new structure: totalRevenue, totalExpenses, totalProfit
+        expect(result.totalRevenue).toBe(1000);
 
-        // Expenses Breakdown
-        expect(result.expenses.business).toBe(300);
-        expect(result.expenses.personal).toBe(100);
-        expect(result.expenses.totalOut).toBe(400); // 300 + 100
+        // Expenses: 300 (Transport) + 100 (Personal) = 400
+        // Grant and Gift are 'in' flow, so ignored.
+        expect(result.totalExpenses).toBe(400);
 
-        // Financials
-        // Business Profit = (Revenue + Business Injection) - Business Expense = (1000 + 50) - 300 = 750
-        expect(result.financials.netBusinessProfit).toBe(750);
+        // Profit: 1000 - 400 = 600
+        expect(result.totalProfit).toBe(600);
 
-        // Net Cash Flow = (Revenue + All Injections) - (Total Expenses)
-        // (1000 + 70) - 400 = 670
-        expect(result.financials.netCashFlow).toBe(670);
-
-        // Verify Category Breakdown exists
-        expect(result.expenses.breakdown).toBeDefined();
-        const transport = result.expenses.breakdown.find(c => c.category === 'Transport');
+        // Verify Category Breakdown exists (flat structure)
+        expect(result.expensesByCategory).toBeDefined();
+        const transport = result.expensesByCategory.find(c => c.category === 'Transport');
+        expect(transport).toBeDefined();
         expect(transport.amount).toBe(300);
+
+        const personal = result.expensesByCategory.find(c => c.category === 'Personal');
+        expect(personal).toBeDefined();
+        expect(personal.amount).toBe(100);
     });
 
     it('returns restricted message for staff role', async () => {
@@ -135,9 +139,9 @@ describe('get_business_report Logic Check', () => {
         }, businessId.toString(), 'staff');
 
         expect(result.message).toContain('restricted to Owner accounts');
-        expect(result.revenue).toBeUndefined();
-        expect(result.expenses).toBeUndefined();
-        expect(result.financials).toBeUndefined();
+        expect(result.totalRevenue).toBeUndefined();
+        expect(result.totalExpenses).toBeUndefined();
+        expect(result.totalProfit).toBeUndefined();
         expect(result.topSellingProducts).toBeDefined();
         expect(result.topSellingProducts.length).toBeGreaterThan(0);
         expect(result.topSellingProducts[0].name).toBe('Item B');

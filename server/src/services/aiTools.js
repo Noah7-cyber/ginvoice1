@@ -210,7 +210,8 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
         transactionDate: { $gte: start, $lte: end }
     };
 
-    // 2. Top Products
+    // 2. Aggregations (Common)
+    // Top Product (Always accessible)
     const topProductResult = await Transaction.aggregate([
         { $match: transactionMatch },
         { $unwind: '$items' },
@@ -239,7 +240,7 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
         sold: p.sold
     }));
 
-    // 3. RBAC Check
+    // 3. RBAC Check (Revenue, Profit, Expenses)
     if (userRole !== 'owner') {
         return {
             period: { start: startDate, end: endDate },
@@ -248,92 +249,64 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
         };
     }
 
-    // 4. Revenue (Transaction Sales)
+    // Owner-Only Calculations
+
+    // Revenue
     const revenueResult = await Transaction.aggregate([
         { $match: transactionMatch },
         { $group: { _id: null, total: { $sum: '$totalAmount' } } }
     ]);
     const totalRevenue = revenueResult[0]?.total || 0;
 
-    // 5. Expenses & Cash Flow (Split by Type)
-    const expenseAggregation = await Expenditure.aggregate([
+    // Expenses (Strictly OUT)
+    const expensesResult = await Expenditure.aggregate([
         { $match: {
             business: businessObjectId,
-            date: { $gte: start, $lte: end }
-        }},
-        { $group: {
-            _id: {
-                category: { $ifNull: ['$category', 'Uncategorized'] },
-                flow: { $ifNull: ['$flowType', 'out'] },
-                type: { $ifNull: ['$expenseType', 'business'] } // Distinction: business vs personal
-            },
-            total: { $sum: '$amount' }
-        }}
+            date: { $gte: start, $lte: end },
+            flowType: 'out' // <--- STRICT FILTER
+        } },
+        { $group: { _id: null, total: { $sum: '$amount' } } }
     ]);
 
-    let businessExpenses = 0;
-    let personalExpenses = 0;
-    let businessIncome = 0; // NEW: Track business grants/loans separately
-    let personalIncome = 0;
-    let totalCashInjections = 0;
-    const categoryMap = {};
+    // Parse Decimal128 or Number to float
+    let totalExpenses = 0;
+    if (expensesResult.length > 0 && expensesResult[0].total) {
+        // Handle Decimal128 .toString() if necessary
+        const val = expensesResult[0].total.toString ? expensesResult[0].total.toString() : expensesResult[0].total;
+        totalExpenses = parseFloat(val);
+    }
 
-    expenseAggregation.forEach(item => {
-        // FIX: Database stores expenses as negative. Force absolute value.
-        const rawVal = item.total.toString ? parseFloat(item.total.toString()) : Number(item.total);
-        const val = Math.abs(rawVal); // Keep the Math.abs() fix!
+    // Expenses by Category (New Feature)
+    const expensesByCategoryResult = await Expenditure.aggregate([
+        { $match: {
+            business: businessObjectId,
+            date: { $gte: start, $lte: end },
+            flowType: 'out'
+        } },
+        { $group: {
+            _id: '$category',
+            total: { $sum: '$amount' }
+        }},
+        { $sort: { total: -1 } }
+    ]);
 
-        const flow = item._id.flow;
-        const type = item._id.type;
-        const cat = item._id.category;
-
-        if (flow === 'in') {
-            totalCashInjections += val;
-            if (type === 'business') {
-                businessIncome += val; // Grant/Loan to business
-            } else {
-                personalIncome += val;
-            }
-        } else if (flow === 'out') {
-            if (type === 'personal') {
-                personalExpenses += val;
-            } else {
-                businessExpenses += val;
-            }
-            categoryMap[cat] = (categoryMap[cat] || 0) + val;
-        }
+    const expensesByCategory = expensesByCategoryResult.map(item => {
+        const val = item.total.toString ? item.total.toString() : item.total;
+        return {
+            category: item._id || 'Uncategorized',
+            amount: parseFloat(val)
+        };
     });
 
-    // 6. Explicit Summaries
-    // Metric 1: Business Performance = (Sales + Business Grants) - Business Costs
-    const netBusinessProfit = (totalRevenue + businessIncome) - businessExpenses;
-
-    // Metric 2: Wallet Reality = (Sales + All Money In) - (All Money Out)
-    const netCashFlow = (totalRevenue + totalCashInjections) - (businessExpenses + personalExpenses);
-
-    const expensesByCategory = Object.entries(categoryMap)
-        .map(([category, amount]) => ({ category, amount }))
-        .sort((a, b) => b.amount - a.amount);
+    const totalProfit = totalRevenue - totalExpenses;
 
     return {
         period: { start: startDate, end: endDate },
-        revenue: {
-            sales: totalRevenue,
-            businessInjections: businessIncome, // Explicitly show this
-            totalIn: totalCashInjections
-        },
-        expenses: {
-            business: businessExpenses,
-            personal: personalExpenses,
-            totalOut: businessExpenses + personalExpenses,
-            breakdown: expensesByCategory
-        },
-        financials: {
-            netBusinessProfit, // <--- The number users care about for "How is my business doing?"
-            netCashFlow,       // <--- The number users care about for "How much cash do I have?"
-            note: "Profit = Sales - Business Costs. Cash Flow = (Sales + Money In) - All Money Out."
-        },
-        topSellingProducts: topSellingProducts
+        totalRevenue,   // Explicit key
+        totalExpenses,  // Explicit key
+        totalProfit,    // Explicit key
+        topSellingProducts,
+        expensesByCategory // The new feature
     };
 };
 
