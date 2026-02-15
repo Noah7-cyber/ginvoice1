@@ -255,53 +255,54 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
     ]);
     const revenue = revenueResult[0]?.total || 0;
 
-    // 5. Expenses (Separate Out vs In)
+    // 5. Expenses & Cash Flow (Split by Type)
     const expenseAggregation = await Expenditure.aggregate([
         { $match: {
             business: businessObjectId,
             date: { $gte: start, $lte: end }
-        } },
-        {
-            $group: {
-                _id: {
-                    category: { $ifNull: ['$category', 'Uncategorized'] },
-                    flow: { $ifNull: ['$flowType', 'out'] }
-                },
-                total: { $sum: '$amount' }
-            }
-        }
+        }},
+        { $group: {
+            _id: {
+                category: { $ifNull: ['$category', 'Uncategorized'] },
+                flow: { $ifNull: ['$flowType', 'out'] },
+                type: { $ifNull: ['$expenseType', 'business'] } // Split Business vs Personal
+            },
+            total: { $sum: '$amount' }
+        }}
     ]);
 
-    // Process in JS
-    let totalMoneyOut = 0;
-    let totalMoneyIn = 0;
-    const categoryBreakdown = [];
-
-    // Temporary map for category aggregation (Out only for breakdown as implied by 'operating' vs 'injections' split)
-    const categoryMapOut = {};
+    let businessExpenses = 0;
+    let personalExpenses = 0;
+    let cashInjections = 0;
+    const categoryMap = {};
 
     expenseAggregation.forEach(item => {
-        // Convert Decimal128 to number safely
         const val = item.total.toString ? parseFloat(item.total.toString()) : Number(item.total);
-        const cat = item._id.category;
         const flow = item._id.flow;
+        const type = item._id.type;
+        const cat = item._id.category;
 
-        if (flow === 'out') {
-            totalMoneyOut += val;
-            categoryMapOut[cat] = (categoryMapOut[cat] || 0) + val;
-        } else if (flow === 'in') {
-            totalMoneyIn += val;
+        if (flow === 'in') {
+            cashInjections += val;
+        } else if (flow === 'out') {
+            if (type === 'personal') {
+                personalExpenses += val;
+            } else {
+                businessExpenses += val; // Default to business if undefined
+            }
+            // Add to category breakdown regardless of type
+            categoryMap[cat] = (categoryMap[cat] || 0) + val;
         }
     });
 
-    // Net Profit = Revenue - Money Out
-    const netProfit = revenue - totalMoneyOut;
+    // Operational Profit (Business Performance)
+    const operationalProfit = revenue - businessExpenses;
 
-    // Cash Flow = Revenue - Money Out + Money In
-    const cashFlow = revenue - totalMoneyOut + totalMoneyIn;
+    // Net Cash Balance (Wallet Position)
+    // (Revenue + Injections) - (All Money Out)
+    const netCashBalance = (revenue + cashInjections) - (businessExpenses + personalExpenses);
 
-    // Format breakdown
-    const breakdown = Object.entries(categoryMapOut)
+    const breakdown = Object.entries(categoryMap)
         .map(([category, amount]) => ({ category, amount }))
         .filter(item => item.amount > 0.01)
         .sort((a, b) => b.amount - a.amount);
@@ -309,13 +310,17 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
     return {
         period: { start: startDate, end: endDate },
         revenue,
-        expenses: {
-            operating: totalMoneyOut,
-            injections: totalMoneyIn,
+        moneyIn: cashInjections, // Grants/Loans
+        moneyOut: {
+            business: businessExpenses,
+            personal: personalExpenses,
+            total: businessExpenses + personalExpenses,
             breakdown
         },
-        netProfit,
-        cashFlow,
+        financials: {
+            operationalProfit, // Revenue - Business Exp
+            netCashBalance     // (Rev + In) - All Out
+        },
         topSellingProducts
     };
 };

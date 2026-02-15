@@ -24,11 +24,10 @@ beforeEach(async () => {
 });
 
 describe('get_business_report Logic Check', () => {
-    it('calculates Net Expenses (Out - In) and correct Profit', async () => {
+    it('calculates Business vs Personal Expenses and Cash Flow correctly', async () => {
         const businessId = new mongoose.Types.ObjectId();
 
-        // 1. Create Revenue (Transaction)
-        // Simulate String Product ID (e.g., 'PRD-123')
+        // 1. Create Revenue (Transaction) - 1000
         const productId = 'PRD-12345';
         await Transaction.create({
             businessId: businessId,
@@ -38,24 +37,35 @@ describe('get_business_report Logic Check', () => {
             items: [{ productId: productId, productName: 'Item A', quantity: 1, total: 1000 }]
         });
 
-        // 2. Create Expense (Out) - Transport
+        // 2. Create Business Expense (Out) - Transport - 300
         await Expenditure.create({
-            id: 'exp-1',
+            id: 'exp-biz',
             business: businessId,
             amount: 300,
             flowType: 'out',
             category: 'Transport',
+            expenseType: 'business',
             date: new Date()
         });
 
-        // 3. Create Expense (In/Refund) - Transport
-        // This should reduce the total expense for Transport
+        // 3. Create Personal Expense (Out) - Food - 100
         await Expenditure.create({
-            id: 'exp-2',
+            id: 'exp-pers',
+            business: businessId,
+            amount: 100,
+            flowType: 'out',
+            category: 'Personal',
+            expenseType: 'personal',
+            date: new Date()
+        });
+
+        // 4. Create Cash Injection (In) - Grant - 50
+        await Expenditure.create({
+            id: 'exp-inj',
             business: businessId,
             amount: 50,
             flowType: 'in',
-            category: 'Transport',
+            category: 'Grant',
             date: new Date()
         });
 
@@ -71,32 +81,26 @@ describe('get_business_report Logic Check', () => {
 
         expect(result.revenue).toBe(1000);
 
-        // Expected Operating Expenses (Out only): 300
-        expect(result.expenses.operating).toBe(300);
+        // Money In (Injections)
+        expect(result.moneyIn).toBe(50);
 
-        // Expected Injections (In only): 50
-        expect(result.expenses.injections).toBe(50);
+        // Money Out Breakdown
+        expect(result.moneyOut.business).toBe(300);
+        expect(result.moneyOut.personal).toBe(100);
+        expect(result.moneyOut.total).toBe(400); // 300 + 100
 
-        // Expected Net Profit: 1000 (Revenue) - 300 (Operating Expenses) = 700
-        expect(result.netProfit).toBe(700);
+        // Financials
+        // Operational Profit = Revenue - Business Expense = 1000 - 300 = 700
+        expect(result.financials.operationalProfit).toBe(700);
 
-        // Expected Cash Flow: 1000 (Revenue) - 300 (Operating Expenses) + 50 (Injections) = 750
-        expect(result.cashFlow).toBe(750);
+        // Net Cash Balance = (Revenue + Injections) - (Total Expenses)
+        // (1000 + 50) - 400 = 650
+        expect(result.financials.netCashBalance).toBe(650);
 
-        // Verify Category Breakdown
-        // Should find 'Transport' in breakdown array
-        const transportCat = result.expenses.breakdown ? result.expenses.breakdown.find(c => c.category === 'Transport') : null;
-
-        if (transportCat) {
-             expect(transportCat.amount).toBe(300); // Only Out counts for category breakdown in new requirement? Or net?
-             // Let's assume breakdown lists purely expenses (Out) based on "operating: 6000".
-             // Or maybe net per category? The requirement says "breakdown: [...] // Category list".
-             // Assuming breakdown matches operating expenses sum, so likely just 'out'.
-             // Wait, if I spend 300 on transport and get 50 refund, my expense is 250.
-             // But 'operating' is 300 (totalMoneyOut).
-             // If breakdown sums to operating, then it should be 300.
-             // Let's assume it sums to operating for now as per "operating: 6000" context.
-        }
+        // Verify Category Breakdown exists
+        expect(result.moneyOut.breakdown).toBeDefined();
+        const transport = result.moneyOut.breakdown.find(c => c.category === 'Transport');
+        expect(transport.amount).toBe(300);
     });
 
     it('returns restricted message for staff role', async () => {
@@ -120,7 +124,8 @@ describe('get_business_report Logic Check', () => {
 
         expect(result.message).toContain('restricted to Owner accounts');
         expect(result.revenue).toBeUndefined();
-        expect(result.expenses).toBeUndefined();
+        expect(result.moneyOut).toBeUndefined();
+        expect(result.financials).toBeUndefined();
         expect(result.topSellingProducts).toBeDefined();
         expect(result.topSellingProducts.length).toBeGreaterThan(0);
         expect(result.topSellingProducts[0].name).toBe('Item B');
