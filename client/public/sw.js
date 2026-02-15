@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ginvoice-v38-profit-logic';
+const CACHE_NAME = 'ginvoice-v39-clean-text';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',

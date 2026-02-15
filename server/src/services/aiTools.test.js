@@ -59,13 +59,25 @@ describe('get_business_report Logic Check', () => {
             date: new Date()
         });
 
-        // 4. Create Cash Injection (In) - Grant - 50
+        // 4. Create Business Injection (In) - Grant - 50
         await Expenditure.create({
-            id: 'exp-inj',
+            id: 'exp-biz-in',
             business: businessId,
             amount: 50,
             flowType: 'in',
+            expenseType: 'business',
             category: 'Grant',
+            date: new Date()
+        });
+
+        // 5. Create Personal Injection (In) - Gift - 20
+        await Expenditure.create({
+            id: 'exp-pers-in',
+            business: businessId,
+            amount: 20,
+            flowType: 'in',
+            expenseType: 'personal',
+            category: 'Gift',
             date: new Date()
         });
 
@@ -81,7 +93,8 @@ describe('get_business_report Logic Check', () => {
 
         // Check new structure: revenue.sales, expenses.business, etc.
         expect(result.revenue.sales).toBe(1000);
-        expect(result.revenue.injections).toBe(50);
+        expect(result.revenue.businessInjections).toBe(50);
+        expect(result.revenue.totalIn).toBe(70); // 50 + 20
 
         // Expenses Breakdown
         expect(result.expenses.business).toBe(300);
@@ -89,12 +102,12 @@ describe('get_business_report Logic Check', () => {
         expect(result.expenses.totalOut).toBe(400); // 300 + 100
 
         // Financials
-        // Business Profit = Revenue - Business Expense = 1000 - 300 = 700
-        expect(result.financials.netBusinessProfit).toBe(700);
+        // Business Profit = (Revenue + Business Injection) - Business Expense = (1000 + 50) - 300 = 750
+        expect(result.financials.netBusinessProfit).toBe(750);
 
-        // Net Cash Flow = (Revenue + Injections) - (Total Expenses)
-        // (1000 + 50) - 400 = 650
-        expect(result.financials.netCashFlow).toBe(650);
+        // Net Cash Flow = (Revenue + All Injections) - (Total Expenses)
+        // (1000 + 70) - 400 = 670
+        expect(result.financials.netCashFlow).toBe(670);
 
         // Verify Category Breakdown exists
         expect(result.expenses.breakdown).toBeDefined();
