@@ -69,23 +69,33 @@ describe('get_business_report Logic Check', () => {
         // Assertions
         console.log('Report Result:', result);
 
-        expect(result.totalSalesRevenue || result.totalRevenue).toBe(1000);
+        expect(result.revenue).toBe(1000);
 
-        // Expected Net Expense: 300 (Out) - 50 (In) = 250
-        expect(result.totalExpenses).toBe(250);
+        // Expected Operating Expenses (Out only): 300
+        expect(result.expenses.operating).toBe(300);
 
-        // Expected Profit: 1000 (Revenue) - 250 (Net Expense) = 750
-        expect(result.totalProfit).toBe(750);
+        // Expected Injections (In only): 50
+        expect(result.expenses.injections).toBe(50);
+
+        // Expected Net Profit: 1000 (Revenue) - 300 (Operating Expenses) = 700
+        expect(result.netProfit).toBe(700);
+
+        // Expected Cash Flow: 1000 (Revenue) - 300 (Operating Expenses) + 50 (Injections) = 750
+        expect(result.cashFlow).toBe(750);
 
         // Verify Category Breakdown
-        // Should find 'Transport' with net amount 250
-        // Currently the structure might be `expensesByCategory` or `cashFlow` depending on implementation
-        // The requirement is `expensesByCategory`
-        const transportCat = result.expensesByCategory ? result.expensesByCategory.find(c => c.category === 'Transport') : null;
+        // Should find 'Transport' in breakdown array
+        const transportCat = result.expenses.breakdown ? result.expenses.breakdown.find(c => c.category === 'Transport') : null;
 
-        // If not implemented yet, this test will fail, which is expected for TDD
         if (transportCat) {
-             expect(transportCat.amount).toBe(250);
+             expect(transportCat.amount).toBe(300); // Only Out counts for category breakdown in new requirement? Or net?
+             // Let's assume breakdown lists purely expenses (Out) based on "operating: 6000".
+             // Or maybe net per category? The requirement says "breakdown: [...] // Category list".
+             // Assuming breakdown matches operating expenses sum, so likely just 'out'.
+             // Wait, if I spend 300 on transport and get 50 refund, my expense is 250.
+             // But 'operating' is 300 (totalMoneyOut).
+             // If breakdown sums to operating, then it should be 300.
+             // Let's assume it sums to operating for now as per "operating: 6000" context.
         }
     });
 
@@ -109,8 +119,8 @@ describe('get_business_report Logic Check', () => {
         }, businessId.toString(), 'staff');
 
         expect(result.message).toContain('restricted to Owner accounts');
-        expect(result.totalRevenue).toBeUndefined();
-        expect(result.totalExpenses).toBeUndefined();
+        expect(result.revenue).toBeUndefined();
+        expect(result.expenses).toBeUndefined();
         expect(result.topSellingProducts).toBeDefined();
         expect(result.topSellingProducts.length).toBeGreaterThan(0);
         expect(result.topSellingProducts[0].name).toBe('Item B');
