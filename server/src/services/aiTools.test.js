@@ -79,27 +79,26 @@ describe('get_business_report Logic Check', () => {
         // Assertions
         console.log('Report Result:', result);
 
-        expect(result.revenue).toBe(1000);
+        // Check new structure: revenue.sales, expenses.business, etc.
+        expect(result.revenue.sales).toBe(1000);
+        expect(result.revenue.injections).toBe(50);
 
-        // Money In (Injections)
-        expect(result.moneyIn).toBe(50);
-
-        // Money Out Breakdown
-        expect(result.moneyOut.business).toBe(300);
-        expect(result.moneyOut.personal).toBe(100);
-        expect(result.moneyOut.total).toBe(400); // 300 + 100
+        // Expenses Breakdown
+        expect(result.expenses.business).toBe(300);
+        expect(result.expenses.personal).toBe(100);
+        expect(result.expenses.totalOut).toBe(400); // 300 + 100
 
         // Financials
-        // Operational Profit = Revenue - Business Expense = 1000 - 300 = 700
-        expect(result.financials.operationalProfit).toBe(700);
+        // Business Profit = Revenue - Business Expense = 1000 - 300 = 700
+        expect(result.financials.netBusinessProfit).toBe(700);
 
-        // Net Cash Balance = (Revenue + Injections) - (Total Expenses)
+        // Net Cash Flow = (Revenue + Injections) - (Total Expenses)
         // (1000 + 50) - 400 = 650
-        expect(result.financials.netCashBalance).toBe(650);
+        expect(result.financials.netCashFlow).toBe(650);
 
         // Verify Category Breakdown exists
-        expect(result.moneyOut.breakdown).toBeDefined();
-        const transport = result.moneyOut.breakdown.find(c => c.category === 'Transport');
+        expect(result.expenses.breakdown).toBeDefined();
+        const transport = result.expenses.breakdown.find(c => c.category === 'Transport');
         expect(transport.amount).toBe(300);
     });
 
@@ -124,7 +123,7 @@ describe('get_business_report Logic Check', () => {
 
         expect(result.message).toContain('restricted to Owner accounts');
         expect(result.revenue).toBeUndefined();
-        expect(result.moneyOut).toBeUndefined();
+        expect(result.expenses).toBeUndefined();
         expect(result.financials).toBeUndefined();
         expect(result.topSellingProducts).toBeDefined();
         expect(result.topSellingProducts.length).toBeGreaterThan(0);

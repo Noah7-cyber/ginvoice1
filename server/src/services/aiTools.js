@@ -253,7 +253,7 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
         { $match: transactionMatch },
         { $group: { _id: null, total: { $sum: '$totalAmount' } } }
     ]);
-    const revenue = revenueResult[0]?.total || 0;
+    const totalRevenue = revenueResult[0]?.total || 0;
 
     // 5. Expenses & Cash Flow (Split by Type)
     const expenseAggregation = await Expenditure.aggregate([
@@ -265,7 +265,7 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
             _id: {
                 category: { $ifNull: ['$category', 'Uncategorized'] },
                 flow: { $ifNull: ['$flowType', 'out'] },
-                type: { $ifNull: ['$expenseType', 'business'] } // Split Business vs Personal
+                type: { $ifNull: ['$expenseType', 'business'] } // Distinction: business vs personal
             },
             total: { $sum: '$amount' }
         }}
@@ -277,51 +277,57 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
     const categoryMap = {};
 
     expenseAggregation.forEach(item => {
-        const val = item.total.toString ? parseFloat(item.total.toString()) : Number(item.total);
+        // FIX: Database stores expenses as negative. Force absolute value.
+        const rawVal = item.total.toString ? parseFloat(item.total.toString()) : Number(item.total);
+        const val = Math.abs(rawVal);
+
         const flow = item._id.flow;
         const type = item._id.type;
         const cat = item._id.category;
 
         if (flow === 'in') {
-            cashInjections += val;
+            cashInjections += val; // Money put INTO the business (e.g. Loans, Grants)
         } else if (flow === 'out') {
             if (type === 'personal') {
-                personalExpenses += val;
+                personalExpenses += val; // Money taken OUT for personal use
             } else {
-                businessExpenses += val; // Default to business if undefined
+                businessExpenses += val; // Money spent ON the business (Stock, Rent, etc)
             }
-            // Add to category breakdown regardless of type
+
+            // Add to category breakdown (track everything)
             categoryMap[cat] = (categoryMap[cat] || 0) + val;
         }
     });
 
-    // Operational Profit (Business Performance)
-    const operationalProfit = revenue - businessExpenses;
+    // 6. Explicit Summaries
+    // Metric 1: Business Performance (Revenue - Business Costs). Ignores personal withdrawals.
+    const netBusinessProfit = totalRevenue - businessExpenses;
 
-    // Net Cash Balance (Wallet Position)
-    // (Revenue + Injections) - (All Money Out)
-    const netCashBalance = (revenue + cashInjections) - (businessExpenses + personalExpenses);
+    // Metric 2: Wallet Reality (All Money In - All Money Out)
+    const netCashFlow = (totalRevenue + cashInjections) - (businessExpenses + personalExpenses);
 
-    const breakdown = Object.entries(categoryMap)
+    const expensesByCategory = Object.entries(categoryMap)
         .map(([category, amount]) => ({ category, amount }))
-        .filter(item => item.amount > 0.01)
         .sort((a, b) => b.amount - a.amount);
 
     return {
         period: { start: startDate, end: endDate },
-        revenue,
-        moneyIn: cashInjections, // Grants/Loans
-        moneyOut: {
+        revenue: {
+            sales: totalRevenue,
+            injections: cashInjections
+        },
+        expenses: {
             business: businessExpenses,
             personal: personalExpenses,
-            total: businessExpenses + personalExpenses,
-            breakdown
+            totalOut: businessExpenses + personalExpenses,
+            breakdown: expensesByCategory
         },
         financials: {
-            operationalProfit, // Revenue - Business Exp
-            netCashBalance     // (Rev + In) - All Out
+            netBusinessProfit, // <--- The number users care about for "How is my business doing?"
+            netCashFlow,       // <--- The number users care about for "How much cash do I have?"
+            note: "Profit = Sales - Business Costs. Cash Flow = (Sales + Money In) - All Money Out."
         },
-        topSellingProducts
+        topSellingProducts: topSellingProducts
     };
 };
 

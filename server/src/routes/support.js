@@ -150,6 +150,57 @@ const formatToolResult = (result, fallbackMessage) => {
 };
 
 
+const tryHandleCheapIntent = async (message, businessId, userRole) => {
+  const text = normalizeText(message);
+  if (!text) return null;
+
+  // 1. Stock Check
+  if (/low\s*stock|out\s*of\s*stock|stock\s*running\s*low/.test(text)) {
+    const result = await executeTool({ name: 'check_low_stock', args: {} }, businessId, userRole);
+    return {
+      text: formatToolResult(result, 'Stock check complete.'),
+      action: result?.special_action === 'NAVIGATE'
+        ? { type: 'NAVIGATE', payload: result.screen, params: result.params }
+        : null
+    };
+  }
+
+  // 2. Debtors Check
+  if (/debtor|owe|owing|unpaid|credit\s*sales?/.test(text)) {
+    const result = await executeTool({ name: 'check_debtors', args: {} }, businessId, userRole);
+    return {
+      text: formatToolResult(result, 'Debtor check complete.'),
+      action: result?.special_action === 'NAVIGATE'
+        ? { type: 'NAVIGATE', payload: result.screen, params: result.params }
+        : null
+    };
+  }
+
+  // 3. Today's Summary (Fast Report)
+  if (/today.*(sales?|revenue|profit)|(sales?|revenue|profit).*today/.test(text)) {
+    const today = new Date().toISOString().slice(0, 10);
+    const result = await executeTool({ name: 'get_business_report', args: { startDate: today, endDate: today } }, businessId, userRole);
+
+    if (result && result.financials) {
+        const { netBusinessProfit, netCashFlow } = result.financials;
+        const revenue = Number(result.revenue?.sales || 0).toLocaleString();
+
+        return {
+            text: `Today's Summary:\n• Sales: ₦${revenue}\n• Business Profit: ₦${Number(netBusinessProfit || 0).toLocaleString()}\n• Cash Flow: ₦${Number(netCashFlow || 0).toLocaleString()}`,
+            action: null
+        };
+    }
+    return { text: "I could not generate today's summary right now.", action: null };
+  }
+
+  // 4. Navigation Help
+  if (/(record|add|create|enter).*(sale|invoice|bill)/.test(text)) {
+    return { text: "To record a sale: Open Sales tab, add items, and tap ‘Confirm Bill’.", action: { type: 'NAVIGATE', payload: 'sales' } };
+  }
+
+  return null;
+};
+
 // --- THE CHAT ROUTE ---
 router.post('/chat', auth, async (req, res) => {
   try {
