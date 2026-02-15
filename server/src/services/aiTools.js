@@ -217,8 +217,8 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
         {
             $lookup: {
                 from: 'products',
-                let: { pId: { $toObjectId: '$items.productId' } },
-                pipeline: [ { $match: { $expr: { $eq: ['$_id', '$$pId'] } } } ],
+                let: { pId: '$items.productId' },
+                pipeline: [ { $match: { $expr: { $eq: ['$id', '$$pId'] } } } ],
                 as: 'productDetails'
             }
         },

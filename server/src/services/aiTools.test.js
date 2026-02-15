@@ -28,7 +28,8 @@ describe('get_business_report Logic Check', () => {
         const businessId = new mongoose.Types.ObjectId();
 
         // 1. Create Revenue (Transaction)
-        const productId = new mongoose.Types.ObjectId().toString();
+        // Simulate String Product ID (e.g., 'PRD-123')
+        const productId = 'PRD-12345';
         await Transaction.create({
             businessId: businessId,
             id: 'txn-1',
@@ -91,8 +92,8 @@ describe('get_business_report Logic Check', () => {
     it('returns restricted message for staff role', async () => {
         const businessId = new mongoose.Types.ObjectId();
 
-        // Setup data to ensure top products logic runs
-        const productId = new mongoose.Types.ObjectId().toString();
+        // Setup data to ensure top products logic runs with String ID
+        const productId = 'PRD-STAFF-999';
         await Transaction.create({
             businessId: businessId,
             id: 'txn-staff',
