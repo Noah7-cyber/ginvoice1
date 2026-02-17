@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { InventoryState, UserRole, Product, ProductUnit, Transaction, BusinessProfile, TabId, SaleItem, PaymentMethod, Expenditure, ActivityLog } from './types';
 import useTabRouting from './hooks/useTabRouting';
+import { useStockVerification } from './hooks/useStockVerification';
 import { INITIAL_PRODUCTS } from './constants';
 import { safeCalculate } from './utils/math';
 import { saveState, loadState, pushToBackend, getDataVersion, saveDataVersion, getLastSync, saveLastSync } from './services/storage';
@@ -811,6 +812,18 @@ const App: React.FC = () => {
     }
   }, [allowedTabs, activeTab]);
 
+  // Call hooks BEFORE any conditional returns to prevent "Rendered fewer hooks than expected"
+  const {
+    startStockVerification,
+    snoozeVerification,
+    dismissVerification
+  } = useStockVerification({
+    handleBotNavigate,
+    addToast,
+    refreshData,
+    setIsNotificationOpen
+  });
+
   // SPECIAL ROUTE: Admin Portal (Bypasses Main App Auth)
   if (activeTab === 'admin-portal') {
       return (
@@ -855,29 +868,6 @@ const App: React.FC = () => {
   }
 
 
-  const startStockVerification = useCallback(() => {
-    handleBotNavigate('inventory', { filter: 'stock_verify' });
-    setIsNotificationOpen(false);
-  }, [handleBotNavigate]);
-
-  const snoozeVerification = useCallback(async () => {
-    try {
-      await snoozeStockVerification();
-      addToast('Verification reminder snoozed for 24h.', 'success');
-      await refreshData();
-    } catch {
-      addToast('Could not snooze reminder.', 'error');
-    }
-  }, [addToast, refreshData]);
-
-  const dismissVerification = useCallback(async (id: string) => {
-    try {
-      await dismissNotification(id);
-      await refreshData();
-    } catch {
-      addToast('Could not dismiss notification.', 'error');
-    }
-  }, [refreshData, addToast]);
   if (!state.isRegistered && showWelcome) {
     return (
       <WelcomeScreen
