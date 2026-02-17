@@ -17,6 +17,7 @@ export interface BusinessProfile {
   subscriptionExpiresAt?: string;
   subscriptionStatus?: 'active' | 'non-renewing' | 'cancelled';
   autoRenew?: boolean;
+  useThermalPrinter?: boolean;
   theme: {
     primaryColor: string;
     fontFamily: string;
@@ -102,6 +103,7 @@ export interface SaleItem {
   cartId: string; // Unique ID for cart management
   productId: string;
   productName: string;
+  category?: string;
   quantity: number;
   unitPrice: number;
   discount: number;

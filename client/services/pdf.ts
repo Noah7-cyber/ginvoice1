@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import { Transaction, BusinessProfile } from '../types';
+import { Transaction, BusinessProfile, Product } from '../types';
 
 export const sharePdfBlob = async (blob: Blob, filename: string) => {
   const file = new File([blob], filename, { type: 'application/pdf' });
@@ -26,7 +26,128 @@ export const sharePdfBlob = async (blob: Blob, filename: string) => {
   }
 };
 
-export const generateInvoicePDF = async (transaction: Transaction, business: BusinessProfile): Promise<Blob> => {
+export const generateInvoicePDF = async (transaction: Transaction, business: BusinessProfile, products: Product[] = []): Promise<Blob> => {
+  const isThermal = business.useThermalPrinter;
+
+  // --- THERMAL LAYOUT (80mm) ---
+  if (isThermal) {
+     // 1. Calculate Estimated Height
+     let estimatedHeight = 100; // Base height for header/footer
+     transaction.items.forEach(item => {
+        // Rough estimate: 10mm per item + extra for wrapping
+        const nameLen = item.productName.length;
+        estimatedHeight += 10 + Math.ceil(nameLen / 30) * 4;
+     });
+
+     const doc = new jsPDF({
+       orientation: 'portrait',
+       unit: 'mm',
+       format: [80, estimatedHeight + 50] // Dynamic height + buffer
+     });
+
+     const pageWidth = 80;
+     const margin = 2;
+     let y = 10;
+
+     const drawTextCenter = (text: string, yPos: number, size = 10, isBold = false) => {
+        doc.setFont('helvetica', isBold ? 'bold' : 'normal');
+        doc.setFontSize(size);
+        doc.text(text, pageWidth / 2, yPos, { align: 'center' });
+     };
+
+     const drawLine = () => {
+        doc.setDrawColor(0);
+        doc.setLineWidth(0.1);
+        doc.line(margin, y, pageWidth - margin, y);
+        y += 2;
+     };
+
+     // Header
+     drawTextCenter(business.name, y, 12, true);
+     y += 5;
+     drawTextCenter(business.address, y, 8);
+     y += 4;
+     drawTextCenter(business.phone, y, 8);
+     y += 6;
+
+     drawLine();
+
+     // Info
+     doc.setFontSize(8);
+     doc.text(`Date: ${new Date(transaction.transactionDate).toLocaleDateString()}`, margin, y);
+     y += 4;
+     doc.text(`Time: ${new Date(transaction.transactionDate).toLocaleTimeString()}`, margin, y);
+     y += 4;
+     doc.text(`ID: ${transaction.id.slice(-8)}`, margin, y);
+     y += 4;
+     doc.text(`Customer: ${transaction.customerName}`, margin, y);
+     y += 6;
+
+     drawLine();
+
+     // Items Header
+     doc.setFont('helvetica', 'bold');
+     doc.setFontSize(8);
+     doc.text('Item', margin, y);
+     doc.text('Qty', 45, y, { align: 'right' });
+     doc.text('Total', pageWidth - margin, y, { align: 'right' });
+     y += 4;
+
+     // Items
+     doc.setFont('helvetica', 'normal');
+     transaction.items.forEach(item => {
+         // Resolve Category
+         const category = item.category || products.find(p => p.id === item.productId)?.category;
+
+         const nameLines = doc.splitTextToSize(item.productName, 40);
+         doc.text(nameLines, margin, y);
+
+         // Draw Qty and Total aligned with first line of name
+         doc.text(item.quantity.toString(), 45, y, { align: 'right' });
+         doc.text(item.total.toLocaleString(), pageWidth - margin, y, { align: 'right' });
+
+         y += (nameLines.length * 3.5);
+
+         // Category below name
+         if (category) {
+            doc.setFontSize(7);
+            doc.setTextColor(100);
+            doc.text(`(${category})`, margin, y);
+            doc.setTextColor(0);
+            doc.setFontSize(8);
+            y += 4;
+         }
+
+         y += 2; // Spacing
+     });
+
+     drawLine();
+
+     // Totals
+     const drawRow = (label: string, val: string, bold = false) => {
+         doc.setFont('helvetica', bold ? 'bold' : 'normal');
+         doc.text(label, 40, y, { align: 'right' });
+         doc.text(val, pageWidth - margin, y, { align: 'right' });
+         y += 5;
+     };
+
+     drawRow('Subtotal:', transaction.subtotal.toLocaleString());
+     if (transaction.globalDiscount > 0) {
+        drawRow('Discount:', `-${transaction.globalDiscount.toLocaleString()}`);
+     }
+     drawRow('Total:', `NGN ${transaction.totalAmount.toLocaleString()}`, true);
+     drawRow('Paid:', transaction.amountPaid.toLocaleString());
+     drawRow('Balance:', transaction.balance.toLocaleString(), true);
+
+     y += 5;
+     drawTextCenter('Thank you!', y, 10, true);
+     y += 5;
+     drawTextCenter('Powered by Ginvoice', y, 7);
+
+     return doc.output('blob');
+  }
+
+  // --- STANDARD A4 LAYOUT ---
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -124,9 +245,16 @@ export const generateInvoicePDF = async (transaction: Transaction, business: Bus
   doc.setTextColor(0);
 
   transaction.items.forEach((item) => {
+    // Resolve Category
+    const category = item.category || products.find(p => p.id === item.productId)?.category;
+
     // Handle text wrapping for long names
     const nameLines = doc.splitTextToSize(item.productName, 100); // Max width 100mm
-    const lineCount = nameLines.length;
+    let lineCount = nameLines.length;
+
+    // Add category line if exists
+    if (category) lineCount += 1;
+
     const rowHeight = Math.max(10, lineCount * 5);
 
     // Check for page break
@@ -136,6 +264,18 @@ export const generateInvoicePDF = async (transaction: Transaction, business: Bus
     }
 
     drawText(nameLines, cols.desc + 2, y);
+
+    // Draw Category below
+    if (category) {
+        doc.setFontSize(8);
+        doc.setTextColor(100);
+        // Calculate Y position for category (below name lines)
+        const catY = y + (nameLines.length * 4);
+        drawText(`(${category})`, cols.desc + 2, catY);
+        doc.setTextColor(0);
+        doc.setFontSize(9);
+    }
+
     drawText(item.quantity.toString(), cols.qty, y, { align: 'center' });
     drawText(item.unitPrice.toLocaleString(), cols.price, y, { align: 'right' });
     drawText(item.total.toLocaleString(), pageWidth - margin - 2, y, { align: 'right' });
@@ -144,7 +284,8 @@ export const generateInvoicePDF = async (transaction: Transaction, business: Bus
 
     // Add light separator
     doc.setDrawColor(240);
-    doc.line(margin, y - rowHeight + 2, pageWidth - margin, y - rowHeight + 2); // Top of row? No, below
+    doc.line(margin, y, pageWidth - margin, y);
+    y += 2;
   });
 
   drawLine(y);

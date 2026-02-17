@@ -405,7 +405,7 @@ const product_search = async ({ query }, { businessId }) => {
 
     const count = await Product.countDocuments(criteria);
 
-    if (count > 5) {
+    if (count > 20) {
         return {
             special_action: "NAVIGATE",
             screen: "inventory",
@@ -413,7 +413,7 @@ const product_search = async ({ query }, { businessId }) => {
             message: `Found ${count} items matching "${query}". Opening list...`
         };
     } else if (count > 0) {
-        const results = await Product.find(criteria).limit(5);
+        const results = await Product.find(criteria).limit(20);
 
         // Ensure sanitizeData handles the conversion, so the AI gets clean numbers
         const cleanItems = sanitizeData(results);

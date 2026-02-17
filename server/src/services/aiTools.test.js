@@ -4,6 +4,7 @@ const { executeTool } = require('./aiTools');
 const Transaction = require('../models/Transaction');
 const Expenditure = require('../models/Expenditure');
 const Business = require('../models/Business');
+const Product = require('../models/Product');
 
 let mongoServer;
 
@@ -21,6 +22,7 @@ beforeEach(async () => {
     await Transaction.deleteMany({});
     await Expenditure.deleteMany({});
     await Business.deleteMany({});
+    await Product.deleteMany({});
 });
 
 describe('get_business_report Logic Check', () => {
@@ -141,5 +143,59 @@ describe('get_business_report Logic Check', () => {
         expect(result.topSellingProducts).toBeDefined();
         expect(result.topSellingProducts.length).toBeGreaterThan(0);
         expect(result.topSellingProducts[0].name).toBe('Item B');
+    });
+});
+
+describe('product_search Logic Check', () => {
+    it('returns items directly if count <= 20', async () => {
+        const businessId = new mongoose.Types.ObjectId();
+        // Create 20 products
+        const products = [];
+        for (let i = 0; i < 20; i++) {
+            products.push({
+                businessId: businessId.toString(),
+                id: `prod-${i}`,
+                name: `Test Product ${i}`,
+                category: 'Test',
+                costPrice: 100,
+                sellingPrice: 150,
+                currentStock: 10
+            });
+        }
+        await Product.insertMany(products);
+
+        const result = await executeTool({
+            name: 'product_search',
+            args: { query: 'Test Product' }
+        }, businessId.toString(), 'owner');
+
+        expect(result.special_action).toBeUndefined();
+        expect(result.items).toHaveLength(20);
+    });
+
+    it('returns NAVIGATE if count > 20', async () => {
+        const businessId = new mongoose.Types.ObjectId();
+        // Create 21 products
+        const products = [];
+        for (let i = 0; i < 21; i++) {
+             products.push({
+                businessId: businessId.toString(),
+                id: `prod-nav-${i}`,
+                name: `Nav Product ${i}`,
+                category: 'Test',
+                costPrice: 100,
+                sellingPrice: 150,
+                currentStock: 10
+            });
+        }
+        await Product.insertMany(products);
+
+        const result = await executeTool({
+            name: 'product_search',
+            args: { query: 'Nav Product' }
+        }, businessId.toString(), 'owner');
+
+        expect(result.special_action).toBe('NAVIGATE');
+        expect(result.items).toBeUndefined();
     });
 });

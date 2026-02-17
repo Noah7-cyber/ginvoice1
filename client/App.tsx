@@ -711,6 +711,7 @@ const App: React.FC = () => {
           cartId: crypto.randomUUID(),
           productId: product.id,
           productName: unit ? `${product.name} (${unit.name})` : product.name,
+          category: product.category,
           quantity: 1,
           unitPrice: unit ? (unit.sellingPrice || 0) : (product.sellingPrice || 0),
           discount: 0,
