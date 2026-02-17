@@ -182,6 +182,24 @@ export const fetchRemoteState = async (forceFull = false) => {
   }
 };
 
+// NEW: Smart Sync Version Check
+export const checkServerVersion = async (): Promise<number> => {
+  const token = loadAuthToken();
+  if (!token) return 0; // Silent fail
+
+  try {
+      const res = await fetch(buildUrl('/api/sync/version'), {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) return 0;
+      const data = await res.json();
+      return typeof data.version === 'number' ? data.version : 0;
+  } catch (err) {
+      return 0; // Network error or offline
+  }
+};
+
 export const updateSettings = async (settings: Partial<BusinessProfile['settings']>, staffPermissions?: Partial<BusinessProfile['staffPermissions']>) => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');

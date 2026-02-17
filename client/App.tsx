@@ -24,7 +24,7 @@ import { useStockVerification } from './hooks/useStockVerification';
 import { INITIAL_PRODUCTS } from './constants';
 import { safeCalculate } from './utils/math';
 import { saveState, loadState, pushToBackend, getDataVersion, saveDataVersion, getLastSync, saveLastSync } from './services/storage';
-import { login, registerBusiness, saveAuthToken, clearAuthToken, getEntitlements, initializePayment, fetchRemoteState, deleteExpenditure, snoozeStockVerification, dismissNotification } from './services/api';
+import { login, registerBusiness, saveAuthToken, clearAuthToken, getEntitlements, initializePayment, fetchRemoteState, deleteExpenditure, snoozeStockVerification, dismissNotification, checkServerVersion } from './services/api';
 import { useToast } from './components/ToastProvider';
 import SalesScreen from './components/SalesScreen';
 import InventoryScreen from './components/InventoryScreen';
@@ -455,6 +455,32 @@ const App: React.FC = () => {
        fetchEntitlements();
     }
   }, [state.isLoggedIn, refreshData, fetchEntitlements]);
+
+  // SMART SYNC HEARTBEAT (Every 10s)
+  useEffect(() => {
+      if (!isOnline || !state.isLoggedIn) return;
+
+      const interval = setInterval(async () => {
+         try {
+             const serverVersion = await checkServerVersion();
+             const localVersion = getDataVersion();
+
+             if (serverVersion > localVersion) {
+                 console.log(`[Smart Sync] Update found! Server: ${serverVersion} > Local: ${localVersion}`);
+                 await refreshData();
+                 // Update local version match to prevent loops (refreshData should ideally return the new version,
+                 // but simpler to just trust it for now or rely on next refreshData saving it)
+                 // NOTE: refreshData logic below needs to handle version saving if we want this perfect.
+                 // For now, let's manually update the version marker to match server so we don't spam.
+                 saveDataVersion(serverVersion);
+             }
+         } catch (err) {
+             console.warn('Smart Sync check failed', err);
+         }
+      }, 10000);
+
+      return () => clearInterval(interval);
+  }, [isOnline, state.isLoggedIn, refreshData]);
 
   const openPaymentLink = useCallback(async () => {
     if (!navigator.onLine) {

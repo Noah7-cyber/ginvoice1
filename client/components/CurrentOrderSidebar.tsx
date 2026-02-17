@@ -121,7 +121,7 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
       balance: balance,
       signature: finalSignature,
       isSignatureLocked: isLocked,
-      staffId: isOwner ? 'owner' : 'staff',
+      staffId: isOwner ? 'owner' : 'Store Staff',
       createdByRole: isOwner ? 'owner' : 'staff',
       discountCode: discountCode || undefined
     };
