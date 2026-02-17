@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Store, Save, RefreshCw, CloudCheck, Upload, Trash2, Image as ImageIcon, MessageSquare, HeadphonesIcon, HelpCircle, Lock, AlertTriangle, X, Ticket, ToggleLeft, ToggleRight, Loader2, CreditCard, ShieldCheck, CheckCircle2, Palette, Database, Download } from 'lucide-react';
+import { Store, Save, RefreshCw, CloudCheck, Upload, Trash2, Image as ImageIcon, MessageSquare, HeadphonesIcon, HelpCircle, Lock, AlertTriangle, X, Ticket, ToggleLeft, ToggleRight, Loader2, CreditCard, ShieldCheck, CheckCircle2, Palette, Database, Download, Printer } from 'lucide-react';
 import { BusinessProfile, DiscountCode } from '../types';
 import { THEME_COLORS, FONTS } from '../constants';
 import { changeBusinessPins, deleteAccount, uploadFile, updateSettings, generateDiscountCode, verifyPayment, getEntitlements, cancelSubscription, pauseSubscription, resumeSubscription, exportBusinessData } from '../services/api';
@@ -537,6 +537,26 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                             ))}
                         </div>
                     </div>
+                  </div>
+
+                  {/* Receipt Settings */}
+                  <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
+                      <h2 className="text-lg font-bold flex items-center gap-2"><Printer className="text-primary" /> Receipt Settings</h2>
+                      <div className="flex items-center justify-between p-4 rounded-2xl border bg-gray-50">
+                          <div>
+                              <p className="font-bold text-sm text-gray-900">Use Thermal Printer Format (80mm)</p>
+                              <p className="text-[10px] text-gray-500 mt-0.5">Format invoices for thermal rolls instead of A4</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                                setFormData({ ...formData, useThermalPrinter: !formData.useThermalPrinter });
+                            }}
+                            className={`transition-colors ${formData.useThermalPrinter ? 'text-primary' : 'text-gray-300'}`}
+                          >
+                              {formData.useThermalPrinter ? <ToggleRight size={32} /> : <ToggleLeft size={32} />}
+                          </button>
+                      </div>
                   </div>
 
                   {/* Tax Compliance Toggle */}

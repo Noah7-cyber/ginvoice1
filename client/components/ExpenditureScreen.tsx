@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, X, Save, Calendar, DollarSign, Tag, FileText, CreditCard, Pencil, Trash2, ArrowUpRight, ArrowDownLeft, Layers } from 'lucide-react';
+import { Plus, X, Save, Calendar, DollarSign, Tag, FileText, CreditCard, Pencil, Trash2, ArrowUpRight, ArrowDownLeft, Layers, Search } from 'lucide-react';
 import { useToast } from '../components/ToastProvider';
 import { getCategories } from '../services/api';
 import { Category } from '../types';
@@ -62,6 +62,7 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
   // Date Filters
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Calculate Summary Metrics
   const summaryMetrics = React.useMemo(() => {
@@ -116,9 +117,17 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
     return expenditures.filter(e => {
       if (startDate && e.date < startDate) return false;
       if (endDate && e.date > endDate) return false;
+
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase();
+        const matches = (e.title?.toLowerCase().includes(term)) ||
+                        (e.category?.toLowerCase().includes(term)) ||
+                        (e.description?.toLowerCase().includes(term));
+        if (!matches) return false;
+      }
       return true;
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [expenditures, startDate, endDate]);
+  }, [expenditures, startDate, endDate, searchTerm]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -189,6 +198,18 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
         <h1 className="text-2xl font-bold text-gray-800">Shop Expenses</h1>
 
         <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
+           {/* Search Input */}
+           <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                <input
+                    type="text"
+                    placeholder="Search expenses..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500 w-full md:w-48"
+                />
+           </div>
+
            {/* Date Filters */}
            <div className="flex items-center gap-2 bg-white p-2 rounded-lg border">
               <span className="text-xs font-bold text-gray-500 uppercase">From</span>

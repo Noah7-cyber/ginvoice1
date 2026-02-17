@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Transaction, BusinessProfile } from '../types';
+import { Transaction, BusinessProfile, Product } from '../types';
 import { CURRENCY } from '../constants';
 import { ShoppingBag, Printer, Share2, X, Download, Tag, Loader2 } from 'lucide-react';
 import { useToast } from './ToastProvider';
@@ -8,10 +8,11 @@ import { sharePdfBlob, generateInvoicePDF } from '../services/pdf';
 interface InvoicePreviewProps {
   transaction: Transaction;
   business: BusinessProfile;
+  products: Product[];
   onClose: () => void;
 }
 
-const InvoicePreview: React.FC<InvoicePreviewProps> = ({ transaction, business, onClose }) => {
+const InvoicePreview: React.FC<InvoicePreviewProps> = ({ transaction, business, products, onClose }) => {
   const { addToast } = useToast();
   const [isGenerating, setIsGenerating] = useState(false);
 
@@ -25,7 +26,7 @@ const InvoicePreview: React.FC<InvoicePreviewProps> = ({ transaction, business, 
 
     try {
       // Use Drawing Method (robust for mobile)
-      const blob = await generateInvoicePDF(transaction, business);
+      const blob = await generateInvoicePDF(transaction, business, products);
       const filename = `invoice-${transaction.id}.pdf`;
       await sharePdfBlob(blob, filename);
     } catch (error) {

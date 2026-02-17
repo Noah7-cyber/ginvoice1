@@ -723,6 +723,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
         <InvoicePreview 
           transaction={selectedInvoice} 
           business={business} 
+          products={products}
           onClose={() => { setSelectedInvoice(null); updateUrlForInvoice(null); }}
         />
       )}
