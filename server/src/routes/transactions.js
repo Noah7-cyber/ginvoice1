@@ -3,8 +3,62 @@ const router = express.Router();
 const Transaction = require('../models/Transaction');
 const Product = require('../models/Product');
 const Notification = require('../models/Notification');
+const Business = require('../models/Business');
 const auth = require('../middleware/auth');
 const requireActiveSubscription = require('../middleware/subscription');
+
+// CREATE Transaction
+router.post('/', auth, requireActiveSubscription, async (req, res) => {
+  try {
+    const { items, customerName, totalAmount, amountPaid, paymentMethod, transactionDate, id, staffId, discountCode } = req.body;
+
+    // 1. Determine Staff ID (Trust frontend "Store Staff" if provided, otherwise fallback to user)
+    // NOTE: This logic ensures Owner can't accidentally attribute to themselves if they selected "Staff" mode on frontend
+    const finalStaffId = staffId || req.user._id;
+    const createdByRole = staffId === 'Store Staff' ? 'staff' : req.userRole;
+
+    const newTransaction = new Transaction({
+      businessId: req.businessId,
+      id,
+      transactionDate: transactionDate || new Date(),
+      customerName,
+      items,
+      totalAmount,
+      amountPaid,
+      paymentMethod,
+      staffId: finalStaffId,
+      createdByRole,
+      discountCode, // Save discount code if used
+      // Auto-calculate balance
+      balance: Math.max(0, totalAmount - amountPaid),
+      paymentStatus: (totalAmount - amountPaid) <= 0 ? 'paid' : 'credit'
+    });
+
+    await newTransaction.save();
+
+    // 2. Decrement Stock
+    if (items && items.length > 0) {
+      const bulkOps = items.map(item => {
+        const multiplier = item.multiplier || (item.selectedUnit ? item.selectedUnit.multiplier : 1);
+        return {
+          updateOne: {
+            filter: { id: item.productId, businessId: req.businessId },
+            update: { $inc: { stock: -1 * (item.quantity * multiplier) } }
+          }
+        };
+      });
+      await Product.bulkWrite(bulkOps);
+    }
+
+    // 3. Increment Data Version (Smart Sync)
+    await Business.findByIdAndUpdate(req.businessId, { $inc: { dataVersion: 0.001 } });
+
+    res.status(201).json(newTransaction);
+  } catch (err) {
+    console.error('Create Transaction Error:', err);
+    res.status(500).json({ message: 'Server Error' });
+  }
+});
 
 // EDIT Transaction (Smart Rollback)
 router.put('/:id', auth, requireActiveSubscription, async (req, res) => {
@@ -85,6 +139,9 @@ router.put('/:id', auth, requireActiveSubscription, async (req, res) => {
     if (date) originalTx.transactionDate = date; // Allow date update if provided
 
     await originalTx.save();
+
+    // 4b. Increment Data Version
+    await Business.findByIdAndUpdate(req.businessId, { $inc: { dataVersion: 0.001 } });
 
     // 5. Log Notification
     const performerName = req.userRole === 'owner' ? 'Owner' : 'Staff';

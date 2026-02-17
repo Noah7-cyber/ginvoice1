@@ -41,6 +41,20 @@ const normalizeCustomerName = (value) => {
 
 // --- ROUTES ---
 
+// 0. Version Check
+router.get('/version', auth, async (req, res) => {
+  try {
+    const business = await Business.findById(req.businessId).select('dataVersion');
+    // Return version as a float, defaulting to 0.000
+    // Ensure it's a number for the JSON response
+    const version = business?.dataVersion ? parseFloat(business.dataVersion.toString()) : 0.000;
+    res.json({ version });
+  } catch (err) {
+    console.error('Version check failed:', err);
+    res.status(500).json({ version: 0.000 });
+  }
+});
+
 // 1. GET Full State (Online-Only Mode) - EMERGENCY VERSION
 router.get('/', auth, async (req, res) => {
   try {
@@ -203,6 +217,11 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
     if (business && typeof business === 'object') {
        const { staffPermissions, trialEndsAt, isSubscribed, ...safeUpdates } = business;
        await Business.findByIdAndUpdate(businessId, { $set: { ...safeUpdates, lastActiveAt: new Date() } });
+    }
+
+    // 3. Increment Version if changes detected
+    if (categories.length > 0 || products.length > 0 || transactions.length > 0 || expenditures.length > 0) {
+        await Business.findByIdAndUpdate(businessId, { $inc: { dataVersion: 0.001 } });
     }
 
     if (categories.length > 0) {
