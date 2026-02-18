@@ -176,19 +176,45 @@ router.put('/:id', auth, requireActiveSubscription, async (req, res) => {
   }
 });
 
-// SETTLE Debt (Mark Paid)
+// SETTLE Debt (Mark Paid or Partial Payment)
 router.patch('/:id/settle', auth, requireActiveSubscription, async (req, res) => {
   try {
     const { id } = req.params;
+    const { amountPaid } = req.body;
     const transaction = await Transaction.findOne({ id, businessId: req.businessId });
 
     if (!transaction) return res.status(404).json({ message: 'Transaction not found' });
 
-    transaction.amountPaid = transaction.totalAmount;
-    transaction.balance = 0;
-    transaction.paymentStatus = 'paid';
+    // Helper to parse Decimal128 or Number safely
+    const safeNum = (val) => val && val.toString ? parseFloat(val.toString()) : (Number(val) || 0);
+
+    const currentTotal = safeNum(transaction.totalAmount);
+
+    if (amountPaid !== undefined) {
+       // PARTIAL SETTLEMENT MODE
+       const newAmountPaid = safeNum(amountPaid);
+       if (newAmountPaid < 0) return res.status(400).json({ message: 'Invalid amount' });
+
+       transaction.amountPaid = newAmountPaid;
+       transaction.balance = Math.max(0, currentTotal - newAmountPaid);
+
+       if (transaction.balance <= 0.01) { // Tolerance for floating point
+           transaction.balance = 0;
+           transaction.paymentStatus = 'paid';
+       } else {
+           transaction.paymentStatus = 'credit';
+       }
+    } else {
+       // FULL SETTLEMENT MODE (Legacy Behavior)
+       transaction.amountPaid = currentTotal;
+       transaction.balance = 0;
+       transaction.paymentStatus = 'paid';
+    }
 
     await transaction.save();
+
+    // Increment Data Version for Sync
+    await Business.findByIdAndUpdate(req.businessId, { $inc: { dataVersion: 0.001 } });
 
     res.json(transaction);
   } catch (err) {
