@@ -31,8 +31,19 @@ const summarizeUiContextForPrompt = (uiContext) => {
   }
 
   if (tab === 'inventory' && uiContext.inventory) {
-    const { totalProducts, lowStockCount, totalValue } = uiContext.inventory;
+    const { totalProducts, lowStockCount, totalValue, outOfStockCount, deadStockCount } = uiContext.inventory;
     parts.push(`User is viewing their Stock List: ${totalProducts} total products, ${lowStockCount} items low on stock. Total inventory value is approx ₦${(totalValue || 0).toLocaleString()}.`);
+    if (outOfStockCount != null || deadStockCount != null) {
+      parts.push(`Inventory alerts: ${Number(outOfStockCount || 0)} out-of-stock item(s), ${Number(deadStockCount || 0)} dead-stock candidate(s).`);
+    }
+
+    if (Array.isArray(uiContext.inventory.lowStockPreview) && uiContext.inventory.lowStockPreview.length) {
+      const preview = uiContext.inventory.lowStockPreview
+        .slice(0, 5)
+        .map((item) => `${item?.name || 'Item'}(${Number(item?.stock || 0)})`)
+        .join(', ');
+      parts.push(`Low-stock preview: ${preview}.`);
+    }
   }
 
   if (tab === 'expenditure' && uiContext.expenditure) {
@@ -57,6 +68,13 @@ const summarizeUiContextForPrompt = (uiContext) => {
     );
   } else if (tab === 'history') {
     parts.push("User is viewing the list of Past Sales (Transaction History).");
+    if (Array.isArray(uiContext.recentTransactions) && uiContext.recentTransactions.length) {
+      const txSummary = uiContext.recentTransactions
+        .slice(0, 5)
+        .map((tx) => `${tx?.id || 'N/A'}: ₦${Number(tx?.totalAmount || 0).toLocaleString()} (${tx?.paymentStatus || 'unknown'})`)
+        .join(', ');
+      parts.push(`Recent transaction preview: ${txSummary}.`);
+    }
   }
 
   return parts.join(' ');
@@ -140,6 +158,34 @@ const formatToolResult = (result, fallbackMessage) => {
     return `${result.message || 'Items found.'}\n${lines.join('\n')}`;
   }
 
+
+  if (Array.isArray(result.topSelling) || Array.isArray(result.deadStockCandidates) || Array.isArray(result.restockRecommendations)) {
+    const lines = [];
+    if (Array.isArray(result.topSelling) && result.topSelling.length) {
+      lines.push('TOP SELLERS (PREVIEW)');
+      result.topSelling.slice(0, 5).forEach((item, index) => {
+        lines.push(`${index + 1}. ${item.name} (${item.category || 'Uncategorized'}) — ${Number(item.sold || 0)} sold`);
+      });
+    }
+    if (Array.isArray(result.deadStockCandidates) && result.deadStockCandidates.length) {
+      lines.push('DEAD STOCK (PREVIEW)');
+      result.deadStockCandidates.slice(0, 5).forEach((item, index) => {
+        lines.push(`${index + 1}. ${item.name} — ${Number(item.currentStock || 0)} in stock, 0 sold`);
+      });
+    }
+    if (Array.isArray(result.restockRecommendations) && result.restockRecommendations.length) {
+      lines.push('RESTOCK (PREVIEW)');
+      result.restockRecommendations.slice(0, 5).forEach((item, index) => {
+        lines.push(`${index + 1}. ${item.name} — buy ~${Number(item.recommendedQty || 0)}`);
+      });
+    }
+
+    if (lines.length) {
+      lines.push('I can open the full filtered list if you want all matching items.');
+      return lines.join('\n');
+    }
+  }
+
   if (result.message) return result.message;
 
   if (result.topSellingProduct?.name) {
@@ -193,7 +239,39 @@ const tryHandleCheapIntent = async (message, businessId, userRole) => {
     return { text: "I could not generate today's summary right now.", action: null };
   }
 
-  // 4. Navigation Help
+  // 4. Inventory Intelligence
+  if (/(top\s*selling|best\s*selling|dead\s*stock|restock|what\s*to\s*buy|buy\s*list|slow\s*moving)/.test(text)) {
+    const result = await executeTool({ name: 'get_inventory_intelligence', args: { days: 30, restockHorizonDays: 30, topN: 10 } }, businessId, userRole);
+
+    if (result?.error) return { text: result.error, action: null };
+
+    const top = Array.isArray(result?.topSelling) ? result.topSelling.slice(0, 5) : [];
+    const dead = Array.isArray(result?.deadStockCandidates) ? result.deadStockCandidates.slice(0, 5) : [];
+    const restock = Array.isArray(result?.restockRecommendations) ? result.restockRecommendations.slice(0, 5) : [];
+
+    const lines = [`INVENTORY SNAPSHOT (${Number(result?.periodDays || 30)}D)`];
+
+    if (top.length) {
+      lines.push('TOP SELLERS (PREVIEW)');
+      top.forEach((item, i) => lines.push(`${i + 1}. ${item.name} (${item.category}) — ${item.sold} sold`));
+    }
+
+    if (dead.length) {
+      lines.push('DEAD STOCK CANDIDATES (PREVIEW)');
+      dead.forEach((item, i) => lines.push(`${i + 1}. ${item.name} (${item.category}) — ${item.currentStock} in stock, 0 sold`));
+    }
+
+    if (restock.length) {
+      lines.push(`RESTOCK RECOMMENDATIONS (${Number(result?.horizonDays || 30)}D, PREVIEW)`);
+      restock.forEach((item, i) => lines.push(`${i + 1}. ${item.name} (${item.category}) — buy ~${item.recommendedQty}`));
+    }
+
+    lines.push('Need the full list? I can open Inventory with filters so you can review all matching items.');
+
+    return { text: lines.join('\n'), action: null };
+  }
+
+  // 5. Navigation Help
   if (/(record|add|create|enter).*(sale|invoice|bill)/.test(text)) {
     return { text: "To record a sale: Open Sales tab, add items, and tap ‘Confirm Bill’.", action: { type: 'NAVIGATE', payload: 'sales' } };
   }
@@ -216,6 +294,14 @@ router.post('/chat', auth, async (req, res) => {
 
 
     const trimmedMessage = userMessage.trim();
+
+    // Deterministic fast-paths for high-confidence intents.
+    if (trimmedMessage) {
+      const cheapIntent = await tryHandleCheapIntent(trimmedMessage, businessId, userRole);
+      if (cheapIntent) {
+        return res.json({ text: cheapIntent.text, action: cheapIntent.action || null, usage: null });
+      }
+    }
 
     const businessDoc = await Business.findById(businessId).select('trialEndsAt subscriptionExpiresAt botUsage').lean();
     if (!businessDoc) {
@@ -270,6 +356,13 @@ TOOL USAGE RULES (CRITICAL):
 If asked about 'Performance', 'Profit', 'Revenue', or 'How much I made', you MUST use the get_business_report tool.
 Do NOT use search_sales_records for financial summaries.
 For 'Today's performance', call get_business_report with startDate: '${todayISO}' and endDate: '${todayISO}'.
+For focused financial questions (e.g. 'only profit', 'just revenue', 'cash flow only'), still call get_business_report and return ONLY the requested metric(s).
+For inventory intelligence requests (top sellers, dead stock, what to restock), call get_inventory_intelligence.
+
+TASK VS CHAT RULES:
+- If user asks to do something in app (open/go/navigate/show screen/filter), return actionable guidance and navigation when possible.
+- If user asks analysis/question, answer directly with data and do NOT force navigation.
+- If returning partial results due to list size limits, explicitly say you are showing a preview and offer to open the full filtered list.
 
 CRITICAL: You CAN 'see' the user's screen through the CURRENT UI CONTEXT provided below. NEVER say 'I cannot see your screen', 'I don't have eyes', or 'Based on the app structure'. Speak confidently as if you are standing next to the user looking at the exact same screen.
 

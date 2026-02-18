@@ -199,3 +199,56 @@ describe('product_search Logic Check', () => {
         expect(result.items).toBeUndefined();
     });
 });
+
+
+describe('get_inventory_intelligence', () => {
+    it('returns top sellers, dead stock and restock recommendations', async () => {
+        const businessId = new mongoose.Types.ObjectId();
+
+        await Product.insertMany([
+            {
+                businessId: businessId.toString(),
+                id: 'prod-fast',
+                name: 'Fast Item',
+                category: 'Snacks',
+                costPrice: 100,
+                sellingPrice: 150,
+                stock: 2
+            },
+            {
+                businessId: businessId.toString(),
+                id: 'prod-dead',
+                name: 'Dead Item',
+                category: 'Misc',
+                costPrice: 50,
+                sellingPrice: 80,
+                stock: 20
+            }
+        ]);
+
+        await Transaction.create({
+            businessId,
+            id: 'txn-intel-1',
+            transactionDate: new Date(),
+            totalAmount: 750,
+            items: [
+                { productId: 'prod-fast', productName: 'Fast Item', quantity: 5, total: 750 }
+            ]
+        });
+
+        const result = await executeTool({
+            name: 'get_inventory_intelligence',
+            args: { days: 30, restockHorizonDays: 30, topN: 10 }
+        }, businessId.toString(), 'owner');
+
+        expect(result.topSelling.length).toBeGreaterThan(0);
+        expect(result.topSelling[0].name).toBe('Fast Item');
+
+        const dead = result.deadStockCandidates.find((item) => item.id === 'prod-dead');
+        expect(dead).toBeDefined();
+
+        const restock = result.restockRecommendations.find((item) => item.id === 'prod-fast');
+        expect(restock).toBeDefined();
+        expect(restock.recommendedQty).toBeGreaterThan(0);
+    });
+});

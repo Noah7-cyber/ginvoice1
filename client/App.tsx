@@ -224,6 +224,42 @@ const App: React.FC = () => {
     return Array.from(names).sort();
   }, [state.transactions]);
 
+  const topSellingPreview = useMemo(() => {
+    const soldMap = new Map<string, number>();
+    state.transactions.forEach((tx) => {
+      (tx.items || []).forEach((item) => {
+        const key = item.productId || item.productName;
+        soldMap.set(key, (soldMap.get(key) || 0) + Number(item.quantity || 0));
+      });
+    });
+
+    return state.products
+      .map((product) => ({
+        id: product.id,
+        name: product.name,
+        category: product.category || 'Uncategorized',
+        sold: Number(soldMap.get(product.id) || 0)
+      }))
+      .filter((item) => item.sold > 0)
+      .sort((a, b) => b.sold - a.sold)
+      .slice(0, 8);
+  }, [state.transactions, state.products]);
+
+  const recentTransactionsPreview = useMemo(() => {
+    return state.transactions
+      .slice()
+      .sort((a, b) => new Date(b.transactionDate || b.updatedAt || '').getTime() - new Date(a.transactionDate || a.updatedAt || '').getTime())
+      .slice(0, 8)
+      .map((tx) => ({
+        id: tx.id,
+        customerName: tx.customerName,
+        totalAmount: tx.totalAmount,
+        balance: tx.balance,
+        paymentStatus: tx.paymentStatus,
+        transactionDate: tx.transactionDate
+      }));
+  }, [state.transactions]);
+
   const botUiContext = useMemo(() => {
     if (activeTab === 'sales') {
       const cartSubtotal = cart.reduce((sum, item) => sum + (item.total || 0), 0);
@@ -249,12 +285,25 @@ const App: React.FC = () => {
       // Estimate value using Cost Price if available, else 0.
       const totalValue = state.products.reduce((sum, p) => sum + (p.currentStock * (p.costPrice || 0)), 0);
 
+      const outOfStockCount = state.products.filter(p => Number(p.currentStock || 0) <= 0).length;
+      const deadStockCount = state.products.filter((p) => {
+        const sold = topSellingPreview.find(item => item.id === p.id)?.sold || 0;
+        return Number(p.currentStock || 0) > 0 && sold === 0;
+      }).length;
+
       return {
         tab: 'inventory',
         inventory: {
             totalProducts: state.products.length,
             lowStockCount,
-            totalValue
+            outOfStockCount,
+            deadStockCount,
+            totalValue,
+            lowStockPreview: state.products
+              .filter(p => Number(p.currentStock || 0) < lowStockThreshold)
+              .slice(0, 8)
+              .map(p => ({ id: p.id, name: p.name, stock: Number(p.currentStock || 0), category: p.category || 'Uncategorized' })),
+            topSellingPreview
         }
       };
     }
@@ -284,7 +333,7 @@ const App: React.FC = () => {
             dashboard: {
                 totalRevenue,
                 totalProfit: 0, // Placeholder as costly to calc here
-                topProduct: '' // Placeholder
+                topProduct: topSellingPreview[0]?.name || ''
             }
         };
     }
@@ -313,12 +362,13 @@ const App: React.FC = () => {
               paymentStatus: historySelectedInvoice.paymentStatus,
               itemCount: historySelectedInvoice.items?.length || 0
             }
-          : null
+          : null,
+        recentTransactions: recentTransactionsPreview
       };
     }
 
     return { tab: activeTab };
-  }, [activeTab, cart, historySelectedInvoice, customerName, state.products, state.transactions, state.expenditures, state.business, entitlements]);
+  }, [activeTab, cart, historySelectedInvoice, customerName, state.products, state.transactions, state.expenditures, state.business, entitlements, topSellingPreview, recentTransactionsPreview]);
 
   const refreshData = useCallback(async (overrideState?: InventoryState) => {
     if (!navigator.onLine) return;

@@ -94,7 +94,7 @@ const tools = [
         type: "function",
         function: {
             name: "check_debtors",
-            description: "Find transactions where paymentStatus is 'partial' or 'pending'. Checks for customers who owe money.",
+            description: "Find customers with outstanding balances (balance > 0), typically credit sales.",
             parameters: {
                 type: "object",
                 properties: {},
@@ -133,6 +133,22 @@ const tools = [
         }
     },
 
+    {
+        type: "function",
+        function: {
+            name: "get_inventory_intelligence",
+            description: "Inventory analytics: top-selling products, dead stock candidates, and restock recommendations based on recent sales velocity.",
+            parameters: {
+                type: "object",
+                properties: {
+                    days: { type: "number", description: "Analysis window in days (default 30, max 120)." },
+                    restockHorizonDays: { type: "number", description: "How many upcoming days to cover for restock recommendation (default 30, max 60)." },
+                    topN: { type: "number", description: "How many products to return in each list (default 10, max 50)." }
+                },
+                additionalProperties: false
+            }
+        }
+    },
     {
         type: "function",
         function: {
@@ -463,6 +479,101 @@ const search_expenses = async ({ query, startDate, endDate }, { businessId }) =>
     };
 };
 
+const get_inventory_intelligence = async ({ days = 30, restockHorizonDays = 30, topN = 10 } = {}, { businessId, userRole }) => {
+    if (!businessId) return { error: 'Login required.' };
+
+    const safeDays = Math.min(Math.max(Number(days) || 30, 7), 120);
+    const safeHorizon = Math.min(Math.max(Number(restockHorizonDays) || 30, 7), 60);
+    const safeTopN = Math.min(Math.max(Number(topN) || 10, 1), 50);
+
+    const businessKey = businessId.toString();
+    const periodStart = new Date(Date.now() - safeDays * 24 * 60 * 60 * 1000);
+
+    const [products, recentTransactions] = await Promise.all([
+        Product.find({ businessId: businessKey }).lean(),
+        Transaction.find({ businessId: businessId, transactionDate: { $gte: periodStart } })
+            .select('transactionDate items')
+            .lean()
+    ]);
+
+    const soldMap = new Map();
+    recentTransactions.forEach((tx) => {
+        (tx.items || []).forEach((item) => {
+            const productId = item?.productId;
+            if (!productId) return;
+            soldMap.set(productId, (soldMap.get(productId) || 0) + Number(item?.quantity || 0));
+        });
+    });
+
+    const topSelling = products
+        .map((product) => {
+            const sold = Number(soldMap.get(product.id) || 0);
+            return {
+                id: product.id,
+                name: product.name,
+                category: product.category || 'Uncategorized',
+                sold,
+                currentStock: Number(product.stock || 0)
+            };
+        })
+        .filter((item) => item.sold > 0)
+        .sort((a, b) => b.sold - a.sold)
+        .slice(0, safeTopN);
+
+    const deadStockCandidates = products
+        .map((product) => ({
+            id: product.id,
+            name: product.name,
+            category: product.category || 'Uncategorized',
+            currentStock: Number(product.stock || 0),
+            soldInPeriod: Number(soldMap.get(product.id) || 0)
+        }))
+        .filter((item) => item.currentStock > 0 && item.soldInPeriod <= 0)
+        .sort((a, b) => b.currentStock - a.currentStock)
+        .slice(0, safeTopN);
+
+    const restockRecommendations = products
+        .map((product) => {
+            const soldInPeriod = Number(soldMap.get(product.id) || 0);
+            const avgDailySales = soldInPeriod / safeDays;
+            const forecastNeed = Math.ceil(avgDailySales * safeHorizon);
+            const currentStock = Number(product.stock || 0);
+            const recommendedQty = Math.max(0, forecastNeed - currentStock);
+            return {
+                id: product.id,
+                name: product.name,
+                category: product.category || 'Uncategorized',
+                soldInPeriod,
+                avgDailySales: Number(avgDailySales.toFixed(2)),
+                currentStock,
+                recommendedQty,
+                horizonDays: safeHorizon
+            };
+        })
+        .filter((item) => item.recommendedQty > 0)
+        .sort((a, b) => b.recommendedQty - a.recommendedQty)
+        .slice(0, safeTopN);
+
+    const output = {
+        periodDays: safeDays,
+        horizonDays: safeHorizon,
+        inventorySize: products.length,
+        topSelling,
+        deadStockCandidates,
+        restockRecommendations,
+        message: `Inventory intelligence ready (${safeDays}d window).`
+    };
+
+    if (userRole !== 'owner') {
+        return {
+            ...output,
+            note: 'Detailed financial totals stay owner-only; inventory insights are shared for operations.'
+        };
+    }
+
+    return output;
+};
+
 
 const search_sales_records = async ({ startDate, endDate, customerName, paymentStatus, limit = 20 }, { businessId, userRole }) => {
     if (!businessId) return { error: "Login required." };
@@ -566,6 +677,8 @@ const executeTool = async ({ name, args }, businessId, userRole = 'staff') => {
                 return await search_sales_records(args, context);
             case 'search_expenses':
                 return await search_expenses(args, context);
+            case 'get_inventory_intelligence':
+                return await get_inventory_intelligence(args, context);
             case 'get_recent_transaction':
                 return await get_recent_transaction(args, context);
             case 'get_stock_verification_queue':
