@@ -382,6 +382,16 @@ export const sendChat = async (message: string, history: any[], uiContext?: any)
                     category: String(item?.category || '').slice(0, 40),
                     sold: Number(item?.sold || 0)
                   }))
+                : [],
+              deadStockWindowDays: Number(uiContext.inventory.deadStockWindowDays || 0),
+              deadStockPreview: Array.isArray(uiContext.inventory.deadStockPreview)
+                ? uiContext.inventory.deadStockPreview.slice(0, 8).map((item: any) => ({
+                    id: String(item?.id || '').slice(0, 40),
+                    name: String(item?.name || '').slice(0, 80),
+                    stock: Number(item?.stock || 0),
+                    category: String(item?.category || '').slice(0, 40),
+                    lastSoldAt: item?.lastSoldAt ? String(item.lastSoldAt).slice(0, 40) : null
+                  }))
                 : []
             }
           : undefined,

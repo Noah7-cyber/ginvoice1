@@ -31,10 +31,21 @@ const summarizeUiContextForPrompt = (uiContext) => {
   }
 
   if (tab === 'inventory' && uiContext.inventory) {
-    const { totalProducts, lowStockCount, totalValue, outOfStockCount, deadStockCount } = uiContext.inventory;
+    const {
+      totalProducts,
+      lowStockCount,
+      totalValue,
+      outOfStockCount,
+      deadStockCount,
+      deadStockWindowDays
+    } = uiContext.inventory;
     parts.push(`User is viewing their Stock List: ${totalProducts} total products, ${lowStockCount} items low on stock. Total inventory value is approx ₦${(totalValue || 0).toLocaleString()}.`);
     if (outOfStockCount != null || deadStockCount != null) {
-      parts.push(`Inventory alerts: ${Number(outOfStockCount || 0)} out-of-stock item(s), ${Number(deadStockCount || 0)} dead-stock candidate(s).`);
+      const windowDays = Number(deadStockWindowDays || 0);
+      const deadStockDefinition = windowDays > 0
+        ? `dead-stock candidate(s) (no sales in last ${windowDays} days)`
+        : 'dead-stock candidate(s)';
+      parts.push(`Inventory alerts: ${Number(outOfStockCount || 0)} out-of-stock item(s), ${Number(deadStockCount || 0)} ${deadStockDefinition}.`);
     }
 
     if (Array.isArray(uiContext.inventory.lowStockPreview) && uiContext.inventory.lowStockPreview.length) {
@@ -43,6 +54,22 @@ const summarizeUiContextForPrompt = (uiContext) => {
         .map((item) => `${item?.name || 'Item'}(${Number(item?.stock || 0)})`)
         .join(', ');
       parts.push(`Low-stock preview: ${preview}.`);
+    }
+
+    if (Array.isArray(uiContext.inventory.topSellingPreview) && uiContext.inventory.topSellingPreview.length) {
+      const topPreview = uiContext.inventory.topSellingPreview
+        .slice(0, 5)
+        .map((item) => `${item?.name || 'Item'}(${Number(item?.sold || 0)} sold)`)
+        .join(', ');
+      parts.push(`Top-selling preview: ${topPreview}.`);
+    }
+
+    if (Array.isArray(uiContext.inventory.deadStockPreview) && uiContext.inventory.deadStockPreview.length) {
+      const deadPreview = uiContext.inventory.deadStockPreview
+        .slice(0, 5)
+        .map((item) => `${item?.name || 'Item'}(${Number(item?.stock || 0)} in stock)`)
+        .join(', ');
+      parts.push(`Dead-stock preview: ${deadPreview}.`);
     }
   }
 
@@ -349,6 +376,13 @@ router.post('/chat', auth, async (req, res) => {
 Do not act like a basic calculator. Your job is to provide deep financial insight and build trust through accuracy.
 
 APP REALITY (STRICT): The user can only navigate these in-app tabs: sales, inventory, history, expenditure, dashboard, settings. Do NOT mention screens/buttons that do not exist.
+
+APP DATA GLOSSARY:
+- history tab = past sales list (transactions / invoices)
+- debtors = customers with outstanding balance > 0
+- out-of-stock = current stock <= 0
+- dead stock = item still in stock but no recent sales in the configured window
+- top selling = highest quantity sold from transaction items
 
 NAVIGATION RULES: When giving instructions, reference visible labels in the current app UX like ‘Sales tab’, ‘Select Items’, right-side order panel, and ‘Confirm Bill’.
 

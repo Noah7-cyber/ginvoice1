@@ -224,26 +224,54 @@ const App: React.FC = () => {
     return Array.from(names).sort();
   }, [state.transactions]);
 
-  const topSellingPreview = useMemo(() => {
-    const soldMap = new Map<string, number>();
+  const DEAD_STOCK_WINDOW_DAYS = 45;
+
+  const inventorySalesSnapshot = useMemo(() => {
+    const totalSoldMap = new Map<string, number>();
+    const recentSoldMap = new Map<string, number>();
+    const lastSoldAtMap = new Map<string, string>();
+    const cutoff = Date.now() - (DEAD_STOCK_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+
     state.transactions.forEach((tx) => {
+      const txTs = new Date(tx.transactionDate || tx.updatedAt || '').getTime();
+      const inDeadStockWindow = Number.isFinite(txTs) && txTs >= cutoff;
+
       (tx.items || []).forEach((item) => {
         const key = item.productId || item.productName;
-        soldMap.set(key, (soldMap.get(key) || 0) + Number(item.quantity || 0));
+        if (!key) return;
+
+        const qty = Number(item.quantity || 0);
+        totalSoldMap.set(key, (totalSoldMap.get(key) || 0) + qty);
+
+        if (inDeadStockWindow) {
+          recentSoldMap.set(key, (recentSoldMap.get(key) || 0) + qty);
+        }
+
+        const soldAtIso = tx.transactionDate || tx.updatedAt;
+        if (soldAtIso) {
+          const prev = lastSoldAtMap.get(key);
+          if (!prev || new Date(soldAtIso).getTime() > new Date(prev).getTime()) {
+            lastSoldAtMap.set(key, soldAtIso);
+          }
+        }
       });
     });
 
+    return { totalSoldMap, recentSoldMap, lastSoldAtMap };
+  }, [state.transactions]);
+
+  const topSellingPreview = useMemo(() => {
     return state.products
       .map((product) => ({
         id: product.id,
         name: product.name,
         category: product.category || 'Uncategorized',
-        sold: Number(soldMap.get(product.id) || 0)
+        sold: Number(inventorySalesSnapshot.totalSoldMap.get(product.id) || 0)
       }))
       .filter((item) => item.sold > 0)
       .sort((a, b) => b.sold - a.sold)
       .slice(0, 8);
-  }, [state.transactions, state.products]);
+  }, [state.products, inventorySalesSnapshot]);
 
   const recentTransactionsPreview = useMemo(() => {
     return state.transactions
@@ -287,8 +315,8 @@ const App: React.FC = () => {
 
       const outOfStockCount = state.products.filter(p => Number(p.currentStock || 0) <= 0).length;
       const deadStockCount = state.products.filter((p) => {
-        const sold = topSellingPreview.find(item => item.id === p.id)?.sold || 0;
-        return Number(p.currentStock || 0) > 0 && sold === 0;
+        const soldRecently = Number(inventorySalesSnapshot.recentSoldMap.get(p.id) || 0);
+        return Number(p.currentStock || 0) > 0 && soldRecently <= 0;
       }).length;
 
       return {
@@ -303,7 +331,18 @@ const App: React.FC = () => {
               .filter(p => Number(p.currentStock || 0) < lowStockThreshold)
               .slice(0, 8)
               .map(p => ({ id: p.id, name: p.name, stock: Number(p.currentStock || 0), category: p.category || 'Uncategorized' })),
-            topSellingPreview
+            topSellingPreview,
+            deadStockWindowDays: DEAD_STOCK_WINDOW_DAYS,
+            deadStockPreview: state.products
+              .filter((p) => Number(p.currentStock || 0) > 0 && Number(inventorySalesSnapshot.recentSoldMap.get(p.id) || 0) <= 0)
+              .slice(0, 8)
+              .map((p) => ({
+                id: p.id,
+                name: p.name,
+                stock: Number(p.currentStock || 0),
+                category: p.category || 'Uncategorized',
+                lastSoldAt: inventorySalesSnapshot.lastSoldAtMap.get(p.id) || null
+              }))
         }
       };
     }
@@ -368,7 +407,7 @@ const App: React.FC = () => {
     }
 
     return { tab: activeTab };
-  }, [activeTab, cart, historySelectedInvoice, customerName, state.products, state.transactions, state.expenditures, state.business, entitlements, topSellingPreview, recentTransactionsPreview]);
+  }, [activeTab, cart, historySelectedInvoice, customerName, state.products, state.transactions, state.expenditures, state.business, entitlements, topSellingPreview, recentTransactionsPreview, inventorySalesSnapshot]);
 
   const refreshData = useCallback(async (overrideState?: InventoryState) => {
     if (!navigator.onLine) return;
