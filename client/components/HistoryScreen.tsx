@@ -55,6 +55,21 @@ const formatCustomerName = (value: string) => {
     .join(' ');
 };
 
+
+const toMoneyNumber = (value: unknown): number => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  if (typeof value === 'string') {
+    const normalized = value.replace(/[^0-9.-]/g, '');
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  if (value && typeof (value as any).toString === 'function') {
+    const parsed = Number((value as any).toString());
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+};
+
 const buildSettledTransaction = (transaction: Transaction): Transaction => ({
   ...transaction,
   balance: 0,
@@ -164,7 +179,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
     const map = new Map<string, { name: string, totalOwed: number, invoiceCount: number, lastTxDate: string, transactions: Transaction[], phone?: string }>();
     
     transactions.forEach(t => {
-      if (t.balance > 0) {
+      if (toMoneyNumber(t.balance) > 0.01) {
         const key = normalizeCustomerKey(t.customerName);
         if (!key) return;
 
@@ -177,7 +192,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
           phone: t.customerPhone
         };
 
-        existing.totalOwed += t.balance;
+        existing.totalOwed += toMoneyNumber(t.balance);
         existing.invoiceCount += 1;
         if (new Date(t.transactionDate) > new Date(existing.lastTxDate)) {
           existing.lastTxDate = t.transactionDate;
@@ -348,26 +363,32 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
         // 1. Sort debts: Oldest First (FIFO)
         // We only want unpaid invoices for this customer
         const unpaidInvoices = customerTransactions
-          .filter(t => t.paymentStatus !== 'paid' && t.balance > 0)
+          .filter(t => toMoneyNumber(t.balance) > 0.01)
           .sort((a, b) => new Date(a.transactionDate).getTime() - new Date(b.transactionDate).getTime());
 
-        let remainingMoney = amountPaid;
-        let updatedCount = 0;
+        let remainingMoney = toMoneyNumber(amountPaid);
+        let settledCount = 0;
+
+        if (!unpaidInvoices.length) {
+          setAutoSettleResult({ settledCount: 0, remainingChange: remainingMoney });
+          addToast('No unpaid invoices were found for this customer.', 'info');
+          return;
+        }
 
         for (const tx of unpaidInvoices) {
           if (remainingMoney <= 0) break;
 
           // How much can we pay on THIS invoice?
           // (Either the full debt OR whatever money we have left)
-          const currentDebt = tx.balance;
+          const currentDebt = toMoneyNumber(tx.balance);
           const paymentForThisInvoice = Math.min(currentDebt, remainingMoney);
 
           // Calculate new state
-          const newPaidAmount = (tx.amountPaid || 0) + paymentForThisInvoice;
-          const newBalance = (tx.totalAmount) - newPaidAmount;
+          const newPaidAmount = toMoneyNumber(tx.amountPaid) + paymentForThisInvoice;
+          const newBalance = toMoneyNumber(tx.totalAmount) - newPaidAmount;
 
           let newStatus: 'paid' | 'credit' = tx.paymentStatus || 'credit';
-          if (newBalance <= 1) { // Tolerance for tiny decimals
+          if (newBalance <= 0.01) { // Keep frontend tolerance in sync with backend
              newStatus = 'paid';
           } else {
              newStatus = 'credit';
@@ -395,10 +416,13 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
           await new Promise(resolve => setTimeout(resolve, 50));
 
           remainingMoney -= paymentForThisInvoice;
-          updatedCount++;
+          const finalStatus = (finalTx?.paymentStatus as string | undefined) || newStatus;
+          if (finalStatus === 'paid') {
+            settledCount++;
+          }
         }
 
-        setAutoSettleResult({ settledCount: updatedCount, remainingChange: remainingMoney });
+        setAutoSettleResult({ settledCount, remainingChange: remainingMoney });
       } catch (err) {
         console.error("Auto-settle error:", err);
         addToast("An error occurred during auto-settlement.", "error");
@@ -848,7 +872,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
                       disabled={isAutoSettling}
                       className="w-full text-lg p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none disabled:bg-gray-100"
                       placeholder="0.00"
-                      onChange={(e) => setAutoPayAmount(parseFloat(e.target.value))}
+                      onChange={(e) => setAutoPayAmount(Number(e.target.value) || 0)}
                     />
                     <p className="text-xs text-gray-400 mt-2">
                       System will clear oldest invoices first.
