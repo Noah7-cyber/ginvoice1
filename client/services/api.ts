@@ -364,7 +364,35 @@ export const sendChat = async (message: string, history: any[], uiContext?: any)
           ? {
               totalProducts: Number(uiContext.inventory.totalProducts || 0),
               lowStockCount: Number(uiContext.inventory.lowStockCount || 0),
-              totalValue: Number(uiContext.inventory.totalValue || 0)
+              outOfStockCount: Number(uiContext.inventory.outOfStockCount || 0),
+              deadStockCount: Number(uiContext.inventory.deadStockCount || 0),
+              totalValue: Number(uiContext.inventory.totalValue || 0),
+              lowStockPreview: Array.isArray(uiContext.inventory.lowStockPreview)
+                ? uiContext.inventory.lowStockPreview.slice(0, 8).map((item: any) => ({
+                    id: String(item?.id || '').slice(0, 40),
+                    name: String(item?.name || '').slice(0, 80),
+                    stock: Number(item?.stock || 0),
+                    category: String(item?.category || '').slice(0, 40)
+                  }))
+                : [],
+              topSellingPreview: Array.isArray(uiContext.inventory.topSellingPreview)
+                ? uiContext.inventory.topSellingPreview.slice(0, 8).map((item: any) => ({
+                    id: String(item?.id || '').slice(0, 40),
+                    name: String(item?.name || '').slice(0, 80),
+                    category: String(item?.category || '').slice(0, 40),
+                    sold: Number(item?.sold || 0)
+                  }))
+                : [],
+              deadStockWindowDays: Number(uiContext.inventory.deadStockWindowDays || 0),
+              deadStockPreview: Array.isArray(uiContext.inventory.deadStockPreview)
+                ? uiContext.inventory.deadStockPreview.slice(0, 8).map((item: any) => ({
+                    id: String(item?.id || '').slice(0, 40),
+                    name: String(item?.name || '').slice(0, 80),
+                    stock: Number(item?.stock || 0),
+                    category: String(item?.category || '').slice(0, 40),
+                    lastSoldAt: item?.lastSoldAt ? String(item.lastSoldAt).slice(0, 40) : null
+                  }))
+                : []
             }
           : undefined,
         expenditure: uiContext.expenditure
@@ -397,7 +425,17 @@ export const sendChat = async (message: string, history: any[], uiContext?: any)
               itemCount: Number(uiContext.selectedInvoice.itemCount || 0),
               transactionDate: String(uiContext.selectedInvoice.transactionDate || '').slice(0, 40)
             }
-          : undefined
+          : undefined,
+        recentTransactions: Array.isArray(uiContext.recentTransactions)
+          ? uiContext.recentTransactions.slice(0, 8).map((tx: any) => ({
+              id: String(tx?.id || '').slice(0, 50),
+              customerName: String(tx?.customerName || '').slice(0, 80),
+              totalAmount: Number(tx?.totalAmount || 0),
+              balance: Number(tx?.balance || 0),
+              paymentStatus: String(tx?.paymentStatus || '').slice(0, 20),
+              transactionDate: String(tx?.transactionDate || '').slice(0, 40)
+            }))
+          : []
       }
     : undefined;
 

@@ -224,6 +224,70 @@ const App: React.FC = () => {
     return Array.from(names).sort();
   }, [state.transactions]);
 
+  const DEAD_STOCK_WINDOW_DAYS = 45;
+
+  const inventorySalesSnapshot = useMemo(() => {
+    const totalSoldMap = new Map<string, number>();
+    const recentSoldMap = new Map<string, number>();
+    const lastSoldAtMap = new Map<string, string>();
+    const cutoff = Date.now() - (DEAD_STOCK_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+
+    state.transactions.forEach((tx) => {
+      const txTs = new Date(tx.transactionDate || tx.updatedAt || '').getTime();
+      const inDeadStockWindow = Number.isFinite(txTs) && txTs >= cutoff;
+
+      (tx.items || []).forEach((item) => {
+        const key = item.productId || item.productName;
+        if (!key) return;
+
+        const qty = Number(item.quantity || 0);
+        totalSoldMap.set(key, (totalSoldMap.get(key) || 0) + qty);
+
+        if (inDeadStockWindow) {
+          recentSoldMap.set(key, (recentSoldMap.get(key) || 0) + qty);
+        }
+
+        const soldAtIso = tx.transactionDate || tx.updatedAt;
+        if (soldAtIso) {
+          const prev = lastSoldAtMap.get(key);
+          if (!prev || new Date(soldAtIso).getTime() > new Date(prev).getTime()) {
+            lastSoldAtMap.set(key, soldAtIso);
+          }
+        }
+      });
+    });
+
+    return { totalSoldMap, recentSoldMap, lastSoldAtMap };
+  }, [state.transactions]);
+
+  const topSellingPreview = useMemo(() => {
+    return state.products
+      .map((product) => ({
+        id: product.id,
+        name: product.name,
+        category: product.category || 'Uncategorized',
+        sold: Number(inventorySalesSnapshot.totalSoldMap.get(product.id) || 0)
+      }))
+      .filter((item) => item.sold > 0)
+      .sort((a, b) => b.sold - a.sold)
+      .slice(0, 8);
+  }, [state.products, inventorySalesSnapshot]);
+
+  const recentTransactionsPreview = useMemo(() => {
+    return state.transactions
+      .slice()
+      .sort((a, b) => new Date(b.transactionDate || b.updatedAt || '').getTime() - new Date(a.transactionDate || a.updatedAt || '').getTime())
+      .slice(0, 8)
+      .map((tx) => ({
+        id: tx.id,
+        customerName: tx.customerName,
+        totalAmount: tx.totalAmount,
+        balance: tx.balance,
+        paymentStatus: tx.paymentStatus,
+        transactionDate: tx.transactionDate
+      }));
+  }, [state.transactions]);
+
   const botUiContext = useMemo(() => {
     if (activeTab === 'sales') {
       const cartSubtotal = cart.reduce((sum, item) => sum + (item.total || 0), 0);
@@ -249,12 +313,36 @@ const App: React.FC = () => {
       // Estimate value using Cost Price if available, else 0.
       const totalValue = state.products.reduce((sum, p) => sum + (p.currentStock * (p.costPrice || 0)), 0);
 
+      const outOfStockCount = state.products.filter(p => Number(p.currentStock || 0) <= 0).length;
+      const deadStockCount = state.products.filter((p) => {
+        const soldRecently = Number(inventorySalesSnapshot.recentSoldMap.get(p.id) || 0);
+        return Number(p.currentStock || 0) > 0 && soldRecently <= 0;
+      }).length;
+
       return {
         tab: 'inventory',
         inventory: {
             totalProducts: state.products.length,
             lowStockCount,
-            totalValue
+            outOfStockCount,
+            deadStockCount,
+            totalValue,
+            lowStockPreview: state.products
+              .filter(p => Number(p.currentStock || 0) < lowStockThreshold)
+              .slice(0, 8)
+              .map(p => ({ id: p.id, name: p.name, stock: Number(p.currentStock || 0), category: p.category || 'Uncategorized' })),
+            topSellingPreview,
+            deadStockWindowDays: DEAD_STOCK_WINDOW_DAYS,
+            deadStockPreview: state.products
+              .filter((p) => Number(p.currentStock || 0) > 0 && Number(inventorySalesSnapshot.recentSoldMap.get(p.id) || 0) <= 0)
+              .slice(0, 8)
+              .map((p) => ({
+                id: p.id,
+                name: p.name,
+                stock: Number(p.currentStock || 0),
+                category: p.category || 'Uncategorized',
+                lastSoldAt: inventorySalesSnapshot.lastSoldAtMap.get(p.id) || null
+              }))
         }
       };
     }
@@ -284,7 +372,7 @@ const App: React.FC = () => {
             dashboard: {
                 totalRevenue,
                 totalProfit: 0, // Placeholder as costly to calc here
-                topProduct: '' // Placeholder
+                topProduct: topSellingPreview[0]?.name || ''
             }
         };
     }
@@ -313,12 +401,13 @@ const App: React.FC = () => {
               paymentStatus: historySelectedInvoice.paymentStatus,
               itemCount: historySelectedInvoice.items?.length || 0
             }
-          : null
+          : null,
+        recentTransactions: recentTransactionsPreview
       };
     }
 
     return { tab: activeTab };
-  }, [activeTab, cart, historySelectedInvoice, customerName, state.products, state.transactions, state.expenditures, state.business, entitlements]);
+  }, [activeTab, cart, historySelectedInvoice, customerName, state.products, state.transactions, state.expenditures, state.business, entitlements, topSellingPreview, recentTransactionsPreview, inventorySalesSnapshot]);
 
   const refreshData = useCallback(async (overrideState?: InventoryState) => {
     if (!navigator.onLine) return;

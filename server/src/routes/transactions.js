@@ -14,8 +14,9 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
 
     // 1. Determine Staff ID (Trust frontend "Store Staff" if provided, otherwise fallback to user)
     // NOTE: This logic ensures Owner can't accidentally attribute to themselves if they selected "Staff" mode on frontend
-    const finalStaffId = staffId || req.user._id;
-    const createdByRole = staffId === 'Store Staff' ? 'staff' : req.userRole;
+    const createdByRole = req.userRole === 'staff' ? 'staff' : 'owner';
+    const createdByUserId = req.user?.id ? String(req.user.id) : '';
+    const finalStaffId = staffId || (createdByRole === 'staff' ? (createdByUserId || 'Store Staff') : 'owner');
 
     const newTransaction = new Transaction({
       businessId: req.businessId,
@@ -28,6 +29,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
       paymentMethod,
       staffId: finalStaffId,
       createdByRole,
+      createdByUserId,
       discountCode, // Save discount code if used
       // Auto-calculate balance
       balance: Math.max(0, totalAmount - amountPaid),

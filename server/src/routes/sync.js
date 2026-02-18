@@ -289,6 +289,9 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
               totalAmount: toDecimal(t.totalAmount),
               amountPaid: toDecimal(t.amountPaid),
               balance: toDecimal(t.balance),
+              staffId: t.staffId || (t.createdByRole === 'staff' ? 'Store Staff' : 'owner'),
+              createdByRole: t.createdByRole === 'staff' ? 'staff' : 'owner',
+              createdByUserId: t.createdByUserId ? String(t.createdByUserId) : '',
               createdAt: t.transactionDate ? new Date(t.transactionDate) : new Date(),
               updatedAt: new Date()
             }

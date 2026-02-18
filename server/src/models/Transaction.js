@@ -27,7 +27,9 @@ const TransactionSchema = new mongoose.Schema({
   paymentStatus: { type: String, enum: ['paid', 'credit'], default: 'paid' },
   signature: { type: String },
   isSignatureLocked: { type: Boolean, default: false },
-  staffId: { type: String }
+  staffId: { type: String },
+  createdByRole: { type: String, enum: ['owner', 'staff'], default: 'owner' },
+  createdByUserId: { type: String, default: '' }
 }, { timestamps: true });
 
 TransactionSchema.index({ businessId: 1, id: 1 }, { unique: true });
