@@ -351,23 +351,23 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
           .filter(t => t.paymentStatus !== 'paid' && t.balance > 0)
           .sort((a, b) => new Date(a.transactionDate).getTime() - new Date(b.transactionDate).getTime());
 
-        let remainingMoney = amountPaid;
-        let updatedCount = 0;
+        let remainingMoney = Number(amountPaid) || 0;
+        let settledCount = 0;
 
         for (const tx of unpaidInvoices) {
           if (remainingMoney <= 0) break;
 
           // How much can we pay on THIS invoice?
           // (Either the full debt OR whatever money we have left)
-          const currentDebt = tx.balance;
+          const currentDebt = Number(tx.balance || 0);
           const paymentForThisInvoice = Math.min(currentDebt, remainingMoney);
 
           // Calculate new state
-          const newPaidAmount = (tx.amountPaid || 0) + paymentForThisInvoice;
-          const newBalance = (tx.totalAmount) - newPaidAmount;
+          const newPaidAmount = Number(tx.amountPaid || 0) + paymentForThisInvoice;
+          const newBalance = Number(tx.totalAmount || 0) - newPaidAmount;
 
           let newStatus: 'paid' | 'credit' = tx.paymentStatus || 'credit';
-          if (newBalance <= 1) { // Tolerance for tiny decimals
+          if (newBalance <= 0.01) { // Keep frontend tolerance in sync with backend
              newStatus = 'paid';
           } else {
              newStatus = 'credit';
@@ -395,10 +395,12 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
           await new Promise(resolve => setTimeout(resolve, 50));
 
           remainingMoney -= paymentForThisInvoice;
-          updatedCount++;
+          if (newStatus === 'paid') {
+            settledCount++;
+          }
         }
 
-        setAutoSettleResult({ settledCount: updatedCount, remainingChange: remainingMoney });
+        setAutoSettleResult({ settledCount, remainingChange: remainingMoney });
       } catch (err) {
         console.error("Auto-settle error:", err);
         addToast("An error occurred during auto-settlement.", "error");
@@ -848,7 +850,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
                       disabled={isAutoSettling}
                       className="w-full text-lg p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none disabled:bg-gray-100"
                       placeholder="0.00"
-                      onChange={(e) => setAutoPayAmount(parseFloat(e.target.value))}
+                      onChange={(e) => setAutoPayAmount(Number(e.target.value) || 0)}
                     />
                     <p className="text-xs text-gray-400 mt-2">
                       System will clear oldest invoices first.

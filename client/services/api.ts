@@ -615,6 +615,15 @@ const api = {
     });
   },
 
+  patch: async (url: string, body: any) => {
+    const token = loadAuthToken();
+    return request(`/api${url}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body)
+    });
+  },
+
   delete: async (url: string) => {
     const token = loadAuthToken();
     return request(`/api${url}`, {
