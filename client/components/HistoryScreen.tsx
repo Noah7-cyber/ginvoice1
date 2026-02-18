@@ -384,10 +384,12 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
           // 2. Fire Update
           // Note: The parent component's onUpdateTransaction handles syncing (via pushToBackend)
           // We await a small delay to prevent overwhelming the network with rapid requests
-          // Persist to server
+          // Persist to server (Use dedicated settle endpoint for safety)
           // @ts-ignore
-          await api.put(`/transactions/${tx.id}`, updatedTx);
-          await onUpdateTransaction(updatedTx);
+          const res = await api.patch(`/transactions/${tx.id}/settle`, { amountPaid: newPaidAmount });
+          const finalTx = res || updatedTx; // Fallback if API doesn't return object
+
+          await onUpdateTransaction(finalTx);
 
           // Simulate async operation for smoother UI feedback
           await new Promise(resolve => setTimeout(resolve, 50));
