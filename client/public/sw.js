@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ginvoice-v39-fix';
+const CACHE_NAME = 'ginvoice-v40-tiktok';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',

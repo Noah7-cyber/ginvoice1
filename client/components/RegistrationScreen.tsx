@@ -5,6 +5,8 @@ import 'react-phone-input-2/lib/style.css';
 import { useToast } from './ToastProvider';
 import { uploadFile, loadAuthToken } from '../services/api';
 
+declare global { interface Window { ttq: any; } }
+
 interface RegistrationScreenProps {
   onRegister: (details: { name: string, address: string, phone: string, email: string, logo?: string, ownerPassword?: string, staffPassword?: string }) => Promise<void>;
   onManualLogin: (details: { email: string, pin: string }) => Promise<void>;
@@ -110,6 +112,13 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onM
 
         if (formData.name && formData.phone && formData.ownerPassword && formData.staffPassword) {
           await onRegister(formData);
+          // TikTok Pixel: Track successful registration
+          if (window.ttq) {
+            window.ttq.track('CompleteRegistration', {
+              content_name: 'New Shop Signup',
+              status: 'success',
+            });
+          }
         } else {
           addToast('Please fill in all required fields', 'error');
         }
