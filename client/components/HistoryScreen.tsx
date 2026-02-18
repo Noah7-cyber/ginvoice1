@@ -384,6 +384,9 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
           // 2. Fire Update
           // Note: The parent component's onUpdateTransaction handles syncing (via pushToBackend)
           // We await a small delay to prevent overwhelming the network with rapid requests
+          // Persist to server
+          // @ts-ignore
+          await api.put(`/transactions/${tx.id}`, updatedTx);
           await onUpdateTransaction(updatedTx);
 
           // Simulate async operation for smoother UI feedback
@@ -976,7 +979,7 @@ const EditTransactionModal: React.FC<EditModalProps> = ({ transaction, products,
                      <label className="text-xs font-bold text-gray-500 uppercase">Amount Paid</label>
                      <input
                         type="number"
-                        value={amountPaid}
+                        value={amountPaid || ''}
                         onChange={(e) => setAmountPaid(Number(e.target.value))}
                         className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl font-bold focus:ring-2 focus:ring-primary outline-none"
                      />
