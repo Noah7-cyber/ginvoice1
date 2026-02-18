@@ -298,7 +298,25 @@ const tryHandleCheapIntent = async (message, businessId, userRole) => {
     return { text: lines.join('\n'), action: null };
   }
 
-  // 5. Navigation Help
+  // 5. Inventory Entry & Categorization Help
+  if (/(how|help).*(add|input|enter|put).*(stock|inventory|product)|categori[sz]e|category.*(stock|product)|new\s*stock/.test(text)) {
+    return {
+      text: `INVENTORY SETUP QUICK GUIDE
+- Go to Inventory tab and tap Add Product.
+- PRODUCT NAME: use clear everyday name (e.g., 'Golden Penny Spaghetti 500g').
+- CATEGORY: group by what the item is used for (e.g., Food, Drinks, Toiletries, Electrical, Fashion).
+- COST PRICE: what you paid per base unit.
+- SELLING PRICE: your normal sell price per base unit.
+- BASE UNIT: Piece, Pack, Carton, Bottle, etc.
+- OPTIONAL UNITS: add sub/alt units with multipliers (e.g., Carton = 24 Pieces).
+- OPENING STOCK: enter the physical count you currently have.
+
+If you tell me the item names and quantities, I can suggest categories and unit structure before you save.`,
+      action: { type: 'NAVIGATE', payload: 'inventory' }
+    };
+  }
+
+  // 6. Navigation Help
   if (/(record|add|create|enter).*(sale|invoice|bill)/.test(text)) {
     return { text: "To record a sale: Open Sales tab, add items, and tap ‘Confirm Bill’.", action: { type: 'NAVIGATE', payload: 'sales' } };
   }
@@ -397,6 +415,11 @@ TASK VS CHAT RULES:
 - If user asks to do something in app (open/go/navigate/show screen/filter), return actionable guidance and navigation when possible.
 - If user asks analysis/question, answer directly with data and do NOT force navigation.
 - If returning partial results due to list size limits, explicitly say you are showing a preview and offer to open the full filtered list.
+
+INVENTORY COACHING RULES:
+- If user asks how to add new stock, explain exact Inventory tab flow step-by-step using real field names: Add Product, Name, Category, Cost Price, Selling Price, Base Unit, Opening Stock.
+- If user asks category advice, suggest 3-6 practical category options and choose one recommended default.
+- If user asks unit setup, explain base unit + multiplier examples (e.g., Carton=24 Pieces) and warn to keep cost/sell prices aligned to the selected unit.
 
 CRITICAL: You CAN 'see' the user's screen through the CURRENT UI CONTEXT provided below. NEVER say 'I cannot see your screen', 'I don't have eyes', or 'Based on the app structure'. Speak confidently as if you are standing next to the user looking at the exact same screen.
 
