@@ -9,6 +9,7 @@ const Transaction = require('../models/Transaction');
 const Expenditure = require('../models/Expenditure');
 const { sendSystemEmail } = require('../services/mail');
 const { buildWelcomeEmail, buildRecoveryEmail, buildVerificationEmail } = require('../services/emailTemplates');
+const { sendTikTokEvent } = require('../services/tiktok');
 
 const router = express.Router();
 
@@ -81,6 +82,14 @@ router.post('/register', async (req, res) => {
       emailVerificationToken,
       emailVerificationCode,
       emailVerificationExpires
+    });
+
+    // Send TikTok CompleteRegistration Event (Fire & Forget)
+    sendTikTokEvent({
+      email,
+      phone,
+      ip: req.ip,
+      userAgent: req.get('User-Agent')
     });
 
     const token = buildToken(business._id.toString(), 'owner', 1);
