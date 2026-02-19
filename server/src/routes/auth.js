@@ -9,6 +9,7 @@ const Transaction = require('../models/Transaction');
 const Expenditure = require('../models/Expenditure');
 const { sendSystemEmail } = require('../services/mail');
 const { buildWelcomeEmail, buildRecoveryEmail, buildVerificationEmail } = require('../services/emailTemplates');
+const { sendTikTokEvent } = require('../services/tiktok');
 
 const router = express.Router();
 
@@ -125,6 +126,15 @@ router.post('/register', async (req, res) => {
         });
       }
     }
+
+    // Send TikTok CompleteRegistration Event (Fire & Forget)
+    // Only send after the email verification logic succeeds (or isn't needed) to avoid overcounting on rollback.
+    sendTikTokEvent({
+      email,
+      phone,
+      ip: req.ip,
+      userAgent: req.get('User-Agent')
+    });
 
     return res.json({
       token,
