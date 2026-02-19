@@ -84,14 +84,6 @@ router.post('/register', async (req, res) => {
       emailVerificationExpires
     });
 
-    // Send TikTok CompleteRegistration Event (Fire & Forget)
-    sendTikTokEvent({
-      email,
-      phone,
-      ip: req.ip,
-      userAgent: req.get('User-Agent')
-    });
-
     const token = buildToken(business._id.toString(), 'owner', 1);
 
     if (email && rawToken && emailVerificationCode) {
@@ -134,6 +126,15 @@ router.post('/register', async (req, res) => {
         });
       }
     }
+
+    // Send TikTok CompleteRegistration Event (Fire & Forget)
+    // Only send after the email verification logic succeeds (or isn't needed) to avoid overcounting on rollback.
+    sendTikTokEvent({
+      email,
+      phone,
+      ip: req.ip,
+      userAgent: req.get('User-Agent')
+    });
 
     return res.json({
       token,
