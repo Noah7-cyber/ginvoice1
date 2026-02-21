@@ -35,6 +35,7 @@ interface HistoryScreenProps {
   business: BusinessProfile;
   onDeleteTransaction: (id: string, restockItems: boolean) => void;
   onUpdateTransaction: (transaction: Transaction, options?: { skipSync?: boolean }) => void;
+  onCreatePreviousDebt?: (transaction: Transaction) => void;
   isSubscriptionExpired?: boolean;
   onRenewSubscription?: () => void;
   isReadOnly?: boolean;
@@ -80,7 +81,7 @@ const buildSettledTransaction = (transaction: Transaction): Transaction => ({
 const debtorKeyForTransactions = (transactions: Transaction[]) =>
   transactions.map(tx => tx.id).sort().join('|');
 
-const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, business, onDeleteTransaction, onUpdateTransaction, isSubscriptionExpired, onRenewSubscription, isReadOnly, isOnline, initialParams, onSelectedInvoiceChange }) => {
+const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, business, onDeleteTransaction, onUpdateTransaction, onCreatePreviousDebt, isSubscriptionExpired, onRenewSubscription, isReadOnly, isOnline, initialParams, onSelectedInvoiceChange }) => {
   const { addToast } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>('invoices');
   const [searchTerm, setSearchTerm] = useState('');
@@ -354,6 +355,61 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
       }
   };
 
+
+  const handleAddPreviousDebtor = () => {
+    if (isReadOnly) {
+      addToast('Read-only mode active. You cannot add previous debt now.', 'error');
+      return;
+    }
+
+    const customerRaw = window.prompt('Customer name for previous debt:');
+    if (customerRaw === null) return;
+    const customerName = formatCustomerName(customerRaw);
+
+    const amountRaw = window.prompt('Opening debt amount:');
+    if (amountRaw === null) return;
+    const amount = Number(String(amountRaw).replace(/[^0-9.-]/g, ''));
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      addToast('Please enter a valid amount greater than zero.', 'error');
+      return;
+    }
+
+    const phoneRaw = window.prompt('Customer phone (optional):') || '';
+    const now = new Date().toISOString();
+
+    const tx: Transaction = {
+      id: crypto.randomUUID(),
+      transactionDate: now,
+      customerName,
+      customerPhone: phoneRaw.trim() || undefined,
+      items: [{
+        cartId: crypto.randomUUID(),
+        productId: '',
+        productName: 'Previous Debt Balance',
+        quantity: 1,
+        unitPrice: amount,
+        discount: 0,
+        total: amount
+      }],
+      subtotal: amount,
+      globalDiscount: 0,
+      totalAmount: amount,
+      paymentMethod: 'credit',
+      amountPaid: 0,
+      balance: amount,
+      paymentStatus: 'credit',
+      staffId: 'owner',
+      createdByRole: 'owner',
+      isPreviousDebt: true,
+      updatedAt: now
+    };
+
+    onCreatePreviousDebt?.(tx);
+    addToast('Previous debtor added successfully.', 'success');
+    setViewMode('debtors');
+  };
+
   const handleAutoSettle = async (customerName: string, amountPaid: number, customerTransactions: Transaction[]) => {
       if (!amountPaid || amountPaid <= 0) return;
 
@@ -459,15 +515,26 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
           </div>
         </div>
 
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-          <input 
-            type="text"
-            placeholder={viewMode === 'invoices' ? "Search invoice or customer..." : "Search debtor name..."}
-            className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-2xl focus:ring-2 focus:ring-primary outline-none shadow-sm"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+        <div className="flex-1 max-w-md flex flex-col gap-2">
+          {viewMode === 'debtors' && (
+            <button
+              onClick={handleAddPreviousDebtor}
+              disabled={!!isReadOnly}
+              className="self-end inline-flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              <Plus size={14} /> Add Previous Debtor
+            </button>
+          )}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            <input 
+              type="text"
+              placeholder={viewMode === 'invoices' ? "Search invoice or customer..." : "Search debtor name..."}
+              className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-2xl focus:ring-2 focus:ring-primary outline-none shadow-sm"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
         </div>
       </div>
 

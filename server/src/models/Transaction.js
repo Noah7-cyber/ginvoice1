@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const TransactionItemSchema = new mongoose.Schema({
-  productId: { type: String, required: true },
+  productId: { type: String, required: false },
   productName: { type: String, required: true },
   quantity: { type: Number, required: true },
   unit: { type: String }, // Name of the unit (e.g., "Box")
@@ -17,6 +17,7 @@ const TransactionSchema = new mongoose.Schema({
   transactionDate: { type: Date },
   customerName: { type: String },
   customerPhone: { type: String },
+  isPreviousDebt: { type: Boolean, default: false },
   items: { type: [TransactionItemSchema], default: [] },
   subtotal: { type: Number, default: 0 },
   globalDiscount: { type: Number, default: 0 },
@@ -29,7 +30,8 @@ const TransactionSchema = new mongoose.Schema({
   isSignatureLocked: { type: Boolean, default: false },
   staffId: { type: String },
   createdByRole: { type: String, enum: ['owner', 'staff'], default: 'owner' },
-  createdByUserId: { type: String, default: '' }
+  createdByUserId: { type: String, default: '' },
+  clientUpdatedAt: { type: Date }
 }, { timestamps: true });
 
 TransactionSchema.index({ businessId: 1, id: 1 }, { unique: true });
