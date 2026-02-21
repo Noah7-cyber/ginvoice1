@@ -82,6 +82,7 @@ const App: React.FC = () => {
   const [isMobileView, setIsMobileView] = useState(window.innerWidth < 768);
   const [isLoading, setIsLoading] = useState(false);
   const wasOnlineRef = useRef(navigator.onLine);
+  const syncInFlightRef = useRef(false);
   
   const [subscriptionLocked, setSubscriptionLocked] = useState(false);
 
@@ -454,6 +455,34 @@ const App: React.FC = () => {
     }
   }, [addToast]);
 
+  const safeSyncWithServer = useCallback(async (source: 'online-event' | 'initial-load' | 'heartbeat' | 'manual') => {
+    if (!navigator.onLine) return;
+
+    const currentState = stateRef.current;
+    if (!currentState.isLoggedIn) return;
+
+    if (syncInFlightRef.current) return;
+    syncInFlightRef.current = true;
+
+    try {
+      try {
+        await pushToBackend({
+          transactions: currentState.transactions,
+          products: currentState.products,
+          expenditures: currentState.expenditures
+        });
+      } catch (err) {
+        console.error(`[Safe Sync] Pre-sync push failed (${source})`, err);
+        addToast('Backup pending: local data kept safely. We will retry sync shortly.', 'warning');
+        return;
+      }
+
+      await refreshData(currentState);
+    } finally {
+      syncInFlightRef.current = false;
+    }
+  }, [addToast, refreshData]);
+
   const handleLogout = useCallback(() => {
     clearAuthToken();
     setState(prev => ({ ...prev, isLoggedIn: false }));
@@ -504,16 +533,7 @@ const App: React.FC = () => {
     const handleOnline = async () => {
       setIsOnline(true);
       if (!wasOnlineRef.current && state.isLoggedIn) {
-        // Critical Sync Fix: Push local state first to prevent overwrite
-        try {
-            await pushToBackend({
-                transactions: state.transactions,
-                products: state.products
-            });
-        } catch (err) {
-            console.error('Pre-sync push failed', err);
-        }
-        await refreshData();
+        await safeSyncWithServer('online-event');
       }
       await fetchEntitlements();
     };
@@ -525,7 +545,7 @@ const App: React.FC = () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [state.isLoggedIn, state.transactions, state.products, fetchEntitlements, refreshData]);
+  }, [state.isLoggedIn, fetchEntitlements, safeSyncWithServer]);
 
   useEffect(() => {
     wasOnlineRef.current = isOnline;
@@ -539,11 +559,11 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (state.isLoggedIn && navigator.onLine) {
-       // Initial load data refresh
-       refreshData();
+       // Initial load safe sync (push local first, then pull)
+       safeSyncWithServer('initial-load');
        fetchEntitlements();
     }
-  }, [state.isLoggedIn, refreshData, fetchEntitlements]);
+  }, [state.isLoggedIn, safeSyncWithServer, fetchEntitlements]);
 
   // SMART SYNC HEARTBEAT (Every 10s)
   useEffect(() => {
@@ -556,7 +576,7 @@ const App: React.FC = () => {
 
              if (serverVersion > localVersion) {
                  console.log(`[Smart Sync] Update found! Server: ${serverVersion} > Local: ${localVersion}`);
-                 await refreshData();
+                 await safeSyncWithServer('heartbeat');
                  // Update local version match to prevent loops (refreshData should ideally return the new version,
                  // but simpler to just trust it for now or rely on next refreshData saving it)
                  // NOTE: refreshData logic below needs to handle version saving if we want this perfect.
@@ -569,7 +589,7 @@ const App: React.FC = () => {
       }, 10000);
 
       return () => clearInterval(interval);
-  }, [isOnline, state.isLoggedIn, refreshData]);
+  }, [isOnline, state.isLoggedIn, safeSyncWithServer]);
 
   const openPaymentLink = useCallback(async () => {
     if (!navigator.onLine) {
@@ -1114,7 +1134,17 @@ const App: React.FC = () => {
                     transactions: prev.transactions.map(tx => tx.id === t.id ? { ...t, updatedAt: new Date().toISOString() } : tx)
                   }));
                   if (navigator.onLine && !options?.skipSync) {
-                    pushToBackend({ transactions: [t] }).catch(err => console.error("Failed to sync edit", err));
+                    pushToBackend({ transactions: [{ ...t, updatedAt: new Date().toISOString() }] }).catch(err => console.error("Failed to sync edit", err));
+                  }
+                }}
+                onCreatePreviousDebt={(t) => {
+                  const created = { ...t, updatedAt: new Date().toISOString(), isPreviousDebt: true };
+                  setState(prev => ({
+                    ...prev,
+                    transactions: [created, ...prev.transactions]
+                  }));
+                  if (navigator.onLine) {
+                    pushToBackend({ transactions: [created] }).catch(err => console.error('Failed to sync opening debt', err));
                   }
                 }}
                 isSubscriptionExpired={subscriptionLocked}
@@ -1168,7 +1198,7 @@ const App: React.FC = () => {
                <SettingsScreen
                 business={state.business}
                 onUpdateBusiness={b => setState(prev => ({ ...prev, business: b }))}
-                onManualSync={() => refreshData()}
+                onManualSync={() => safeSyncWithServer('manual')}
                 lastSyncedAt={state.lastSyncedAt}
                 onLogout={handleLogout}
                 onDeleteAccount={handleDeleteAccount}

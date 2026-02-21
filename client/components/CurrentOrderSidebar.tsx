@@ -108,7 +108,7 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
     }
 
     const transaction: Transaction = {
-      id: `TX-${Date.now()}`,
+      id: crypto.randomUUID(),
       transactionDate: new Date().toISOString(),
       customerName: normalizeCustomerName(customerName),
       customerPhone: customerPhone || undefined,
