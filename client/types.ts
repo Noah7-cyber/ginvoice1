@@ -131,6 +131,8 @@ export interface Transaction {
   updatedAt?: string;
   createdByRole?: 'owner' | 'staff'; // New field
   discountCode?: string;
+  isPreviousDebt?: boolean;
+  clientUpdatedAt?: string;
 }
 
 /* New: Expenditure item stored locally */

@@ -41,13 +41,21 @@ const normalizeCustomerName = (value) => {
 
 // --- ROUTES ---
 
+
+const normalizeVersion = (value) => {
+  const n = Number(value || 0);
+  if (!Number.isFinite(n)) return 0;
+  return Number(n.toFixed(3));
+};
+
+
 // 0. Version Check
 router.get('/version', auth, async (req, res) => {
   try {
     const business = await Business.findById(req.businessId).select('dataVersion');
     // Return version as a float, defaulting to 0.000
     // Ensure it's a number for the JSON response
-    const version = business?.dataVersion ? parseFloat(business.dataVersion.toString()) : 0.000;
+    const version = normalizeVersion(business?.dataVersion);
     res.json({ version });
   } catch (err) {
     console.error('Version check failed:', err);
@@ -127,6 +135,7 @@ router.get('/', auth, async (req, res) => {
     const transactions = rawTransactions.map(t => ({
       ...t,
       id: (t.id && t.id !== 'undefined' && t.id !== 'null') ? t.id : t._id.toString(),
+      isPreviousDebt: Boolean(t.isPreviousDebt),
       items: (t.items || []).map(i => ({
         ...i,
         unitPrice: parseDecimal(i.unitPrice),
@@ -265,44 +274,95 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
     }
 
     if (transactions.length > 0) {
-      const txOps = transactions.map((t) => ({
-        updateOne: {
-          filter: { businessId, id: t.id },
-          update: {
-            $set: {
-              businessId,
-              id: t.id,
-              transactionDate: t.transactionDate ? new Date(t.transactionDate) : null,
-              customerName: normalizeCustomerName(t.customerName),
-              items: (t.items || []).map((item) => ({
-                productId: item.productId,
-                productName: item.productName,
-                quantity: item.quantity,
-                unit: item.selectedUnit ? item.selectedUnit.name : undefined,
-                multiplier: item.selectedUnit ? item.selectedUnit.multiplier : (item.multiplier || 1),
-                unitPrice: toDecimal(item.unitPrice),
-                discount: toDecimal(item.discount),
-                total: toDecimal(item.total)
-              })),
-              subtotal: toDecimal(t.subtotal),
-              globalDiscount: toDecimal(t.globalDiscount),
-              totalAmount: toDecimal(t.totalAmount),
-              amountPaid: toDecimal(t.amountPaid),
-              balance: toDecimal(t.balance),
-              staffId: t.staffId || (t.createdByRole === 'staff' ? 'Store Staff' : 'owner'),
-              createdByRole: t.createdByRole === 'staff' ? 'staff' : 'owner',
-              createdByUserId: t.createdByUserId ? String(t.createdByUserId) : '',
-              createdAt: t.transactionDate ? new Date(t.transactionDate) : new Date(),
-              updatedAt: new Date()
-            }
-          },
-          upsert: true
+      const incomingIds = transactions
+        .map((t) => String(t?.id || '').trim())
+        .filter(Boolean);
+
+      const existingTxs = incomingIds.length > 0
+        ? await Transaction.find({ businessId, id: { $in: incomingIds } }).lean()
+        : [];
+
+      const existingMap = new Map(existingTxs.map(t => [t.id, t]));
+
+      const txOps = transactions.map((t) => {
+        const txId = String(t?.id || '').trim();
+        if (!txId) return null;
+
+        const existing = existingMap.get(txId);
+        const incomingUpdatedAt = t.updatedAt ? new Date(t.updatedAt) : new Date();
+        if (Number.isNaN(incomingUpdatedAt.getTime())) {
+          return null;
         }
-      }));
-      await Transaction.bulkWrite(txOps);
+
+        if (existing) {
+          const existingUpdatedAt = existing.clientUpdatedAt
+            ? new Date(existing.clientUpdatedAt)
+            : new Date(existing.updatedAt || existing.createdAt || 0);
+
+          if (!Number.isNaN(existingUpdatedAt.getTime()) && incomingUpdatedAt <= existingUpdatedAt) {
+            return null;
+          }
+        }
+
+        const updateData = {
+          businessId,
+          id: txId,
+          transactionDate: t.transactionDate ? new Date(t.transactionDate) : null,
+          customerName: normalizeCustomerName(t.customerName),
+          customerPhone: t.customerPhone || '',
+          isPreviousDebt: Boolean(t.isPreviousDebt),
+          items: (t.items || []).map((item) => ({
+            productId: item.productId,
+            productName: item.productName,
+            quantity: item.quantity,
+            unit: item.selectedUnit ? item.selectedUnit.name : item.unit,
+            multiplier: item.selectedUnit ? item.selectedUnit.multiplier : (item.multiplier || 1),
+            unitPrice: toDecimal(item.unitPrice),
+            discount: toDecimal(item.discount),
+            total: toDecimal(item.total)
+          })),
+          subtotal: toDecimal(t.subtotal),
+          globalDiscount: toDecimal(t.globalDiscount),
+          totalAmount: toDecimal(t.totalAmount),
+          paymentMethod: t.paymentMethod || 'cash',
+          amountPaid: toDecimal(t.amountPaid),
+          balance: toDecimal(t.balance),
+          paymentStatus: t.paymentStatus === 'credit' ? 'credit' : 'paid',
+          signature: t.signature,
+          isSignatureLocked: Boolean(t.isSignatureLocked),
+          staffId: t.staffId || (t.createdByRole === 'staff' ? 'Store Staff' : 'owner'),
+          createdByRole: t.createdByRole === 'staff' ? 'staff' : 'owner',
+          createdByUserId: t.createdByUserId ? String(t.createdByUserId) : '',
+          clientUpdatedAt: incomingUpdatedAt,
+          updatedAt: new Date()
+        };
+
+        if (existing) {
+          return {
+            updateOne: {
+              filter: { businessId, id: txId },
+              update: { $set: updateData }
+            }
+          };
+        }
+
+        return {
+          insertOne: {
+            document: {
+              ...updateData,
+              createdAt: t.transactionDate ? new Date(t.transactionDate) : new Date()
+            }
+          }
+        };
+      }).filter(Boolean);
+
+      if (txOps.length > 0) {
+        await Transaction.bulkWrite(txOps);
+      }
     }
 
     if (expenditures.length > 0) {
+
       const expOps = expenditures.map((e) => {
         const val = parseDecimal(e.amount);
         return {

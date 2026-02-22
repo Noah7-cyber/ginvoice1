@@ -39,11 +39,13 @@ export const saveLastSync = (time: Date | null) => {
 
 export const getDataVersion = (): number => {
   const v = localStorage.getItem('ginvoice_data_version');
-  return v ? parseInt(v) : 0;
+  const parsed = v ? parseFloat(v) : 0;
+  return Number.isFinite(parsed) ? Number(parsed.toFixed(3)) : 0;
 };
 
 export const saveDataVersion = (version: number) => {
-  localStorage.setItem('ginvoice_data_version', version.toString());
+  const safe = Number.isFinite(version) ? Number(version.toFixed(3)) : 0;
+  localStorage.setItem('ginvoice_data_version', safe.toString());
 };
 
 export const getLastSync = (): Date | null => {
