@@ -151,6 +151,15 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
   const [isAutoSettling, setIsAutoSettling] = useState(false);
   const [autoSettleResult, setAutoSettleResult] = useState<{ settledCount: number, remainingChange: number } | null>(null);
 
+  const [isPreviousDebtModalOpen, setIsPreviousDebtModalOpen] = useState(false);
+  const [previousDebtForm, setPreviousDebtForm] = useState({
+    customerName: '',
+    customerPhone: '',
+    amount: '',
+    date: new Date().toISOString().split('T')[0],
+    note: 'Previous Debt Balance'
+  });
+
   const filteredInvoices = useMemo(() => transactions.filter(t => {
     const matchesSearch = t.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           t.id.toLowerCase().includes(searchTerm.toLowerCase());
@@ -356,37 +365,55 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
   };
 
 
-  const handleAddPreviousDebtor = () => {
+  const resetPreviousDebtForm = () => {
+    setPreviousDebtForm({
+      customerName: '',
+      customerPhone: '',
+      amount: '',
+      date: new Date().toISOString().split('T')[0],
+      note: 'Previous Debt Balance'
+    });
+  };
+
+  const openPreviousDebtModal = () => {
     if (isReadOnly) {
       addToast('Read-only mode active. You cannot add previous debt now.', 'error');
       return;
     }
+    resetPreviousDebtForm();
+    setIsPreviousDebtModalOpen(true);
+  };
 
-    const customerRaw = window.prompt('Customer name for previous debt:');
-    if (customerRaw === null) return;
-    const customerName = formatCustomerName(customerRaw);
+  const handleCreatePreviousDebtor = () => {
+    const customerName = formatCustomerName(previousDebtForm.customerName);
+    const amount = Number(String(previousDebtForm.amount).replace(/[^0-9.-]/g, ''));
 
-    const amountRaw = window.prompt('Opening debt amount:');
-    if (amountRaw === null) return;
-    const amount = Number(String(amountRaw).replace(/[^0-9.-]/g, ''));
+    if (!customerName || customerName === 'Walk-in Customer') {
+      addToast('Please enter customer name.', 'error');
+      return;
+    }
 
     if (!Number.isFinite(amount) || amount <= 0) {
       addToast('Please enter a valid amount greater than zero.', 'error');
       return;
     }
 
-    const phoneRaw = window.prompt('Customer phone (optional):') || '';
+    const txDate = previousDebtForm.date
+      ? new Date(`${previousDebtForm.date}T00:00:00`).toISOString()
+      : new Date().toISOString();
+
     const now = new Date().toISOString();
+    const note = (previousDebtForm.note || 'Previous Debt Balance').trim();
 
     const tx: Transaction = {
       id: crypto.randomUUID(),
-      transactionDate: now,
+      transactionDate: txDate,
       customerName,
-      customerPhone: phoneRaw.trim() || undefined,
+      customerPhone: previousDebtForm.customerPhone.trim() || undefined,
       items: [{
         cartId: crypto.randomUUID(),
         productId: '',
-        productName: 'Previous Debt Balance',
+        productName: note || 'Previous Debt Balance',
         quantity: 1,
         unitPrice: amount,
         discount: 0,
@@ -407,6 +434,8 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
 
     onCreatePreviousDebt?.(tx);
     addToast('Previous debtor added successfully.', 'success');
+    setIsPreviousDebtModalOpen(false);
+    resetPreviousDebtForm();
     setViewMode('debtors');
   };
 
@@ -518,7 +547,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
         <div className="flex-1 max-w-md flex flex-col gap-2">
           {viewMode === 'debtors' && (
             <button
-              onClick={handleAddPreviousDebtor}
+              onClick={openPreviousDebtModal}
               disabled={!!isReadOnly}
               className="self-end inline-flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
             >
@@ -822,6 +851,93 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
           products={products}
           onClose={() => { setSelectedInvoice(null); updateUrlForInvoice(null); }}
         />
+      )}
+
+
+      {/* Previous Debtor Modal */}
+      {isPreviousDebtModalOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-900">Add Previous Debtor</h3>
+              <button onClick={() => setIsPreviousDebtModalOpen(false)} className="text-gray-400 hover:text-gray-600"><X size={20}/></button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">Customer Name</label>
+                <input
+                  type="text"
+                  value={previousDebtForm.customerName}
+                  onChange={(e) => setPreviousDebtForm(prev => ({ ...prev, customerName: e.target.value }))}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                  placeholder="e.g. John Doe"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1">Phone (Optional)</label>
+                  <input
+                    type="text"
+                    value={previousDebtForm.customerPhone}
+                    onChange={(e) => setPreviousDebtForm(prev => ({ ...prev, customerPhone: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                    placeholder="080..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1">Debt Date</label>
+                  <input
+                    type="date"
+                    value={previousDebtForm.date}
+                    onChange={(e) => setPreviousDebtForm(prev => ({ ...prev, date: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">Amount</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={previousDebtForm.amount}
+                  onChange={(e) => setPreviousDebtForm(prev => ({ ...prev, amount: e.target.value }))}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                  placeholder="0.00"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">Description</label>
+                <input
+                  type="text"
+                  value={previousDebtForm.note}
+                  onChange={(e) => setPreviousDebtForm(prev => ({ ...prev, note: e.target.value }))}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                  placeholder="Previous Debt Balance"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setIsPreviousDebtModalOpen(false)}
+                className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreatePreviousDebtor}
+                className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700"
+              >
+                Save Debtor
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Delete Confirmation Modal */}

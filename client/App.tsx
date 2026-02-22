@@ -43,7 +43,7 @@ import NotificationCenter from './components/NotificationCenter';
 import WelcomeScreen from './components/WelcomeScreen';
 import AdminDashboard from './components/AdminDashboard';
 import AdminLogin from './components/AdminLogin';
-import { loadAdminToken } from './services/api';
+import { loadAdminToken, clearAdminToken } from './services/api';
 
 // Helper to check for active alerts (duplicated from NotificationCenter to avoid circular deps or complex state lifting)
 const hasActiveAlerts = (products: Product[], business: BusinessProfile, lowStockThreshold: number) => {
@@ -169,12 +169,23 @@ const App: React.FC = () => {
   // Global Auth/Permission Handler
   useEffect(() => {
     const handleForceReload = (e: Event) => {
-        const detail = (e as CustomEvent).detail;
-        addToast(detail?.message || 'Session expired. Refreshing...', 'error');
+        const detail = (e as CustomEvent).detail || {};
+        const scope = detail?.scope as 'admin' | 'user' | undefined;
+
+        if (scope === 'admin') {
+          clearAdminToken();
+          addToast(detail?.message || 'Admin session expired. Please log in again.', 'error');
+        } else {
+          clearAuthToken();
+          clearAdminToken();
+          setState(prev => ({ ...prev, isLoggedIn: false }));
+          addToast(detail?.message || 'Session expired. Please log in again.', 'error');
+        }
+
         // Small delay to let toast show
         setTimeout(() => {
             window.location.reload();
-        }, 1500);
+        }, 1000);
     };
 
     window.addEventListener('auth:force-reload', handleForceReload);
@@ -571,17 +582,19 @@ const App: React.FC = () => {
 
       const interval = setInterval(async () => {
          try {
-             const serverVersion = await checkServerVersion();
+             const serverVersion = Number(checkServerVersion ? await checkServerVersion() : 0).valueOf();
              const localVersion = getDataVersion();
+             const safeServerVersion = Number.isFinite(serverVersion) ? Number(serverVersion.toFixed(3)) : 0;
+             const safeLocalVersion = Number.isFinite(localVersion) ? Number(localVersion.toFixed(3)) : 0;
 
-             if (serverVersion > localVersion) {
-                 console.log(`[Smart Sync] Update found! Server: ${serverVersion} > Local: ${localVersion}`);
+             if (safeServerVersion > safeLocalVersion) {
+                 console.log(`[Smart Sync] Update found! Server: ${safeServerVersion.toFixed(3)} > Local: ${safeLocalVersion.toFixed(3)}`);
                  await safeSyncWithServer('heartbeat');
                  // Update local version match to prevent loops (refreshData should ideally return the new version,
                  // but simpler to just trust it for now or rely on next refreshData saving it)
                  // NOTE: refreshData logic below needs to handle version saving if we want this perfect.
                  // For now, let's manually update the version marker to match server so we don't spam.
-                 saveDataVersion(serverVersion);
+                 saveDataVersion(safeServerVersion);
              }
          } catch (err) {
              console.warn('Smart Sync check failed', err);

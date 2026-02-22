@@ -55,9 +55,18 @@ const request = async (path: string, options: RequestInit = {}) => {
     const message = data?.message || data?.text || 'Request failed';
 
     // Global Handling for Permission/Auth Issues
-    if (res.status === 401 || res.status === 403) {
+    if (res.status === 401) {
+       const isAdminPath = path.startsWith('/api/admin');
+       window.dispatchEvent(new CustomEvent('auth:force-reload', {
+         detail: {
+           message: message || 'Session expired. Please log in again.',
+           reason: 'unauthorized',
+           scope: isAdminPath ? 'admin' : 'user'
+         }
+       }));
+    } else if (res.status === 403) {
        if (message.includes('Permissions updated') || message.includes('Session expired')) {
-           window.dispatchEvent(new CustomEvent('auth:force-reload', { detail: { message } }));
+           window.dispatchEvent(new CustomEvent('auth:force-reload', { detail: { message, reason: 'forbidden' } }));
        }
     }
 

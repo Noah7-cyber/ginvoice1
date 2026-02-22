@@ -41,13 +41,21 @@ const normalizeCustomerName = (value) => {
 
 // --- ROUTES ---
 
+
+const normalizeVersion = (value) => {
+  const n = Number(value || 0);
+  if (!Number.isFinite(n)) return 0;
+  return Number(n.toFixed(3));
+};
+
+
 // 0. Version Check
 router.get('/version', auth, async (req, res) => {
   try {
     const business = await Business.findById(req.businessId).select('dataVersion');
     // Return version as a float, defaulting to 0.000
     // Ensure it's a number for the JSON response
-    const version = business?.dataVersion ? parseFloat(business.dataVersion.toString()) : 0.000;
+    const version = normalizeVersion(business?.dataVersion);
     res.json({ version });
   } catch (err) {
     console.error('Version check failed:', err);
