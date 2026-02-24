@@ -65,8 +65,9 @@ const generateVerificationQueue = async (businessId, options = {}) => {
   const settings = getStockVerificationSettings(business);
 
   if (!settings.enabled) return { queue: [], settings, reason: 'disabled' };
-  if (settings.snoozeUntil && new Date(settings.snoozeUntil) > now) return { queue: [], settings, reason: 'snoozed' };
-  if (settings.lastNotificationAt && (now.getTime() - new Date(settings.lastNotificationAt).getTime()) < (1000 * 60 * 60 * 24)) {
+  if (settings.snoozeUntil && new Date(settings.snoozeUntil) > now && !options.ignoreThrottle) return { queue: [], settings, reason: 'snoozed' };
+
+  if (!options.ignoreThrottle && settings.lastNotificationAt && (now.getTime() - new Date(settings.lastNotificationAt).getTime()) < (1000 * 60 * 60 * 24)) {
     return { queue: [], settings, reason: 'notified_recently' };
   }
 
@@ -75,7 +76,7 @@ const generateVerificationQueue = async (businessId, options = {}) => {
     Notification.findOne({ businessId, type: 'stock_verification' }).sort({ timestamp: -1 }).lean()
   ]);
 
-  if (recentNotification && (now.getTime() - new Date(recentNotification.timestamp).getTime()) < (1000 * 60 * 60 * 24)) {
+  if (!options.ignoreThrottle && recentNotification && (now.getTime() - new Date(recentNotification.timestamp).getTime()) < (1000 * 60 * 60 * 24)) {
     return { queue: [], settings, reason: 'notification_recent' };
   }
 

@@ -139,6 +139,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   const [newProduct, setNewProduct] = useState<Partial<Product>>(initialProductState);
 
   const filteredProducts = useMemo(() => products.filter(p => {
+    if (p.isDeleted) return false; // Hide deleted items
     const term = searchTerm.toLowerCase();
     const matchesSearch = p.name.toLowerCase().includes(term) || (p.category && p.category.toLowerCase().includes(term));
     const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
@@ -195,7 +196,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     }
     const updatedProducts = products.map(p => {
       if (selectedIds.has(p.id)) {
-        let updated = { ...p, isManualUpdate: true };
+        let updated = { ...p, isManualUpdate: true, updatedAt: new Date().toISOString() };
 
         // Partial Updates: Only update if value is provided
         if (bulkCategory) updated.category = bulkCategory;
@@ -206,10 +207,12 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
         if (typeof bulkStockAdd === 'number') {
           updated.currentStock = Math.max(0, updated.currentStock + bulkStockAdd);
+          updated.stockDelta = (updated.stockDelta || 0) + bulkStockAdd;
         }
 
         if (typeof bulkStockReduce === 'number') {
           updated.currentStock = Math.max(0, updated.currentStock - bulkStockReduce);
+          updated.stockDelta = (updated.stockDelta || 0) - bulkStockReduce;
         }
 
         if (typeof bulkCostPrice === 'number') {
@@ -277,10 +280,22 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
     try {
         if (editingProductId) {
-             const updatedItem = { ...(newProduct as Product), id: editingProductId, isManualUpdate: true };
-             await updateProduct(updatedItem);
+             const oldProduct = products.find(p => p.id === editingProductId);
+             const oldStock = oldProduct?.currentStock || 0;
+             const newStock = Number(newProduct.currentStock) || 0;
+             const delta = newStock - oldStock;
+
+             const updatedItem = {
+                 ...(newProduct as Product),
+                 id: editingProductId,
+                 isManualUpdate: true,
+                 updatedAt: new Date().toISOString(),
+                 stockDelta: (oldProduct?.stockDelta || 0) + delta
+             };
+
+             // Optimistic Update
              const updatedProducts = products.map(p => p.id === editingProductId ? updatedItem : p);
-             onUpdateProducts(updatedProducts);
+             onUpdateProducts(updatedProducts); // This triggers Sync
         } else {
              // Fix: Sanitize numeric fields to prevent crashes if empty
              const sanitizedProduct = {
@@ -290,7 +305,14 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                currentStock: Number(newProduct.currentStock) || 0,
              } as Product;
 
-             const newItem: Product = { ...sanitizedProduct, id: `PRD-${Date.now()}`, isManualUpdate: true };
+             // Ensure new products have a delta so backend initializes stock correctly via $inc
+             const newItem: Product = {
+                 ...sanitizedProduct,
+                 id: `PRD-${Date.now()}`,
+                 isManualUpdate: true,
+                 updatedAt: new Date().toISOString(),
+                 stockDelta: sanitizedProduct.currentStock
+             };
              await createProduct(newItem);
              onUpdateProducts([...products, newItem]);
         }
@@ -334,7 +356,12 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
     const updatedProducts = products.map(p => {
       if (p.id === id) {
-        return { ...p, [field]: numValue };
+        if (field === 'currentStock') {
+             const oldStock = p.currentStock || 0;
+             const delta = numValue - oldStock;
+             return { ...p, [field]: numValue, stockDelta: (p.stockDelta || 0) + delta, updatedAt: new Date().toISOString() };
+        }
+        return { ...p, [field]: numValue, updatedAt: new Date().toISOString() };
       }
       return p;
     });
@@ -385,9 +412,20 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     if (!itemToDelete) return;
     console.log('Deleting ID:', itemToDelete);
     setIsDeleting(true);
+
+    // Tombstone Strategy: Mark as deleted locally and let Sync handle it
+    // This allows offline deletions to queue up
+    const updatedProducts = products.map(p => {
+        if (p.id === itemToDelete) {
+            return { ...p, isDeleted: true, deletedAt: new Date().toISOString() };
+        }
+        return p;
+    }); // Filter out from UI immediately? No, we should mark it.
+    // But InventoryScreen likely filters out deleted items?
+    // Usually UI hides them. We'll modify filteredProducts to hide isDeleted.
+
     try {
-      await deleteProduct(itemToDelete);
-      onUpdateProducts(products.filter(p => p.id !== itemToDelete));
+      onUpdateProducts(updatedProducts); // Push tombstone
       setItemToDelete(null);
     } catch (err) {
       addToast('Delete failed. Please try again.', 'error');

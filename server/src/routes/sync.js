@@ -49,6 +49,12 @@ const normalizeVersion = (value) => {
 };
 
 
+// 0. Time Check (Anti-Cheat)
+router.get('/time', (req, res) => {
+    // Return server time for drift calculation
+    res.json({ time: Date.now() });
+});
+
 // 0. Version Check
 router.get('/version', auth, async (req, res) => {
   try {
@@ -264,23 +270,47 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
         const incomingUpdatedAt = p.updatedAt ? new Date(p.updatedAt) : new Date();
         if (Number.isNaN(incomingUpdatedAt.getTime())) return null;
 
+        const stockDelta = Number(p.stockDelta); // Optional Delta
+
+        // Idempotency / Stale Check
+        // If we have a delta, we want to apply it even if the timestamp is "stale" (out of order),
+        // because deltas merge mathematically. However, we must prevent exact replays.
         if (existing) {
           const existingUpdatedAt = existing.clientUpdatedAt
             ? new Date(existing.clientUpdatedAt)
             : new Date(existing.updatedAt || existing.createdAt || 0);
 
-          if (!Number.isNaN(existingUpdatedAt.getTime()) && incomingUpdatedAt <= existingUpdatedAt) {
-            return null;
+          if (!Number.isNaN(existingUpdatedAt.getTime())) {
+              if (typeof stockDelta === 'number' && !Number.isNaN(stockDelta)) {
+                  // Delta Logic: Allow older timestamps (merging), but block exact replays
+                  if (incomingUpdatedAt.getTime() === existingUpdatedAt.getTime()) return null;
+              } else {
+                  // LWW Logic (Standard): Block older or equal
+                  if (incomingUpdatedAt <= existingUpdatedAt) return null;
+              }
           }
         }
 
+        // --- DELETION HANDLING ---
+        if (p.isDeleted) {
+           return {
+             updateOne: {
+               filter: { businessId, id: productId },
+               update: { $set: { isDeleted: true, deletedAt: new Date(), clientUpdatedAt: incomingUpdatedAt, updatedAt: new Date() } }
+             }
+           };
+        }
+
+        // --- NOTIFICATION & DELTA LOGIC ---
         const nextSelling = Number(p.sellingPrice || 0);
-        const nextStock = Number(p.currentStock || 0);
+        // stockDelta already declared above
+        const nextStockAbsolute = Number(p.currentStock || 0);
 
         if (existing) {
           const prevSelling = parseDecimal(existing.sellingPrice);
           const prevStock = Number(existing.stock || 0);
 
+          // 1. Price Change Notification
           if (nextSelling !== prevSelling) {
             productNotifications.push({
               businessId,
@@ -294,43 +324,60 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
             });
           }
 
-          if (nextStock > prevStock) {
-            productNotifications.push({
+          // 2. Stock Increase Notification
+          const isManualIncrease = !Number.isNaN(stockDelta) ? stockDelta > 0 : (nextStockAbsolute > prevStock);
+          const increaseAmount = !Number.isNaN(stockDelta) ? stockDelta : (nextStockAbsolute - prevStock);
+
+          if (isManualIncrease && increaseAmount > 0) {
+             // Only log significant increases (avoid noise)
+             productNotifications.push({
               businessId,
               type: 'modification',
               title: 'Stock Increased',
               message: `Stock increased for ${p.name || productId}`,
-              body: `Stock: ${prevStock} → ${nextStock} (+${nextStock - prevStock})`,
-              amount: nextStock - prevStock,
+              body: `Stock increased by +${increaseAmount}`,
+              amount: increaseAmount,
               performedBy: req.userRole === 'owner' ? 'Owner' : 'Staff',
-              payload: { productId, productName: p.name || '', field: 'stock', previous: prevStock, next: nextStock, delta: nextStock - prevStock }
+              payload: { productId, productName: p.name || '', field: 'stock', delta: increaseAmount }
             });
           }
+        }
+
+        // --- UPDATE CONSTRUCTION ---
+        const updateSet = {
+            businessId,
+            id: productId,
+            name: p.name,
+            category: p.category,
+            // stock: Set below based on delta vs absolute
+            sellingPrice: toDecimal(p.sellingPrice),
+            costPrice: toDecimal(p.costPrice),
+            baseUnit: p.baseUnit || 'Piece',
+            units: Array.isArray(p.units) ? p.units.map(u => ({
+              name: u.name,
+              multiplier: u.multiplier,
+              sellingPrice: toDecimal(u.sellingPrice),
+              costPrice: toDecimal(u.costPrice)
+            })) : [],
+            clientUpdatedAt: incomingUpdatedAt,
+            updatedAt: new Date(),
+            isDeleted: false,
+            deletedAt: null // Resurrect if previously deleted
+        };
+
+        const updateOp = { $set: updateSet };
+
+        // DELTA SYNC MAGIC: Use $inc if delta is provided, otherwise fallback to $set
+        if (typeof stockDelta === 'number' && !Number.isNaN(stockDelta)) {
+            updateOp.$inc = { stock: stockDelta };
+        } else {
+            updateSet.stock = nextStockAbsolute; // Legacy/Absolute overwrite
         }
 
         return {
           updateOne: {
             filter: { businessId, id: productId },
-            update: {
-              $set: {
-                businessId,
-                id: productId,
-                name: p.name,
-                category: p.category,
-                stock: nextStock,
-                sellingPrice: toDecimal(p.sellingPrice),
-                costPrice: toDecimal(p.costPrice),
-                baseUnit: p.baseUnit || 'Piece',
-                units: Array.isArray(p.units) ? p.units.map(u => ({
-                  name: u.name,
-                  multiplier: u.multiplier,
-                  sellingPrice: toDecimal(u.sellingPrice),
-                  costPrice: toDecimal(u.costPrice)
-                })) : [],
-                clientUpdatedAt: incomingUpdatedAt,
-                updatedAt: new Date()
-              }
-            },
+            update: updateOp,
             upsert: true
           }
         };
@@ -487,8 +534,14 @@ router.delete('/products/:id', auth, requireActiveSubscription, async (req, res)
   try {
     const { id } = req.params;
     const businessId = String(req.businessId).trim();
-    const result = await Product.deleteOne({ businessId: { $in: [businessId, new ObjectId(businessId)] }, id });
-    if (!result.deletedCount) return res.status(404).json({ message: 'Product not found' });
+
+    // Soft Delete (Tombstone)
+    const result = await Product.updateOne(
+        { businessId: { $in: [businessId, new ObjectId(businessId)] }, id },
+        { $set: { isDeleted: true, deletedAt: new Date(), updatedAt: new Date() } }
+    );
+
+    if (!result.matchedCount) return res.status(404).json({ message: 'Product not found' });
 
     await Notification.create({
       businessId,

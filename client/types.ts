@@ -97,6 +97,9 @@ export interface Product {
   lastAbsVar?: number;
   updatedAt?: string;
   clientUpdatedAt?: string;
+  stockDelta?: number;
+  isDeleted?: boolean;
+  deletedAt?: string;
 }
 
 export type PaymentMethod = 'cash' | 'transfer' | 'pos' | 'bank' | 'credit';

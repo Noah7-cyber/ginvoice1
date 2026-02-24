@@ -2,11 +2,29 @@ const mongoose = require('mongoose');
 const Business = require('../models/Business');
 const Expenditure = require('../models/Expenditure');
 const Transaction = require('../models/Transaction');
+const Product = require('../models/Product');
 const MonthlySummary = require('../models/MonthlySummary');
 
 const ARCHIVE_INACTIVITY_DAYS = 60;
 
+const purgeDeletedProducts = async () => {
+  console.log('Starting daily purge of deleted products...');
+  try {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const result = await Product.deleteMany({
+      isDeleted: true,
+      deletedAt: { $lt: thirtyDaysAgo }
+    });
+    if (result.deletedCount > 0) {
+      console.log(`Purged ${result.deletedCount} old deleted products.`);
+    }
+  } catch (err) {
+    console.error('Purge deleted products failed:', err);
+  }
+};
+
 const archiveInactiveBusinesses = async () => {
+  await purgeDeletedProducts(); // Run daily
   console.log('Starting daily archival check for inactive businesses...');
   const sixtyDaysAgo = new Date(Date.now() - ARCHIVE_INACTIVITY_DAYS * 24 * 60 * 60 * 1000);
 
