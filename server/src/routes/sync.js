@@ -276,9 +276,10 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
         // If we have a delta, we want to apply it even if the timestamp is "stale" (out of order),
         // because deltas merge mathematically. However, we must prevent exact replays.
         if (existing) {
+          // FIX: ONLY compare against the client's last known time, NEVER the server's time.
           const existingUpdatedAt = existing.clientUpdatedAt
             ? new Date(existing.clientUpdatedAt)
-            : new Date(existing.updatedAt || existing.createdAt || 0);
+            : new Date(0); // Default to absolute past if no client time exists
 
           if (!Number.isNaN(existingUpdatedAt.getTime())) {
               if (typeof stockDelta === 'number' && !Number.isNaN(stockDelta)) {
@@ -286,6 +287,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
                   if (incomingUpdatedAt.getTime() === existingUpdatedAt.getTime()) return null;
               } else {
                   // LWW Logic (Standard): Block older or equal
+                  // Now this will correctly accept the edit because client clock moves forward
                   if (incomingUpdatedAt <= existingUpdatedAt) return null;
               }
           }
@@ -415,9 +417,10 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
         }
 
         if (existing) {
+          // FIX: ONLY compare against the client's last known time, NEVER the server's time.
           const existingUpdatedAt = existing.clientUpdatedAt
             ? new Date(existing.clientUpdatedAt)
-            : new Date(existing.updatedAt || existing.createdAt || 0);
+            : new Date(0); // Default to absolute past if no client time exists
 
           if (!Number.isNaN(existingUpdatedAt.getTime()) && incomingUpdatedAt <= existingUpdatedAt) {
             return null;
