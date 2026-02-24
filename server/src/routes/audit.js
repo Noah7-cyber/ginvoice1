@@ -10,7 +10,8 @@ const { computeRiskScore, generateVerificationQueue, getStockVerificationSetting
 const router = express.Router();
 
 router.get('/queue', auth, async (req, res) => {
-  const result = await generateVerificationQueue(req.businessId);
+  // Always fetch the queue for UI, ignoring notification throttles
+  const result = await generateVerificationQueue(req.businessId, { ignoreThrottle: true });
   return res.json({ queue: result.queue, reason: result.reason, settings: result.settings });
 });
 

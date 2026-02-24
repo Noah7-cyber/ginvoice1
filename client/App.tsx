@@ -21,6 +21,7 @@ import {
 import { InventoryState, UserRole, Product, ProductUnit, Transaction, BusinessProfile, TabId, SaleItem, PaymentMethod, Expenditure, ActivityLog } from './types';
 import useTabRouting from './hooks/useTabRouting';
 import { useStockVerification } from './hooks/useStockVerification';
+import { useTimeDrift } from './hooks/useTimeDrift';
 import { INITIAL_PRODUCTS } from './constants';
 import { safeCalculate } from './utils/math';
 import { saveState, loadState, pushToBackend, getDataVersion, saveDataVersion, getLastSync, saveLastSync } from './services/storage';
@@ -119,6 +120,7 @@ const App: React.FC = () => {
   const { status: wakeStatus } = useServerWakeup();
   const wakeToastShownRef = useRef(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const isTimeBlocked = useTimeDrift();
 
   /* // TEMPORARILY DISABLED TO FIX CRASH
   useEffect(() => {
@@ -873,7 +875,7 @@ const App: React.FC = () => {
   };
 
   const handleCompleteSale = (transaction: Transaction) => {
-    // 1. Calculate new state first
+    // 1. Calculate new state first (with Delta Accumulation)
     const updatedProducts = state.products.map(p => {
       const itemsInSale = transaction.items.filter(i => i.productId === p.id);
       if (itemsInSale.length === 0) return p;
@@ -883,7 +885,12 @@ const App: React.FC = () => {
           return sum + (item.quantity * multiplier);
       }, 0);
 
-      return { ...p, currentStock: Math.max(0, p.currentStock - totalDeduction) };
+      return {
+          ...p,
+          currentStock: Math.max(0, p.currentStock - totalDeduction),
+          stockDelta: (p.stockDelta || 0) - totalDeduction,
+          updatedAt: new Date().toISOString() // Update timestamp immediately
+      };
     });
 
     // Create activity log
@@ -910,8 +917,21 @@ const App: React.FC = () => {
 
     // 3. PUSH to Server immediately
     if (navigator.onLine) {
-      const stampedProducts = updatedProducts.map((p) => ({ ...p, updatedAt: new Date().toISOString() }));
-      pushToBackend({ transactions: [transaction], products: stampedProducts })
+      // Use the stable timestamp from state, don't generate new one on retry
+      pushToBackend({ transactions: [transaction], products: updatedProducts })
+        .then(() => {
+             // CRITICAL: On success, subtract the sent delta to prevent double-counting but keep new offline changes
+             setState(prev => ({
+                 ...prev,
+                 products: prev.products.map(p => {
+                    const sent = updatedProducts.find(s => s.id === p.id);
+                    if (sent && typeof sent.stockDelta === 'number') {
+                        return { ...p, stockDelta: (p.stockDelta || 0) - sent.stockDelta };
+                    }
+                    return p;
+                 })
+             }));
+        })
         .catch(err => {
             console.error("Instant sync failed:", err);
             addToast("Sale saved locally. Connect to internet to back up.", "warning");
@@ -920,11 +940,29 @@ const App: React.FC = () => {
   };
 
   const handleUpdateProducts = (products: Product[]) => {
-    const nextState = { ...state, products };
+    // Ensure products have updatedAt set by the caller (InventoryScreen)
+    // If not, we should set it here? Ideally InventoryScreen sets it.
+    // Let's enforce it here just in case, but InventoryScreen should do it to be precise.
+    const stampedProducts = products.map(p => p.updatedAt ? p : { ...p, updatedAt: new Date().toISOString() });
+
+    const nextState = { ...state, products: stampedProducts };
     setState(nextState);
     if (navigator.onLine) {
-      const stampedProducts = products.map((p) => ({ ...p, updatedAt: new Date().toISOString() }));
-      pushToBackend({ products: stampedProducts }).catch(err => console.error("Instant sync failed:", err));
+      pushToBackend({ products: stampedProducts })
+        .then(() => {
+            // Clear accumulated deltas on success (Subtract sent delta)
+            setState(prev => ({
+                ...prev,
+                products: prev.products.map(p => {
+                    const sent = stampedProducts.find(s => s.id === p.id);
+                    if (sent && typeof sent.stockDelta === 'number') {
+                        return { ...p, stockDelta: (p.stockDelta || 0) - sent.stockDelta };
+                    }
+                    return p;
+                })
+            }));
+        })
+        .catch(err => console.error("Instant sync failed:", err));
     }
   };
 
@@ -973,6 +1011,29 @@ const App: React.FC = () => {
     refreshData,
     setIsNotificationOpen
   });
+
+  // SPECIAL ROUTE: Admin Portal (Bypasses Main App Auth)
+  if (isTimeBlocked) {
+      return (
+        <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur flex flex-col items-center justify-center p-8 text-white text-center animate-in fade-in">
+             <AlertCircle size={64} className="text-red-500 mb-6 animate-pulse" />
+             <h1 className="text-3xl font-black mb-4">Security Alert: Time Mismatch</h1>
+             <p className="text-gray-300 max-w-md mb-8 leading-relaxed">
+                Your device clock appears to be significantly incorrect or has been modified.
+                Please set your device to the correct time automatically to continue using GInvoice.
+             </p>
+             <div className="bg-white/10 p-4 rounded-xl border border-white/20">
+                <p className="font-mono text-sm text-yellow-400">Current Device Time: {new Date().toLocaleTimeString()}</p>
+             </div>
+             <button
+               onClick={() => window.location.reload()}
+               className="mt-8 px-8 py-3 bg-white text-black font-bold rounded-xl hover:scale-105 transition-transform"
+             >
+                Check Again
+             </button>
+        </div>
+      );
+  }
 
   // SPECIAL ROUTE: Admin Portal (Bypasses Main App Auth)
   if (activeTab === 'admin-portal') {

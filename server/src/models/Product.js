@@ -28,7 +28,9 @@ const productSchema = new mongoose.Schema({
   lastVerifiedAt: { type: Date, default: null },
   lastVerifiedQty: { type: Number, default: null },
   varianceCount: { type: Number, default: 0 },
-  lastAbsVar: { type: Number, default: 0 }
+  lastAbsVar: { type: Number, default: 0 },
+  isDeleted: { type: Boolean, default: false },
+  deletedAt: { type: Date }
 }, { timestamps: true });
 
 // Compound index for uniqueness
