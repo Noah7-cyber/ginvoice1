@@ -67,18 +67,10 @@ const generateVerificationQueue = async (businessId, options = {}) => {
   if (!settings.enabled) return { queue: [], settings, reason: 'disabled' };
   if (settings.snoozeUntil && new Date(settings.snoozeUntil) > now && !options.ignoreThrottle) return { queue: [], settings, reason: 'snoozed' };
 
-  if (!options.ignoreThrottle && settings.lastNotificationAt && (now.getTime() - new Date(settings.lastNotificationAt).getTime()) < (1000 * 60 * 60 * 24)) {
-    return { queue: [], settings, reason: 'notified_recently' };
-  }
+  // THROTTLING LOGIC REMOVED FROM HERE TO ALLOW UI ACCESS
+  // Throttling is now handled in 'maybeCreateStockVerificationNotification'
 
-  const [products, recentNotification] = await Promise.all([
-    Product.find({ businessId }).select('id name stock sellingPrice lastVerifiedAt varianceCount lastAbsVar updatedAt isManualUpdate').lean(),
-    Notification.findOne({ businessId, type: 'stock_verification' }).sort({ timestamp: -1 }).lean()
-  ]);
-
-  if (!options.ignoreThrottle && recentNotification && (now.getTime() - new Date(recentNotification.timestamp).getTime()) < (1000 * 60 * 60 * 24)) {
-    return { queue: [], settings, reason: 'notification_recent' };
-  }
+  const products = await Product.find({ businessId }).select('id name stock sellingPrice lastVerifiedAt varianceCount lastAbsVar updatedAt isManualUpdate').lean();
 
   const skuCount = products.length;
   if (skuCount === 0) return { queue: [], settings, reason: 'no_products' };
@@ -129,10 +121,23 @@ const generateVerificationQueue = async (businessId, options = {}) => {
 };
 
 const maybeCreateStockVerificationNotification = async (businessId) => {
-  const { queue, settings } = await generateVerificationQueue(businessId);
+  // FIX: Prevent Spam. If there is already an active stock notification, DO NOT create another one.
+  const existingActive = await Notification.findOne({
+    businessId,
+    type: 'stock_verification',
+    dismissedAt: null
+  });
+
+  if (existingActive) return null;
+
+  const { queue, settings } = await generateVerificationQueue(businessId, { ignoreThrottle: true });
   if (!queue.length) return null;
 
+  // Additional 24h throttle check to respect settings (since we removed it from generator)
   const now = new Date();
+  if (settings.lastNotificationAt && (now.getTime() - new Date(settings.lastNotificationAt).getTime()) < (1000 * 60 * 60 * 24)) {
+      return null;
+  }
   const payload = {
     kind: 'STOCK_VERIFY',
     productIds: queue.map(q => q.productId),
