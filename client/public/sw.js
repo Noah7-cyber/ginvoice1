@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ginvoice-v41-audit-context';
+const CACHE_NAME = 'ginvoice-v42-debtor-modal-sync';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',

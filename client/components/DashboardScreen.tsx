@@ -89,12 +89,14 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
   }, [transactions, timeRange]);
 
   const localStats = useMemo(() => {
+    const salesTransactions = transactions.filter(tx => !tx.isPreviousDebt);
+
     // SAFE MATH IMPLEMENTATION
-    const totalRevenue = safeSum(transactions, 'totalAmount');
+    const totalRevenue = safeSum(salesTransactions, 'totalAmount');
     const totalDebt = safeSum(transactions, 'balance');
     
     // Calculate total profit
-    const totalProfit = transactions.reduce((sum, tx) => {
+    const totalProfit = salesTransactions.reduce((sum, tx) => {
       const txProfit = tx.items.reduce((pSum, item) => {
         const product = products.find(p => p.id === item.productId);
         // FIX: If unit cost is 0, use base cost * multiplier
@@ -127,9 +129,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
       return sum + txProfit - (tx.globalDiscount || 0);
     }, 0);
 
-    const cashSales = transactions.filter(t => t.paymentMethod === 'cash').length;
-    const transferSales = transactions.filter(t => ['transfer', 'bank'].includes(t.paymentMethod)).length;
-    const posSales = transactions.filter(t => t.paymentMethod === 'pos').length;
+    const cashSales = salesTransactions.filter(t => t.paymentMethod === 'cash').length;
+    const transferSales = salesTransactions.filter(t => ['transfer', 'bank'].includes(t.paymentMethod)).length;
+    const posSales = salesTransactions.filter(t => t.paymentMethod === 'pos').length;
 
     // Calculate Shop Cost & Worth locally
     const shopCost = products.reduce((sum, p) => sum + safeCalculate(p.costPrice, p.currentStock), 0);
@@ -138,7 +140,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
     // Calculate Daily Revenue locally
     const today = new Date().toISOString().split('T')[0];
     const dailyRevenue = safeSum(
-        transactions.filter(t => t.transactionDate.startsWith(today)),
+        salesTransactions.filter(t => t.transactionDate.startsWith(today)),
         'totalAmount'
     );
 
@@ -146,7 +148,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
     const incomeTotal = expenditures.reduce((sum, e) => e.flowType === 'in' ? sum + Math.abs(e.amount || 0) : sum, 0);
     const expensesBalance = incomeTotal - expensesTotal;
 
-    return { totalRevenue, totalProfit, totalSales: transactions.length, cashSales, transferSales, posSales, totalDebt, shopCost, shopWorth, dailyRevenue, expensesTotal, incomeTotal, expensesBalance };
+    return { totalRevenue, totalProfit, totalSales: salesTransactions.length, cashSales, transferSales, posSales, totalDebt, shopCost, shopWorth, dailyRevenue, expensesTotal, incomeTotal, expensesBalance };
   }, [transactions, products, expenditures]);
 
   // Hybrid Stats Logic: Merge remote and local
@@ -174,7 +176,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
 
     return last7Days.map(date => {
       const daySales = transactions
-        .filter(t => t.transactionDate.split('T')[0] === date)
+        .filter(t => !t.isPreviousDebt && t.transactionDate.split('T')[0] === date)
         .reduce((sum, t) => sum + t.totalAmount, 0);
       
       const displayDate = new Date(date).toLocaleDateString('en-NG', { weekday: 'short' });
@@ -189,7 +191,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
     // Actually, local calc is better if we have all transactions.
 
     const productSales: Record<string, { name: string, qty: number, category: string }> = {};
-    transactions.forEach(tx => {
+    transactions.filter(tx => !tx.isPreviousDebt).forEach(tx => {
       tx.items.forEach(item => {
         if (!productSales[item.productId]) {
           const product = products.find(p => p.id === item.productId);

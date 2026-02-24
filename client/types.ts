@@ -95,6 +95,8 @@ export interface Product {
   lastVerifiedQty?: number | null;
   varianceCount?: number;
   lastAbsVar?: number;
+  updatedAt?: string;
+  clientUpdatedAt?: string;
 }
 
 export type PaymentMethod = 'cash' | 'transfer' | 'pos' | 'bank' | 'credit';
@@ -131,6 +133,8 @@ export interface Transaction {
   updatedAt?: string;
   createdByRole?: 'owner' | 'staff'; // New field
   discountCode?: string;
+  isPreviousDebt?: boolean;
+  clientUpdatedAt?: string;
 }
 
 /* New: Expenditure item stored locally */

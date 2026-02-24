@@ -14,6 +14,8 @@ const client = new OpenAI({
 const MODEL_NAME = "deepseek-chat";
 
 // --- Helper: Data Diet ---
+const escapeRegex = (value = '') => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 const sanitizeData = (doc) => {
     if (Array.isArray(doc)) {
         return doc.map(d => sanitizeData(d));
@@ -72,7 +74,7 @@ const tools = [
         type: "function",
         function: {
             name: "get_business_report",
-            description: "THE FINANCIAL AUTHORITY. Calculates Net Profit, Total Revenue vs Expenses, and Cash Flow. MUST use this for questions like 'how much did I make', 'daily performance', 'profit', or 'summary'.",
+            description: "Financial summary for a date range: net profit, revenue vs expenses, and cash flow. Use for broad performance summaries.",
             parameters: {
                 type: "object",
                 properties: {
@@ -133,6 +135,41 @@ const tools = [
         }
     },
 
+
+    {
+        type: "function",
+        function: {
+            name: "get_product_performance",
+            description: "Get focused performance for ONE product (revenue, quantity sold, outstanding balance) over an optional date range.",
+            parameters: {
+                type: "object",
+                properties: {
+                    productName: { type: "string", description: "Product name to match (partial allowed)." },
+                    productId: { type: "string", description: "Exact product id if known." },
+                    startDate: { type: "string", description: "Optional start date (YYYY-MM-DD)." },
+                    endDate: { type: "string", description: "Optional end date (YYYY-MM-DD)." }
+                },
+                additionalProperties: false
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "get_category_performance",
+            description: "Get focused performance for ONE category (revenue, quantity sold, invoice count) over an optional date range.",
+            parameters: {
+                type: "object",
+                properties: {
+                    category: { type: "string", description: "Category name to analyze." },
+                    startDate: { type: "string", description: "Optional start date (YYYY-MM-DD)." },
+                    endDate: { type: "string", description: "Optional end date (YYYY-MM-DD)." }
+                },
+                required: ["category"],
+                additionalProperties: false
+            }
+        }
+    },
     {
         type: "function",
         function: {
@@ -479,6 +516,160 @@ const search_expenses = async ({ query, startDate, endDate }, { businessId }) =>
     };
 };
 
+
+const resolveDateRange = (startDate, endDate) => {
+    const end = endDate ? new Date(endDate) : new Date();
+    const start = startDate ? new Date(startDate) : new Date('1970-01-01T00:00:00.000Z');
+
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+        return null;
+    }
+
+    end.setHours(23, 59, 59, 999);
+    return { start, end };
+};
+
+const get_product_performance = async ({ productName, productId, startDate, endDate }, { businessId, userRole }) => {
+    if (!businessId) return { error: 'Login required.' };
+
+    const range = resolveDateRange(startDate, endDate);
+    if (!range) return { error: 'Invalid date format. Use YYYY-MM-DD.' };
+
+    const txMatch = {
+        businessId,
+        transactionDate: { $gte: range.start, $lte: range.end }
+    };
+
+    const productFilter = [];
+    if (productId && String(productId).trim()) {
+        productFilter.push({ 'items.productId': String(productId).trim() });
+    }
+    if (productName && String(productName).trim()) {
+        productFilter.push({ 'items.productName': { $regex: String(productName).trim(), $options: 'i' } });
+    }
+
+    if (productFilter.length > 0) {
+        txMatch.$or = productFilter;
+    }
+
+    const rows = await Transaction.aggregate([
+        { $match: txMatch },
+        { $unwind: '$items' },
+        {
+            $match: {
+                ...(productId && String(productId).trim() ? { 'items.productId': String(productId).trim() } : {}),
+                ...(productName && String(productName).trim() ? { 'items.productName': { $regex: String(productName).trim(), $options: 'i' } } : {})
+            }
+        },
+        {
+            $group: {
+                _id: {
+                    productId: '$items.productId',
+                    productName: '$items.productName'
+                },
+                quantitySold: { $sum: '$items.quantity' },
+                revenue: { $sum: '$items.total' },
+                invoiceCount: { $sum: 1 }
+            }
+        },
+        { $sort: { revenue: -1 } },
+        { $limit: 5 }
+    ]);
+
+    if (!rows.length) {
+        return {
+            period: { start: startDate || 'all-time', end: endDate || new Date().toISOString().split('T')[0] },
+            message: 'No matching product sales found for that range.'
+        };
+    }
+
+    const top = rows[0];
+    const revenue = Number(top.revenue || 0);
+
+    return {
+        period: { start: startDate || 'all-time', end: endDate || new Date().toISOString().split('T')[0] },
+        product: {
+            id: top._id.productId || '',
+            name: top._id.productName,
+            quantitySold: Number(top.quantitySold || 0),
+            invoiceCount: Number(top.invoiceCount || 0),
+            ...(userRole === 'owner' ? { revenue } : {})
+        },
+        alternatives: sanitizeData(rows.slice(1).map(r => ({
+            id: r._id.productId || '',
+            name: r._id.productName,
+            quantitySold: Number(r.quantitySold || 0),
+            invoiceCount: Number(r.invoiceCount || 0),
+            ...(userRole === 'owner' ? { revenue: Number(r.revenue || 0) } : {})
+        }))),
+        ...(userRole !== 'owner' ? { note: 'Revenue values are owner-only; showing quantities and invoice count.' } : {})
+    };
+};
+
+const get_category_performance = async ({ category, startDate, endDate }, { businessId, userRole }) => {
+    if (!businessId) return { error: 'Login required.' };
+    if (!category || !String(category).trim()) return { error: 'Category is required.' };
+
+    const range = resolveDateRange(startDate, endDate);
+    if (!range) return { error: 'Invalid date format. Use YYYY-MM-DD.' };
+
+    const categoryName = String(category).trim();
+
+    const result = await Transaction.aggregate([
+        {
+            $match: {
+                businessId,
+                transactionDate: { $gte: range.start, $lte: range.end }
+            }
+        },
+        { $unwind: '$items' },
+        {
+            $lookup: {
+                from: 'products',
+                let: { pId: '$items.productId', bId: '$businessId' },
+                pipeline: [
+                    { $match: { $expr: { $and: [ { $eq: ['$id', '$$pId'] }, { $eq: ['$businessId', { $toString: '$$bId' }] } ] } } }
+                ],
+                as: 'productDetails'
+            }
+        },
+        { $unwind: { path: '$productDetails', preserveNullAndEmptyArrays: true } },
+        {
+            $match: {
+                'productDetails.category': { $regex: `^${escapeRegex(categoryName)}$`, $options: 'i' }
+            }
+        },
+        {
+            $group: {
+                _id: '$productDetails.category',
+                quantitySold: { $sum: '$items.quantity' },
+                revenue: { $sum: '$items.total' },
+                invoiceCount: { $sum: 1 },
+                uniqueProducts: { $addToSet: '$items.productId' }
+            }
+        }
+    ]);
+
+    if (!result.length) {
+        return {
+            period: { start: startDate || 'all-time', end: endDate || new Date().toISOString().split('T')[0] },
+            category: categoryName,
+            message: 'No sales found for that category in the selected range.'
+        };
+    }
+
+    const row = result[0];
+    return {
+        period: { start: startDate || 'all-time', end: endDate || new Date().toISOString().split('T')[0] },
+        category: row._id || categoryName,
+        quantitySold: Number(row.quantitySold || 0),
+        invoiceCount: Number(row.invoiceCount || 0),
+        uniqueProducts: Array.isArray(row.uniqueProducts) ? row.uniqueProducts.length : 0,
+        ...(userRole === 'owner' ? { revenue: Number(row.revenue || 0) } : {}),
+        ...(userRole !== 'owner' ? { note: 'Revenue values are owner-only; showing operational metrics.' } : {})
+    };
+};
+
 const get_inventory_intelligence = async ({ days = 30, restockHorizonDays = 30, topN = 10 } = {}, { businessId, userRole }) => {
     if (!businessId) return { error: 'Login required.' };
 
@@ -673,6 +864,10 @@ const executeTool = async ({ name, args }, businessId, userRole = 'staff') => {
                 return await check_low_stock(args, context);
             case 'product_search':
                 return await product_search(args, context);
+            case 'get_product_performance':
+                return await get_product_performance(args, context);
+            case 'get_category_performance':
+                return await get_category_performance(args, context);
             case 'search_sales_records':
                 return await search_sales_records(args, context);
             case 'search_expenses':

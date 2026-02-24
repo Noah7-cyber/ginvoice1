@@ -41,13 +41,21 @@ const normalizeCustomerName = (value) => {
 
 // --- ROUTES ---
 
+
+const normalizeVersion = (value) => {
+  const n = Number(value || 0);
+  if (!Number.isFinite(n)) return 0;
+  return Number(n.toFixed(3));
+};
+
+
 // 0. Version Check
 router.get('/version', auth, async (req, res) => {
   try {
     const business = await Business.findById(req.businessId).select('dataVersion');
     // Return version as a float, defaulting to 0.000
     // Ensure it's a number for the JSON response
-    const version = business?.dataVersion ? parseFloat(business.dataVersion.toString()) : 0.000;
+    const version = normalizeVersion(business?.dataVersion);
     res.json({ version });
   } catch (err) {
     console.error('Version check failed:', err);
@@ -127,6 +135,7 @@ router.get('/', auth, async (req, res) => {
     const transactions = rawTransactions.map(t => ({
       ...t,
       id: (t.id && t.id !== 'undefined' && t.id !== 'null') ? t.id : t._id.toString(),
+      isPreviousDebt: Boolean(t.isPreviousDebt),
       items: (t.items || []).map(i => ({
         ...i,
         unitPrice: parseDecimal(i.unitPrice),
@@ -236,73 +245,197 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
     }
 
     if (products.length > 0) {
-      const productOps = products.map((p) => ({
-        updateOne: {
-          filter: { businessId, id: p.id },
-          update: {
-            $set: {
-              businessId,
-              id: p.id,
-              name: p.name,
-              category: p.category,
-              stock: p.currentStock,
-              sellingPrice: toDecimal(p.sellingPrice),
-              costPrice: toDecimal(p.costPrice),
-              baseUnit: p.baseUnit || 'Piece',
-              units: Array.isArray(p.units) ? p.units.map(u => ({
-                name: u.name,
-                multiplier: u.multiplier,
-                sellingPrice: toDecimal(u.sellingPrice),
-                costPrice: toDecimal(u.costPrice)
-              })) : [],
-              updatedAt: new Date()
-            }
-          },
-          upsert: true
+      const incomingProductIds = products
+        .map((p) => String(p?.id || '').trim())
+        .filter(Boolean);
+
+      const existingProducts = incomingProductIds.length > 0
+        ? await Product.find({ businessId, id: { $in: incomingProductIds } }).lean()
+        : [];
+
+      const existingProductMap = new Map(existingProducts.map((p) => [p.id, p]));
+      const productNotifications = [];
+
+      const productOps = products.map((p) => {
+        const productId = String(p?.id || '').trim();
+        if (!productId) return null;
+
+        const existing = existingProductMap.get(productId);
+        const incomingUpdatedAt = p.updatedAt ? new Date(p.updatedAt) : new Date();
+        if (Number.isNaN(incomingUpdatedAt.getTime())) return null;
+
+        if (existing) {
+          const existingUpdatedAt = existing.clientUpdatedAt
+            ? new Date(existing.clientUpdatedAt)
+            : new Date(existing.updatedAt || existing.createdAt || 0);
+
+          if (!Number.isNaN(existingUpdatedAt.getTime()) && incomingUpdatedAt <= existingUpdatedAt) {
+            return null;
+          }
         }
-      }));
-      await Product.bulkWrite(productOps);
+
+        const nextSelling = Number(p.sellingPrice || 0);
+        const nextStock = Number(p.currentStock || 0);
+
+        if (existing) {
+          const prevSelling = parseDecimal(existing.sellingPrice);
+          const prevStock = Number(existing.stock || 0);
+
+          if (nextSelling !== prevSelling) {
+            productNotifications.push({
+              businessId,
+              type: 'modification',
+              title: 'Price Changed',
+              message: `Price changed for ${p.name || productId}`,
+              body: `Selling price: ${prevSelling} → ${nextSelling}`,
+              amount: Math.abs(nextSelling - prevSelling),
+              performedBy: req.userRole === 'owner' ? 'Owner' : 'Staff',
+              payload: { productId, productName: p.name || '', field: 'sellingPrice', previous: prevSelling, next: nextSelling }
+            });
+          }
+
+          if (nextStock > prevStock) {
+            productNotifications.push({
+              businessId,
+              type: 'modification',
+              title: 'Stock Increased',
+              message: `Stock increased for ${p.name || productId}`,
+              body: `Stock: ${prevStock} → ${nextStock} (+${nextStock - prevStock})`,
+              amount: nextStock - prevStock,
+              performedBy: req.userRole === 'owner' ? 'Owner' : 'Staff',
+              payload: { productId, productName: p.name || '', field: 'stock', previous: prevStock, next: nextStock, delta: nextStock - prevStock }
+            });
+          }
+        }
+
+        return {
+          updateOne: {
+            filter: { businessId, id: productId },
+            update: {
+              $set: {
+                businessId,
+                id: productId,
+                name: p.name,
+                category: p.category,
+                stock: nextStock,
+                sellingPrice: toDecimal(p.sellingPrice),
+                costPrice: toDecimal(p.costPrice),
+                baseUnit: p.baseUnit || 'Piece',
+                units: Array.isArray(p.units) ? p.units.map(u => ({
+                  name: u.name,
+                  multiplier: u.multiplier,
+                  sellingPrice: toDecimal(u.sellingPrice),
+                  costPrice: toDecimal(u.costPrice)
+                })) : [],
+                clientUpdatedAt: incomingUpdatedAt,
+                updatedAt: new Date()
+              }
+            },
+            upsert: true
+          }
+        };
+      }).filter(Boolean);
+
+      if (productOps.length > 0) {
+        await Product.bulkWrite(productOps);
+      }
+
+      if (productNotifications.length > 0) {
+        await Notification.insertMany(productNotifications.slice(0, 50));
+      }
     }
 
     if (transactions.length > 0) {
-      const txOps = transactions.map((t) => ({
-        updateOne: {
-          filter: { businessId, id: t.id },
-          update: {
-            $set: {
-              businessId,
-              id: t.id,
-              transactionDate: t.transactionDate ? new Date(t.transactionDate) : null,
-              customerName: normalizeCustomerName(t.customerName),
-              items: (t.items || []).map((item) => ({
-                productId: item.productId,
-                productName: item.productName,
-                quantity: item.quantity,
-                unit: item.selectedUnit ? item.selectedUnit.name : undefined,
-                multiplier: item.selectedUnit ? item.selectedUnit.multiplier : (item.multiplier || 1),
-                unitPrice: toDecimal(item.unitPrice),
-                discount: toDecimal(item.discount),
-                total: toDecimal(item.total)
-              })),
-              subtotal: toDecimal(t.subtotal),
-              globalDiscount: toDecimal(t.globalDiscount),
-              totalAmount: toDecimal(t.totalAmount),
-              amountPaid: toDecimal(t.amountPaid),
-              balance: toDecimal(t.balance),
-              staffId: t.staffId || (t.createdByRole === 'staff' ? 'Store Staff' : 'owner'),
-              createdByRole: t.createdByRole === 'staff' ? 'staff' : 'owner',
-              createdByUserId: t.createdByUserId ? String(t.createdByUserId) : '',
-              createdAt: t.transactionDate ? new Date(t.transactionDate) : new Date(),
-              updatedAt: new Date()
-            }
-          },
-          upsert: true
+
+      const incomingIds = transactions
+        .map((t) => String(t?.id || '').trim())
+        .filter(Boolean);
+
+      const existingTxs = incomingIds.length > 0
+        ? await Transaction.find({ businessId, id: { $in: incomingIds } }).lean()
+        : [];
+
+      const existingMap = new Map(existingTxs.map(t => [t.id, t]));
+
+      const txOps = transactions.map((t) => {
+        const txId = String(t?.id || '').trim();
+        if (!txId) return null;
+
+        const existing = existingMap.get(txId);
+        const incomingUpdatedAt = t.updatedAt ? new Date(t.updatedAt) : new Date();
+        if (Number.isNaN(incomingUpdatedAt.getTime())) {
+          return null;
         }
-      }));
-      await Transaction.bulkWrite(txOps);
+
+        if (existing) {
+          const existingUpdatedAt = existing.clientUpdatedAt
+            ? new Date(existing.clientUpdatedAt)
+            : new Date(existing.updatedAt || existing.createdAt || 0);
+
+          if (!Number.isNaN(existingUpdatedAt.getTime()) && incomingUpdatedAt <= existingUpdatedAt) {
+            return null;
+          }
+        }
+
+        const updateData = {
+          businessId,
+          id: txId,
+          transactionDate: t.transactionDate ? new Date(t.transactionDate) : null,
+          customerName: normalizeCustomerName(t.customerName),
+          customerPhone: t.customerPhone || '',
+          isPreviousDebt: Boolean(t.isPreviousDebt),
+          items: (t.items || []).map((item) => ({
+            productId: item.productId,
+            productName: item.productName,
+            quantity: item.quantity,
+            unit: item.selectedUnit ? item.selectedUnit.name : item.unit,
+            multiplier: item.selectedUnit ? item.selectedUnit.multiplier : (item.multiplier || 1),
+            unitPrice: toDecimal(item.unitPrice),
+            discount: toDecimal(item.discount),
+            total: toDecimal(item.total)
+          })),
+          subtotal: toDecimal(t.subtotal),
+          globalDiscount: toDecimal(t.globalDiscount),
+          totalAmount: toDecimal(t.totalAmount),
+          paymentMethod: t.paymentMethod || 'cash',
+          amountPaid: toDecimal(t.amountPaid),
+          balance: toDecimal(t.balance),
+          paymentStatus: t.paymentStatus === 'credit' ? 'credit' : 'paid',
+          signature: t.signature,
+          isSignatureLocked: Boolean(t.isSignatureLocked),
+          staffId: t.staffId || (t.createdByRole === 'staff' ? 'Store Staff' : 'owner'),
+          createdByRole: t.createdByRole === 'staff' ? 'staff' : 'owner',
+          createdByUserId: t.createdByUserId ? String(t.createdByUserId) : '',
+          clientUpdatedAt: incomingUpdatedAt,
+          updatedAt: new Date()
+        };
+
+        if (existing) {
+          return {
+            updateOne: {
+              filter: { businessId, id: txId },
+              update: { $set: updateData }
+            }
+          };
+        }
+
+        return {
+          insertOne: {
+            document: {
+              ...updateData,
+              createdAt: t.transactionDate ? new Date(t.transactionDate) : new Date()
+            }
+          }
+        };
+      }).filter(Boolean);
+
+      if (txOps.length > 0) {
+        await Transaction.bulkWrite(txOps);
+      }
     }
 
     if (expenditures.length > 0) {
+
       const expOps = expenditures.map((e) => {
         const val = parseDecimal(e.amount);
         return {
@@ -353,8 +486,21 @@ router.get('/fix-ids', auth, async (req, res) => {
 router.delete('/products/:id', auth, requireActiveSubscription, async (req, res) => {
   try {
     const { id } = req.params;
-    const businessId = req.businessId;
-    await Product.deleteOne({ businessId, id });
+    const businessId = String(req.businessId).trim();
+    const result = await Product.deleteOne({ businessId: { $in: [businessId, new ObjectId(businessId)] }, id });
+    if (!result.deletedCount) return res.status(404).json({ message: 'Product not found' });
+
+    await Notification.create({
+      businessId,
+      title: 'Product Deleted',
+      message: `Product deleted: ${id}`,
+      body: 'Owner deleted an item from inventory.',
+      amount: 0,
+      performedBy: req.userRole === 'owner' ? 'Owner' : 'Staff',
+      type: 'deletion',
+      payload: { productId: id }
+    });
+
     res.json({ success: true, id });
   } catch (err) {
     res.status(500).json({ message: 'Delete failed' });

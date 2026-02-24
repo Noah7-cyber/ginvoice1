@@ -409,6 +409,8 @@ If asked about 'Performance', 'Profit', 'Revenue', or 'How much I made', you MUS
 Do NOT use search_sales_records for financial summaries.
 For 'Today's performance', call get_business_report with startDate: '${todayISO}' and endDate: '${todayISO}'.
 For focused financial questions (e.g. 'only profit', 'just revenue', 'cash flow only'), still call get_business_report and return ONLY the requested metric(s).
+For one-product questions (e.g. 'revenue from Coke'), call get_product_performance first.
+For one-category questions (e.g. 'how much from Beverages category'), call get_category_performance first.
 For inventory intelligence requests (top sellers, dead stock, what to restock), call get_inventory_intelligence.
 
 TASK VS CHAT RULES:
