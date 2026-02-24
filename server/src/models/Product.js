@@ -22,6 +22,7 @@ const productSchema = new mongoose.Schema({
   units: [unitSchema],
 
   image: { type: String },
+  clientUpdatedAt: { type: Date },
   updatedAt: { type: Date, default: Date.now },
   isManualUpdate: { type: Boolean, default: false }, // Keeping for schema compatibility if needed, though unused in logic
   lastVerifiedAt: { type: Date, default: null },

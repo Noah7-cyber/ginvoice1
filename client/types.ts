@@ -95,6 +95,8 @@ export interface Product {
   lastVerifiedQty?: number | null;
   varianceCount?: number;
   lastAbsVar?: number;
+  updatedAt?: string;
+  clientUpdatedAt?: string;
 }
 
 export type PaymentMethod = 'cash' | 'transfer' | 'pos' | 'bank' | 'credit';

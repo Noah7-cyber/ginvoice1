@@ -910,7 +910,8 @@ const App: React.FC = () => {
 
     // 3. PUSH to Server immediately
     if (navigator.onLine) {
-      pushToBackend({ transactions: [transaction], products: updatedProducts })
+      const stampedProducts = updatedProducts.map((p) => ({ ...p, updatedAt: new Date().toISOString() }));
+      pushToBackend({ transactions: [transaction], products: stampedProducts })
         .catch(err => {
             console.error("Instant sync failed:", err);
             addToast("Sale saved locally. Connect to internet to back up.", "warning");
@@ -922,7 +923,8 @@ const App: React.FC = () => {
     const nextState = { ...state, products };
     setState(nextState);
     if (navigator.onLine) {
-      pushToBackend({ products }).catch(err => console.error("Instant sync failed:", err));
+      const stampedProducts = products.map((p) => ({ ...p, updatedAt: new Date().toISOString() }));
+      pushToBackend({ products: stampedProducts }).catch(err => console.error("Instant sync failed:", err));
     }
   };
 
