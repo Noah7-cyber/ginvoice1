@@ -32,25 +32,25 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'transactions' | 'system'>('transactions');
 
-  // Derive Recent Activity (Hybrid: Sales + Deletions)
+  // Derive Recent Activity (Sales + Delete + Edit Notifications)
   const recentActivity = useMemo(() => {
-    // 1. Sales (Active)
     const sales = [...transactions]
       .sort((a, b) => new Date(b.createdAt || b.transactionDate).getTime() - new Date(a.createdAt || a.transactionDate).getTime())
       .slice(0, 10)
       .map(t => ({
         id: t.id,
         type: 'sale',
-        amount: t.totalAmount,
-        actor: t.createdByRole || (t.staffId ? 'Staff' : 'Owner'), // Heuristic fallback
+        amount: Number(t.totalAmount || 0),
+        actor: t.createdByRole || (t.staffId ? 'Staff' : 'Owner'),
         timestamp: t.createdAt || t.transactionDate,
+        title: '',
+        message: '',
+        body: '',
+        payload: null
       }));
 
-    // 2. Deletions (Ghost Notes)
-    const deletionNotes = notifications.filter(n => n.type === 'deletion');
-    const modifications = notifications.filter(n => n.type === 'modification');
-
-    const deletions = [...deletionNotes]
+    const deleteNotes = notifications
+      .filter(n => n.type === 'deletion')
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
       .slice(0, 10)
       .map(n => ({
@@ -59,9 +59,14 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
         amount: Number(n.amount || 0),
         actor: n.performedBy || 'System',
         timestamp: n.timestamp,
+        title: n.title || '',
+        message: n.message || '',
+        body: n.body || '',
+        payload: n.payload || null
       }));
 
-    const edits = [...modifications]
+    const edits = notifications
+      .filter(n => n.type === 'modification')
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
       .slice(0, 10)
       .map(n => ({
@@ -70,24 +75,26 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
         amount: Number(n.amount || 0),
         actor: n.performedBy || 'System',
         timestamp: n.timestamp,
+        title: n.title || 'Product Updated',
+        message: n.message || '',
+        body: n.body || '',
+        payload: n.payload || null
       }));
 
-    // 3. Merge & Sort
-    const merged = [...sales, ...deletions, ...edits]
+    const merged = [...sales, ...deleteNotes, ...edits]
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
       .slice(0, 10);
 
-    // 4. Format
     return merged.map(item => {
-      const timeDiff = Math.floor((Date.now() - new Date(item.timestamp).getTime()) / 60000); // minutes
+      const timeDiff = Math.floor((Date.now() - new Date(item.timestamp).getTime()) / 60000);
       let timeDisplay = `${timeDiff} mins ago`;
       if (timeDiff >= 60) {
-          const hours = Math.floor(timeDiff / 60);
-          timeDisplay = `${hours} hour${hours > 1 ? 's' : ''} ago`;
-          if (hours >= 24) {
-              const days = Math.floor(hours / 24);
-              timeDisplay = `${days} day${days > 1 ? 's' : ''} ago`;
-          }
+        const hours = Math.floor(timeDiff / 60);
+        timeDisplay = `${hours} hour${hours > 1 ? 's' : ''} ago`;
+        if (hours >= 24) {
+          const days = Math.floor(hours / 24);
+          timeDisplay = `${days} day${days > 1 ? 's' : ''} ago`;
+        }
       }
 
       const amountStr = new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(item.amount);
@@ -95,15 +102,21 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
       let subtext = '';
 
       if (item.type === 'sale') {
-         title = `New Sale • ${amountStr}`;
-         const role = (item.actor || 'Staff').toLowerCase() === 'owner' ? 'Owner' : 'Staff';
-         subtext = `Sold by ${role}`;
+        title = `New Sale • ${amountStr}`;
+        const role = (item.actor || 'Staff').toLowerCase() === 'owner' ? 'Owner' : 'Staff';
+        subtext = `Sold by ${role}`;
       } else if (item.type === 'deletion') {
-         title = `Sale Deleted • ${amountStr}`;
-         subtext = `Deleted by ${item.actor}`;
+        const isTxDelete = Boolean(item.payload?.transactionId);
+        if (isTxDelete) {
+          title = `Sale Deleted • ${amountStr}`;
+          subtext = `Deleted by ${item.actor}`;
+        } else {
+          title = item.title || 'Product Deleted';
+          subtext = item.message || `Deleted by ${item.actor}`;
+        }
       } else {
-         title = `Sale Edited • ${amountStr}`;
-         subtext = `Updated by ${item.actor}`;
+        title = item.title || 'Product Updated';
+        subtext = item.body || item.message || `Updated by ${item.actor}`;
       }
 
       return {
