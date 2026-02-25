@@ -10,6 +10,7 @@ const helmet = require('helmet');
 // 1. Import Services & Plugins FIRST
 const { archiveInactiveBusinesses } = require('./services/archiver');
 const decimal128ToNumberPlugin = require('./services/mongoosePlugin');
+const Product = require('./models/Product'); // Needed for Garbage Collection
 
 // 2. IMPORTANT: Register Plugin GLOBALLY before importing routes
 // This ensures that when the routes load the Models, the plugin is already applied.
@@ -97,6 +98,22 @@ if (require.main === module) {
       // Schedule daily archival task
       setInterval(archiveInactiveBusinesses, 24 * 60 * 60 * 1000);
       archiveInactiveBusinesses(); // Run once on startup
+
+      // Garbage Collector for Tombstones (Every 12 hours)
+      setInterval(async () => {
+        try {
+          const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+          const result = await Product.deleteMany({
+            isDeleted: true,
+            deletedAt: { $lt: thirtyDaysAgo }
+          });
+          if (result.deletedCount > 0) {
+            console.log(`[GC] Permanently purged ${result.deletedCount} old product tombstones.`);
+          }
+        } catch (err) {
+          console.error('[GC] Tombstone cleanup failed:', err);
+        }
+      }, 12 * 60 * 60 * 1000);
     })
     .catch(err => {
       console.error('Mongo connection failed', err);

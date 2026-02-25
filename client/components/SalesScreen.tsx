@@ -26,6 +26,7 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permis
   const categories = useMemo(() => Array.from(new Set(products.map(p => p.category))), [products]);
 
   const filtered = useMemo(() => products.filter(p => {
+    if (p.isDeleted) return false;
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           p.category.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCat = categoryFilter === 'All' || p.category === categoryFilter;
