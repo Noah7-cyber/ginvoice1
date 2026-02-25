@@ -47,19 +47,33 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
       }));
 
     // 2. Deletions (Ghost Notes)
-    const deletions = [...notifications]
+    const deletionNotes = notifications.filter(n => n.type === 'deletion');
+    const modifications = notifications.filter(n => n.type === 'modification');
+
+    const deletions = [...deletionNotes]
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
       .slice(0, 10)
       .map(n => ({
         id: n.id,
         type: 'deletion',
-        amount: n.amount,
-        actor: n.performedBy,
+        amount: Number(n.amount || 0),
+        actor: n.performedBy || 'System',
+        timestamp: n.timestamp,
+      }));
+
+    const edits = [...modifications]
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 10)
+      .map(n => ({
+        id: n.id,
+        type: 'modification',
+        amount: Number(n.amount || 0),
+        actor: n.performedBy || 'System',
         timestamp: n.timestamp,
       }));
 
     // 3. Merge & Sort
-    const merged = [...sales, ...deletions]
+    const merged = [...sales, ...deletions, ...edits]
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
       .slice(0, 10);
 
@@ -84,9 +98,12 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
          title = `New Sale • ${amountStr}`;
          const role = (item.actor || 'Staff').toLowerCase() === 'owner' ? 'Owner' : 'Staff';
          subtext = `Sold by ${role}`;
-      } else {
+      } else if (item.type === 'deletion') {
          title = `Sale Deleted • ${amountStr}`;
          subtext = `Deleted by ${item.actor}`;
+      } else {
+         title = `Sale Edited • ${amountStr}`;
+         subtext = `Updated by ${item.actor}`;
       }
 
       return {
@@ -192,8 +209,8 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
              ) : (
                 recentActivity.map((item) => (
                 <div key={item.id} className="flex gap-3 p-3 bg-white border rounded-xl hover:bg-gray-50 transition-colors group relative">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${item.type === 'deletion' ? 'bg-red-50' : 'bg-green-50'}`}>
-                        {item.type === 'deletion' ? <Trash2 size={18} className="text-red-600" /> : <CheckCircle size={18} className="text-green-600" />}
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${item.type === 'deletion' ? 'bg-red-50' : item.type === 'sale' ? 'bg-green-50' : 'bg-blue-50'}`}>
+                        {item.type === 'deletion' ? <Trash2 size={18} className="text-red-600" /> : item.type === 'sale' ? <CheckCircle size={18} className="text-green-600" /> : <FileText size={18} className="text-blue-600" />}
                     </div>
                     <div className="flex-1">
                         <h4 className="text-sm font-black text-gray-900">{item.title}</h4>

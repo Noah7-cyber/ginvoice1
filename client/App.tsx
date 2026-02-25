@@ -789,47 +789,43 @@ const App: React.FC = () => {
       addToast('Delete requires internet.', 'error');
       return;
     }
-    try {
-      // API delete is handled by HistoryScreen to avoid duplicate delete requests.
-      // This handler is responsible for local state mutation + activity logging only.
 
-      // Create deletion log
+    try {
+      const current = stateRef.current;
+      const tx = current.transactions.find(t => t.id === id);
+      if (!tx) return;
+
       const deleteLog: ActivityLog = {
         id: `LOG-${Date.now()}`,
         type: 'delete',
         title: 'Transaction Deleted',
-        description: `Order #${id} removed by ${state.role}`,
-        actor: state.role,
+        description: `Order #${id} removed by ${current.role}`,
+        actor: current.role,
         timestamp: new Date().toISOString()
       };
 
-      setState(prev => ({
-        ...prev,
-        transactions: prev.transactions.filter(t => t.id !== id),
-        activities: [deleteLog, ...(prev.activities || [])]
-      }));
-
-      // Optional local stock restoration if caller requests it.
-      if (restockItems) {
-         setState(prev => {
-          const tx = prev.transactions.find(t => t.id === id);
-          if (!tx) return prev;
-          const updatedProducts = prev.products.map(p => {
+      const nextProducts = restockItems
+        ? current.products.map(p => {
             const item = tx.items.find(i => i.productId === p.id);
-            // Re-calculate with multiplier
             const mult = item?.multiplier || (item?.selectedUnit ? item.selectedUnit.multiplier : 1);
             return item ? { ...p, currentStock: p.currentStock + (item.quantity * mult) } : p;
-          });
-          return { ...prev, products: updatedProducts };
-        });
-      }
+          })
+        : current.products;
 
-      // Sync to get the "Ghost Note" notification
-      if (navigator.onLine) {
-         refreshData();
-      }
+      const nextState = {
+        ...current,
+        products: nextProducts,
+        transactions: current.transactions.filter(t => t.id !== id),
+        activities: [deleteLog, ...(current.activities || [])]
+      };
 
-    } catch (err) { addToast('Delete failed.', 'error'); }
+      stateRef.current = nextState;
+      setState(nextState);
+
+      await refreshData(nextState);
+    } catch (err) {
+      addToast('Delete failed.', 'error');
+    }
   };
 
   const addToCart = (product: Product, unit?: ProductUnit) => {
@@ -946,7 +942,8 @@ const App: React.FC = () => {
     // Let's enforce it here just in case, but InventoryScreen should do it to be precise.
     const stampedProducts = products.map(p => p.updatedAt ? p : { ...p, updatedAt: new Date().toISOString() });
 
-    const nextState = { ...state, products: stampedProducts };
+    const nextState = { ...stateRef.current, products: stampedProducts };
+    stateRef.current = nextState;
     setState(nextState);
     if (navigator.onLine) {
       pushToBackend({ products: stampedProducts })
