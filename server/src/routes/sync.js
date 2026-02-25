@@ -295,6 +295,18 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
 
         // --- DELETION HANDLING ---
         if (p.isDeleted) {
+           if (existing && !existing.isDeleted) {
+               productNotifications.push({
+                   businessId,
+                   type: 'deletion',
+                   title: 'Product Deleted',
+                   message: `Product deleted: ${p.name || existing.name || productId}`,
+                   body: 'An item was removed from inventory.',
+                   amount: 0,
+                   performedBy: req.userRole === 'owner' ? 'Owner' : 'Staff',
+                   payload: { productId }
+               });
+           }
            return {
              updateOne: {
                filter: { businessId, id: productId },
@@ -341,6 +353,23 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
               amount: increaseAmount,
               performedBy: req.userRole === 'owner' ? 'Owner' : 'Staff',
               payload: { productId, productName: p.name || '', field: 'stock', delta: increaseAmount }
+            });
+          }
+
+          // 3. Stock Reduction Notification (e.g. wastage/shrinkage)
+          const isManualDecrease = !Number.isNaN(stockDelta) ? stockDelta < 0 : (nextStockAbsolute < prevStock);
+          const decreaseAmount = !Number.isNaN(stockDelta) ? Math.abs(stockDelta) : (prevStock - nextStockAbsolute);
+
+          if (isManualDecrease && decreaseAmount > 0 && !p.isDeleted) {
+             productNotifications.push({
+              businessId,
+              type: 'modification',
+              title: 'Stock Reduced',
+              message: `Stock reduced for ${p.name || productId}`,
+              body: `Stock reduced by -${decreaseAmount}`,
+              amount: decreaseAmount,
+              performedBy: req.userRole === 'owner' ? 'Owner' : 'Staff',
+              payload: { productId, productName: p.name || '', field: 'stock', delta: -decreaseAmount }
             });
           }
         }
