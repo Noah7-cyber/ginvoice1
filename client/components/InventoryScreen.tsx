@@ -399,13 +399,24 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     }
   };
 
-  const handleDeleteProduct = async (id: string) => {
+  const handleDeleteProduct = async (id: string, hard = false) => {
     if (safeReadOnly) return;
     if (!isOnline) {
       addToast('Please connect to the internet to perform this action.', 'error');
       return;
     }
-    setItemToDelete(id);
+    if (hard) {
+        if (!confirm('Permanently delete this item? This cannot be undone.')) return;
+        try {
+            await deleteProduct(id, true);
+            onUpdateProducts(products.filter(p => p.id !== id));
+            addToast('Product permanently deleted.', 'success');
+        } catch(err) {
+            addToast('Failed to delete.', 'error');
+        }
+    } else {
+        setItemToDelete(id);
+    }
   };
 
   const confirmDeleteProduct = async () => {
@@ -861,12 +872,21 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                  safeReadOnly={safeReadOnly}
                  isOnline={isOnline}
                  onEdit={(p) => {
+                    // Check if we are restoring
+                    if (p.isDeleted === false && product.isDeleted === true) {
+                        // Restore logic
+                        const restored = products.map(prod => prod.id === p.id ? { ...prod, isDeleted: false, updatedAt: new Date().toISOString() } : prod);
+                        onUpdateProducts(restored);
+                        addToast('Product restored.', 'success');
+                        return;
+                    }
+
                     setEditingProductId(p.id);
                     setNewProduct({ ...p });
                     setIsModalOpen(true);
                     updateUrlForProduct(p.id);
                  }}
-                 onDelete={() => handleDeleteProduct(product.id)}
+                 onDelete={(hard) => handleDeleteProduct(product.id, hard)}
                  addToast={addToast}
               />
             );
@@ -1297,25 +1317,48 @@ const InventoryCard = React.memo(({ product, showHeader, headerId, firstChar, is
 
         {!safeReadOnly && !isSelectionMode && (
         <div className="flex justify-end gap-2 border-t pt-3 mt-1">
-            <button
-                onClick={(e) => {
-                e.stopPropagation();
-                if (!isOnline) {
-                    addToast('Please connect to the internet to perform this action.', 'error');
-                    return;
-                }
-                onEdit(product);
-                }}
-                className="px-3 py-2 bg-gray-100 text-gray-600 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-gray-200"
-            >
-                <Edit3 size={14} /> Edit
-            </button>
-            <button
-                onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                className="px-3 py-2 bg-red-50 text-red-600 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-red-100"
-            >
-                <Trash2 size={14} /> Delete
-            </button>
+            {product.isDeleted ? (
+                <>
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (!isOnline) { addToast('Online required.', 'error'); return; }
+                            onEdit({ ...product, isDeleted: false }); // Reuse onEdit for Restore (sets isDeleted false)
+                        }}
+                        className="px-3 py-2 bg-emerald-50 text-emerald-600 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-emerald-100"
+                    >
+                        <CheckCircle2 size={14} /> Restore
+                    </button>
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onDelete(true); }} // Pass true for Hard Delete
+                        className="px-3 py-2 bg-red-50 text-red-600 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-red-100"
+                    >
+                        <X size={14} /> Delete Forever
+                    </button>
+                </>
+            ) : (
+                <>
+                    <button
+                        onClick={(e) => {
+                        e.stopPropagation();
+                        if (!isOnline) {
+                            addToast('Please connect to the internet to perform this action.', 'error');
+                            return;
+                        }
+                        onEdit(product);
+                        }}
+                        className="px-3 py-2 bg-gray-100 text-gray-600 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-gray-200"
+                    >
+                        <Edit3 size={14} /> Edit
+                    </button>
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onDelete(false); }}
+                        className="px-3 py-2 bg-red-50 text-red-600 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-red-100"
+                    >
+                        <Trash2 size={14} /> Delete
+                    </button>
+                </>
+            )}
         </div>
         )}
     </div>

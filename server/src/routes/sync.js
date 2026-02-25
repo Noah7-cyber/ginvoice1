@@ -567,6 +567,13 @@ router.delete('/products/:id', auth, requireActiveSubscription, async (req, res)
     const { id } = req.params;
     const businessId = String(req.businessId).trim();
 
+    // Hard Delete?
+    if (req.query.hard === 'true') {
+        const result = await Product.deleteOne({ businessId: { $in: [businessId, new ObjectId(businessId)] }, id });
+        if (result.deletedCount === 0) return res.status(404).json({ message: 'Product not found for hard delete' });
+        return res.json({ success: true, id, hard: true });
+    }
+
     // Soft Delete (Tombstone)
     const result = await Product.updateOne(
         { businessId: { $in: [businessId, new ObjectId(businessId)] }, id },
