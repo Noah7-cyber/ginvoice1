@@ -10,6 +10,7 @@ const Expenditure = require('../models/Expenditure');
 const Category = require('../models/Category');
 const Notification = require('../models/Notification');
 const { maybeCreateStockVerificationNotification } = require('../services/stockVerification');
+const { deleteTransactionForBusiness, parseRestockFlag } = require('../services/transactionDeletion');
 
 // Middleware
 const auth = require('../middleware/auth');
@@ -602,36 +603,23 @@ router.delete('/products/:id', auth, requireActiveSubscription, async (req, res)
 router.delete('/transactions/:id', auth, requireActiveSubscription, async (req, res) => {
   try {
     const { id } = req.params;
-    const businessId = new mongoose.Types.ObjectId(req.businessId); // Transactions use ObjectId
+    const shouldRestock = parseRestockFlag(req.query.restock);
 
-    // 1. Find transaction first (needed for both restock and notification)
-    const transaction = await Transaction.findOne({ businessId, id });
-    if (!transaction) return res.status(404).json({ message: 'Transaction not found' });
-
-    // 2. Restock if requested
-    if (req.query.restock === 'true' && transaction.items) {
-        // Restore stock
-        for (const item of transaction.items) {
-             await Product.updateOne(
-                { businessId: req.businessId, id: item.productId },
-                { $inc: { stock: item.quantity } }
-             );
-        }
-    }
-
-    // 3. Create Ghost Note (Notification)
-    const performerName = req.userRole === 'owner' ? 'Owner' : 'Staff';
-    await Notification.create({
-        businessId: req.businessId,
-        message: `Sale to ${transaction.customerName || 'Customer'} deleted`,
-        amount: transaction.totalAmount || 0,
-        performedBy: performerName,
-        type: 'deletion'
+    const result = await deleteTransactionForBusiness({
+      transactionId: id,
+      businessId: req.businessId,
+      userRole: req.userRole,
+      shouldRestock
     });
 
-    // 4. Hard Delete
-    await Transaction.deleteOne({ businessId, id });
-    res.json({ success: true, id });
+    if (result.notFound) return res.status(404).json({ message: 'Transaction not found' });
+
+    res.json({
+      success: true,
+      id,
+      restocked: shouldRestock,
+      canonicalEndpoint: `/api/transactions/${id}`
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Delete failed' });

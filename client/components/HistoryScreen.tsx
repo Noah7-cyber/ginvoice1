@@ -26,7 +26,7 @@ import { Transaction, BusinessProfile, Product, SaleItem, ProductUnit } from '..
 import { CURRENCY } from '../constants';
 import InvoicePreview from './InvoicePreview';
 import { useToast } from './ToastProvider';
-import api, { settleTransaction } from '../services/api';
+import api, { settleTransaction, deleteTransaction } from '../services/api';
 import { formatCurrency } from '../utils/currency';
 
 interface HistoryScreenProps {
@@ -244,8 +244,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
     setIsDeleting(true);
     setDeletingTransactionIds(prev => new Set(prev).add(txId));
     try {
-      // @ts-ignore
-      await api.delete(`/transactions/${txId}?restock=${shouldRestock}`);
+      await deleteTransaction(txId, shouldRestock);
       onDeleteTransaction(txId, shouldRestock);
       const msg = shouldRestock ? 'Transaction deleted and stock restored' : 'Transaction deleted (Stock NOT restored)';
       addToast(msg, 'success');
