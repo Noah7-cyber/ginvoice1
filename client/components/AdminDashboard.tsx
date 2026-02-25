@@ -20,7 +20,8 @@ import {
   updateUserAdmin,
   deleteUserAdmin,
   grantSubscriptionAdmin,
-  clearAdminToken
+  clearAdminToken,
+  purgeDeletedProducts
 } from '../services/api';
 import { useToast } from './ToastProvider';
 
@@ -42,6 +43,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isSubModalOpen, setIsSubModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isPurgeModalOpen, setIsPurgeModalOpen] = useState(false);
   const [subDays, setSubDays] = useState(30);
 
   const fetchData = useCallback(async () => {
@@ -111,6 +113,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     }
   };
 
+  const handlePurgeProducts = async () => {
+    try {
+      const res: any = await purgeDeletedProducts();
+      addToast(`Purged ${res.deletedCount || 0} soft-deleted products`, 'success');
+      setIsPurgeModalOpen(false);
+    } catch (err) {
+      addToast('Purge failed', 'error');
+    }
+  };
+
   const fetchDetails = async (id: string) => {
       try {
           const details = await getAdminUserDetails(id);
@@ -173,6 +185,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             <p className="text-3xl font-black text-gray-900">{stats.dailyActiveUsers}</p>
           </div>
         </div>
+      </div>
+
+      {/* System Actions */}
+      <div className="bg-white p-6 rounded-2xl shadow-sm border mb-8 flex justify-between items-center">
+        <div>
+            <h2 className="text-lg font-bold text-gray-900">System Maintenance</h2>
+            <p className="text-sm text-gray-500">Perform system-wide cleanup tasks.</p>
+        </div>
+        <button
+           onClick={() => setIsPurgeModalOpen(true)}
+           className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 font-bold rounded-lg border border-red-100 hover:bg-red-100 transition-colors"
+        >
+            <Trash2 size={18} />
+            Purge Soft-Deleted Products
+        </button>
       </div>
 
       {/* Users Table */}
@@ -396,6 +423,28 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
               <div className="flex gap-3">
                 <button onClick={() => setIsDeleteModalOpen(false)} className="flex-1 py-3 font-bold text-gray-500 bg-gray-100 rounded-xl hover:bg-gray-200">Cancel</button>
                 <button onClick={handleDeleteUser} className="flex-1 py-3 font-bold text-white bg-red-600 rounded-xl hover:bg-red-700">Yes, Delete</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Purge Modal */}
+      {isPurgeModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
+            <div className="p-6">
+              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center text-red-600 mb-4">
+                <Trash2 size={24} />
+              </div>
+              <h3 className="font-bold text-xl mb-2 text-red-600">Purge Deleted Products?</h3>
+              <p className="text-gray-500 text-sm mb-6">
+                This will <span className="font-bold text-red-600">PERMANENTLY DELETE</span> all products marked as soft-deleted across all businesses. This action cannot be undone.
+              </p>
+
+              <div className="flex gap-3">
+                <button onClick={() => setIsPurgeModalOpen(false)} className="flex-1 py-3 font-bold text-gray-500 bg-gray-100 rounded-xl hover:bg-gray-200">Cancel</button>
+                <button onClick={handlePurgeProducts} className="flex-1 py-3 font-bold text-white bg-red-600 rounded-xl hover:bg-red-700">Yes, Purge All</button>
               </div>
             </div>
           </div>

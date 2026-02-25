@@ -499,7 +499,20 @@ const App: React.FC = () => {
 
   const handleLogout = useCallback(() => {
     clearAuthToken();
+    clearAdminToken();
+    localStorage.clear();
+    sessionStorage.clear();
+
+    if ('caches' in window) {
+      caches.keys().then((names) => {
+        names.forEach((name) => {
+          caches.delete(name);
+        });
+      });
+    }
+
     setState(prev => ({ ...prev, isLoggedIn: false }));
+    window.location.reload();
   }, []);
 
   const handleDeleteAccount = useCallback(() => {

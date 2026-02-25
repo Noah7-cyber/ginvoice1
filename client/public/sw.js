@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ginvoice-v43-sync-fixes';
+const CACHE_NAME = 'ginvoice-v44-analytics-purge';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',

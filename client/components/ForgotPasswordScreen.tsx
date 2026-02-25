@@ -93,7 +93,7 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ onBack, bus
             </button>
           </div>
         ) : (
-          <form onSubmit={step === 'email' ? handleEmailSubmit : handleVerifySubmit} className="space-y-6">
+          <form onSubmit={step === 'email' ? handleEmailSubmit : handleVerifySubmit} className="space-y-6" autoComplete="off">
             <div className="space-y-2">
               <button 
                 type="button"
@@ -140,6 +140,8 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ onBack, bus
                         <input
                           required
                           type="text"
+                          name="verification-code"
+                          autoComplete="one-time-code"
                           placeholder="6-digit Code"
                           className="w-full pl-12 pr-4 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-indigo-600 outline-none font-bold"
                           value={code}
@@ -151,6 +153,7 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ onBack, bus
                         <input
                           required
                           type="password"
+                          autoComplete="new-password"
                           placeholder="New Owner PIN"
                           className="w-full pl-12 pr-4 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-indigo-600 outline-none font-bold"
                           value={newPin}
