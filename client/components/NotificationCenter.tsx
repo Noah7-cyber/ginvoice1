@@ -32,48 +32,69 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'transactions' | 'system'>('transactions');
 
-  // Derive Recent Activity (Hybrid: Sales + Deletions)
+  // Derive Recent Activity (Sales + Delete + Edit Notifications)
   const recentActivity = useMemo(() => {
-    // 1. Sales (Active)
     const sales = [...transactions]
       .sort((a, b) => new Date(b.createdAt || b.transactionDate).getTime() - new Date(a.createdAt || a.transactionDate).getTime())
       .slice(0, 10)
       .map(t => ({
         id: t.id,
         type: 'sale',
-        amount: t.totalAmount,
-        actor: t.createdByRole || (t.staffId ? 'Staff' : 'Owner'), // Heuristic fallback
+        amount: Number(t.totalAmount || 0),
+        actor: t.createdByRole || (t.staffId ? 'Staff' : 'Owner'),
         timestamp: t.createdAt || t.transactionDate,
+        title: '',
+        message: '',
+        body: '',
+        payload: null
       }));
 
-    // 2. Deletions (Ghost Notes)
-    const deletions = [...notifications]
+    const deleteNotes = notifications
+      .filter(n => n.type === 'deletion')
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
       .slice(0, 10)
       .map(n => ({
         id: n.id,
         type: 'deletion',
-        amount: n.amount,
-        actor: n.performedBy,
+        amount: Number(n.amount || 0),
+        actor: n.performedBy || 'System',
         timestamp: n.timestamp,
+        title: n.title || '',
+        message: n.message || '',
+        body: n.body || '',
+        payload: n.payload || null
       }));
 
-    // 3. Merge & Sort
-    const merged = [...sales, ...deletions]
+    const edits = notifications
+      .filter(n => n.type === 'modification')
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 10)
+      .map(n => ({
+        id: n.id,
+        type: 'modification',
+        amount: Number(n.amount || 0),
+        actor: n.performedBy || 'System',
+        timestamp: n.timestamp,
+        title: n.title || 'Product Updated',
+        message: n.message || '',
+        body: n.body || '',
+        payload: n.payload || null
+      }));
+
+    const merged = [...sales, ...deleteNotes, ...edits]
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
       .slice(0, 10);
 
-    // 4. Format
     return merged.map(item => {
-      const timeDiff = Math.floor((Date.now() - new Date(item.timestamp).getTime()) / 60000); // minutes
+      const timeDiff = Math.floor((Date.now() - new Date(item.timestamp).getTime()) / 60000);
       let timeDisplay = `${timeDiff} mins ago`;
       if (timeDiff >= 60) {
-          const hours = Math.floor(timeDiff / 60);
-          timeDisplay = `${hours} hour${hours > 1 ? 's' : ''} ago`;
-          if (hours >= 24) {
-              const days = Math.floor(hours / 24);
-              timeDisplay = `${days} day${days > 1 ? 's' : ''} ago`;
-          }
+        const hours = Math.floor(timeDiff / 60);
+        timeDisplay = `${hours} hour${hours > 1 ? 's' : ''} ago`;
+        if (hours >= 24) {
+          const days = Math.floor(hours / 24);
+          timeDisplay = `${days} day${days > 1 ? 's' : ''} ago`;
+        }
       }
 
       const amountStr = new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(item.amount);
@@ -81,12 +102,21 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
       let subtext = '';
 
       if (item.type === 'sale') {
-         title = `New Sale • ${amountStr}`;
-         const role = (item.actor || 'Staff').toLowerCase() === 'owner' ? 'Owner' : 'Staff';
-         subtext = `Sold by ${role}`;
+        title = `New Sale • ${amountStr}`;
+        const role = (item.actor || 'Staff').toLowerCase() === 'owner' ? 'Owner' : 'Staff';
+        subtext = `Sold by ${role}`;
+      } else if (item.type === 'deletion') {
+        const isTxDelete = Boolean(item.payload?.transactionId);
+        if (isTxDelete) {
+          title = `Sale Deleted • ${amountStr}`;
+          subtext = `Deleted by ${item.actor}`;
+        } else {
+          title = item.title || 'Product Deleted';
+          subtext = item.message || `Deleted by ${item.actor}`;
+        }
       } else {
-         title = `Sale Deleted • ${amountStr}`;
-         subtext = `Deleted by ${item.actor}`;
+        title = item.title || 'Product Updated';
+        subtext = item.body || item.message || `Updated by ${item.actor}`;
       }
 
       return {
@@ -192,8 +222,8 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
              ) : (
                 recentActivity.map((item) => (
                 <div key={item.id} className="flex gap-3 p-3 bg-white border rounded-xl hover:bg-gray-50 transition-colors group relative">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${item.type === 'deletion' ? 'bg-red-50' : 'bg-green-50'}`}>
-                        {item.type === 'deletion' ? <Trash2 size={18} className="text-red-600" /> : <CheckCircle size={18} className="text-green-600" />}
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${item.type === 'deletion' ? 'bg-red-50' : item.type === 'sale' ? 'bg-green-50' : 'bg-blue-50'}`}>
+                        {item.type === 'deletion' ? <Trash2 size={18} className="text-red-600" /> : item.type === 'sale' ? <CheckCircle size={18} className="text-green-600" /> : <FileText size={18} className="text-blue-600" />}
                     </div>
                     <div className="flex-1">
                         <h4 className="text-sm font-black text-gray-900">{item.title}</h4>

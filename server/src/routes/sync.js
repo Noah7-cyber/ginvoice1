@@ -281,6 +281,14 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
             ? new Date(existing.clientUpdatedAt)
             : new Date(0); // Default to absolute past if no client time exists
 
+          // Guard against accidental resurrection of tombstoned products.
+          // A deleted item should only be restored by a strictly newer explicit update.
+          if (existing.isDeleted && !p.isDeleted) {
+            if (Number.isNaN(existingUpdatedAt.getTime()) || incomingUpdatedAt <= existingUpdatedAt) {
+              return null;
+            }
+          }
+
           if (!Number.isNaN(existingUpdatedAt.getTime())) {
               if (typeof stockDelta === 'number' && !Number.isNaN(stockDelta)) {
                   // Delta Logic: Allow older timestamps (merging), but block exact replays
@@ -435,13 +443,33 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
 
       const existingMap = new Map(existingTxs.map(t => [t.id, t]));
 
+      const deletedTxNotifications = incomingIds.length > 0
+        ? await Notification.find({
+            businessId,
+            type: 'deletion',
+            'payload.transactionId': { $in: incomingIds }
+          }).select('payload timestamp').lean()
+        : [];
+
+      const deletedTxMap = new Map(
+        deletedTxNotifications
+          .map(n => [String(n?.payload?.transactionId || '').trim(), n?.timestamp ? new Date(n.timestamp) : null])
+          .filter(([id, ts]) => id && ts && !Number.isNaN(ts.getTime()))
+      );
+
       const txOps = transactions.map((t) => {
         const txId = String(t?.id || '').trim();
         if (!txId) return null;
 
         const existing = existingMap.get(txId);
-        const incomingUpdatedAt = t.updatedAt ? new Date(t.updatedAt) : new Date();
+        const hasClientUpdatedAt = Boolean(t.updatedAt);
+        const incomingUpdatedAt = hasClientUpdatedAt ? new Date(t.updatedAt) : new Date();
         if (Number.isNaN(incomingUpdatedAt.getTime())) {
+          return null;
+        }
+
+        const deletedAt = deletedTxMap.get(txId);
+        if (deletedAt && (!hasClientUpdatedAt || incomingUpdatedAt <= deletedAt)) {
           return null;
         }
 
@@ -575,12 +603,17 @@ router.delete('/products/:id', auth, requireActiveSubscription, async (req, res)
     }
 
     // Soft Delete (Tombstone)
+    const now = new Date();
     const result = await Product.updateOne(
-        { businessId: { $in: [businessId, new ObjectId(businessId)] }, id },
-        { $set: { isDeleted: true, deletedAt: new Date(), updatedAt: new Date() } }
+        { businessId: { $in: [businessId, new ObjectId(businessId)] }, id, isDeleted: { $ne: true } },
+        { $set: { isDeleted: true, deletedAt: now, updatedAt: now, clientUpdatedAt: now } }
     );
 
-    if (!result.matchedCount) return res.status(404).json({ message: 'Product not found' });
+    if (!result.matchedCount) {
+      const alreadyDeleted = await Product.exists({ businessId: { $in: [businessId, new ObjectId(businessId)] }, id, isDeleted: true });
+      if (alreadyDeleted) return res.json({ success: true, id, alreadyDeleted: true });
+      return res.status(404).json({ message: 'Product not found' });
+    }
 
     await Notification.create({
       businessId,
@@ -626,7 +659,8 @@ router.delete('/transactions/:id', auth, requireActiveSubscription, async (req, 
         message: `Sale to ${transaction.customerName || 'Customer'} deleted`,
         amount: transaction.totalAmount || 0,
         performedBy: performerName,
-        type: 'deletion'
+        type: 'deletion',
+        payload: { transactionId: transaction.id }
     });
 
     // 4. Hard Delete

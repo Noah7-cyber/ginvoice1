@@ -262,7 +262,8 @@ router.delete('/:id', auth, requireActiveSubscription, async (req, res) => {
       message: `Sale to ${transaction.customerName || 'Customer'} deleted`,
       amount: transaction.totalAmount || 0,
       performedBy: performerName,
-      type: 'deletion'
+      type: 'deletion',
+      payload: { transactionId: transaction.id }
     });
     await notification.save();
 

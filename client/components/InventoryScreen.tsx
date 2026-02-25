@@ -421,24 +421,27 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
   const confirmDeleteProduct = async () => {
     if (!itemToDelete) return;
-    console.log('Deleting ID:', itemToDelete);
     setIsDeleting(true);
 
-    // Tombstone Strategy: Mark as deleted locally and let Sync handle it
-    // This allows offline deletions to queue up
+    const targetId = itemToDelete;
+    const nowIso = new Date().toISOString();
+    const previousProducts = products;
     const updatedProducts = products.map(p => {
-        if (p.id === itemToDelete) {
-            return { ...p, isDeleted: true, deletedAt: new Date().toISOString() };
-        }
-        return p;
-    }); // Filter out from UI immediately? No, we should mark it.
-    // But InventoryScreen likely filters out deleted items?
-    // Usually UI hides them. We'll modify filteredProducts to hide isDeleted.
+      if (p.id === targetId) {
+        return { ...p, isDeleted: true, deletedAt: nowIso, updatedAt: nowIso };
+      }
+      return p;
+    });
+
+    // Reflect deletion immediately in UI, then confirm with server.
+    onUpdateProducts(updatedProducts);
 
     try {
-      onUpdateProducts(updatedProducts); // Push tombstone
+      await deleteProduct(targetId, false);
       setItemToDelete(null);
+      addToast('Product deleted.', 'success');
     } catch (err) {
+      onUpdateProducts(previousProducts);
       addToast('Delete failed. Please try again.', 'error');
     } finally {
       setIsDeleting(false);
