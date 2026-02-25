@@ -765,11 +765,11 @@ export const initializePayment = async (amount: number, email: string) => {
   }
 };
 
-export const deleteProduct = async (id: string) => {
+export const deleteProduct = async (id: string, hard = false) => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');
 
-  return request(`/api/sync/products/${id}`, {
+  return request(`/api/sync/products/${id}${hard ? '?hard=true' : ''}`, {
     method: 'DELETE',
     headers: {
       Authorization: `Bearer ${token}`

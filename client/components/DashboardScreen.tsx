@@ -90,6 +90,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
 
   const localStats = useMemo(() => {
     const salesTransactions = transactions.filter(tx => !tx.isPreviousDebt);
+    const activeProducts = products.filter(p => !p.isDeleted); // Filter out deleted items
 
     // SAFE MATH IMPLEMENTATION
     const totalRevenue = safeSum(salesTransactions, 'totalAmount');
@@ -98,6 +99,10 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
     // Calculate total profit
     const totalProfit = salesTransactions.reduce((sum, tx) => {
       const txProfit = tx.items.reduce((pSum, item) => {
+        // Use full products list for profit calc (historical), or active?
+        // Ideally historical transactions should still reference deleted products if needed,
+        // but profit calculation logic doesn't strictly depend on active status for past sales.
+        // However, looking up costPrice might fail if product is hard deleted. Soft deleted is fine.
         const product = products.find(p => p.id === item.productId);
         // FIX: If unit cost is 0, use base cost * multiplier
         let cost = 0;
@@ -133,9 +138,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
     const transferSales = salesTransactions.filter(t => ['transfer', 'bank'].includes(t.paymentMethod)).length;
     const posSales = salesTransactions.filter(t => t.paymentMethod === 'pos').length;
 
-    // Calculate Shop Cost & Worth locally
-    const shopCost = products.reduce((sum, p) => sum + safeCalculate(p.costPrice, p.currentStock), 0);
-    const shopWorth = products.reduce((sum, p) => sum + safeCalculate(p.sellingPrice, p.currentStock), 0);
+    // Calculate Shop Cost & Worth locally (Only Active Products)
+    const shopCost = activeProducts.reduce((sum, p) => sum + safeCalculate(p.costPrice, p.currentStock), 0);
+    const shopWorth = activeProducts.reduce((sum, p) => sum + safeCalculate(p.sellingPrice, p.currentStock), 0);
 
     // Calculate Daily Revenue locally
     const today = new Date().toISOString().split('T')[0];

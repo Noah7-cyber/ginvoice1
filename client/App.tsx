@@ -48,7 +48,7 @@ import { loadAdminToken, clearAdminToken } from './services/api';
 
 // Helper to check for active alerts (duplicated from NotificationCenter to avoid circular deps or complex state lifting)
 const hasActiveAlerts = (products: Product[], business: BusinessProfile, lowStockThreshold: number) => {
-   const hasLowStock = products.some(p => p.currentStock < lowStockThreshold);
+   const hasLowStock = products.some(p => !p.isDeleted && p.currentStock < lowStockThreshold);
 
    // Trial Check
    let hasTrialAlert = false;
@@ -323,11 +323,12 @@ const App: React.FC = () => {
 
     if (activeTab === 'inventory') {
       const lowStockThreshold = state.business.settings?.lowStockThreshold || 10;
-      const lowStockCount = state.products.filter(p => p.currentStock < lowStockThreshold).length;
+      const activeProducts = state.products.filter(p => !p.isDeleted);
+      const lowStockCount = activeProducts.filter(p => p.currentStock < lowStockThreshold).length;
       // Estimate value using Cost Price if available, else 0.
-      const totalValue = state.products.reduce((sum, p) => sum + (p.currentStock * (p.costPrice || 0)), 0);
+      const totalValue = activeProducts.reduce((sum, p) => sum + (p.currentStock * (p.costPrice || 0)), 0);
 
-      const outOfStockCount = state.products.filter(p => Number(p.currentStock || 0) <= 0).length;
+      const outOfStockCount = activeProducts.filter(p => Number(p.currentStock || 0) <= 0).length;
       const deadStockCount = state.products.filter((p) => {
         const soldRecently = Number(inventorySalesSnapshot.recentSoldMap.get(p.id) || 0);
         return Number(p.currentStock || 0) > 0 && soldRecently <= 0;
@@ -341,7 +342,7 @@ const App: React.FC = () => {
             outOfStockCount,
             deadStockCount,
             totalValue,
-            lowStockPreview: state.products
+            lowStockPreview: activeProducts
               .filter(p => Number(p.currentStock || 0) < lowStockThreshold)
               .slice(0, 8)
               .map(p => ({ id: p.id, name: p.name, stock: Number(p.currentStock || 0), category: p.category || 'Uncategorized' })),
