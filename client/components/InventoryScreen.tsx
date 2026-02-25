@@ -423,20 +423,25 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     if (!itemToDelete) return;
     setIsDeleting(true);
 
+    const targetId = itemToDelete;
     const nowIso = new Date().toISOString();
+    const previousProducts = products;
     const updatedProducts = products.map(p => {
-      if (p.id === itemToDelete) {
+      if (p.id === targetId) {
         return { ...p, isDeleted: true, deletedAt: nowIso, updatedAt: nowIso };
       }
       return p;
     });
 
+    // Reflect deletion immediately in UI, then confirm with server.
+    onUpdateProducts(updatedProducts);
+
     try {
-      await deleteProduct(itemToDelete, false);
-      onUpdateProducts(updatedProducts);
+      await deleteProduct(targetId, false);
       setItemToDelete(null);
       addToast('Product deleted.', 'success');
     } catch (err) {
+      onUpdateProducts(previousProducts);
       addToast('Delete failed. Please try again.', 'error');
     } finally {
       setIsDeleting(false);
