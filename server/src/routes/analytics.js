@@ -119,7 +119,7 @@ router.get('/', auth, async (req, res) => {
       // FIX: Product schema uses String `businessId` while Transaction uses ObjectId.
       // We must use the string version for Product aggregations.
       Product.aggregate([
-        { $match: { businessId: req.businessId } },
+        { $match: { businessId: req.businessId, isDeleted: { $ne: true } } },
         {
           $group: {
             _id: null,

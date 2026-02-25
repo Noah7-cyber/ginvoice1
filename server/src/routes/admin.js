@@ -172,4 +172,15 @@ router.delete('/users/:id', async (req, res) => {
   }
 });
 
+// DELETE /purge-deleted-products
+router.delete('/purge-deleted-products', async (req, res) => {
+  try {
+    const result = await Product.deleteMany({ isDeleted: true });
+    res.json({ message: 'Purge successful', deletedCount: result.deletedCount });
+  } catch (err) {
+    console.error('Purge Error:', err);
+    res.status(500).json({ message: 'Failed to purge products' });
+  }
+});
+
 module.exports = router;

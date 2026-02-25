@@ -534,6 +534,15 @@ export const grantSubscriptionAdmin = async (id: string, days: number) => {
   });
 };
 
+export const purgeDeletedProducts = async () => {
+  const token = loadAdminToken();
+  if (!token) throw new Error('Missing admin token');
+  return request('/api/admin/purge-deleted-products', {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+};
+
 export const cancelSubscription = async (reason: string) => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');
