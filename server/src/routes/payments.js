@@ -5,7 +5,7 @@ const Business = require('../models/Business');
 const PaymentEvent = require('../models/PaymentEvent');
 const PaymentAttempt = require('../models/PaymentAttempt');
 const auth = require('../middleware/auth');
-const { sendMail } = require('../services/mail');
+const { sendSystemEmail } = require('../services/mail');
 
 const router = express.Router();
 
@@ -396,7 +396,7 @@ router.post('/webhook', async (req, res) => {
                  await markAttemptStatus(reference, 'processed');
 
                  if (business.email) {
-                    sendMail({
+                    sendSystemEmail({
                         to: business.email,
                         subject: 'Ginvoice Subscription Active',
                         text: `Your subscription is active until ${business.subscriptionExpiresAt.toDateString()}.`,

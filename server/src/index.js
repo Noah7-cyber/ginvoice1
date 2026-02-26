@@ -79,6 +79,12 @@ const port = process.env.PORT || 4000;
 const mongoUri = process.env.MONGODB_URI || '';
 
 if (require.main === module) {
+  // Security Check: Hard fail if JWT_SECRET is missing in production
+  if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
+    console.error('FATAL: JWT_SECRET is missing in production environment.');
+    process.exit(1);
+  }
+
   // Register the plugin globally for all schemas
   mongoose.plugin(decimal128ToNumberPlugin);
 
