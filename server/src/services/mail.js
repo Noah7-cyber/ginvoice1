@@ -40,7 +40,7 @@ const createTransport = (user, pass) => {
 const systemTransport = createTransport(process.env.SYSTEM_MAIL_USER, process.env.SYSTEM_MAIL_PASS);
 const supportTransport = createTransport(process.env.SUPPORT_MAIL_USER, process.env.SUPPORT_MAIL_PASS);
 
-const sendSystemEmail = async ({ to, subject, html, text }) => {
+const sendSystemEmail = async ({ to, subject, html, text, attachments }) => {
   if (!systemTransport) {
     console.warn('System Email skipped: Config missing');
     return { sent: false, reason: 'missing_config' };
@@ -52,7 +52,8 @@ const sendSystemEmail = async ({ to, subject, html, text }) => {
       to,
       subject,
       text,
-      html
+      html,
+      attachments
     });
     return { sent: true };
   } catch (err) {

@@ -11,7 +11,12 @@ import {
   Check,
   AlertTriangle,
   Loader2,
-  LogOut
+  LogOut,
+  Mail,
+  MoreVertical,
+  Paperclip,
+  Send,
+  ChevronDown
 } from 'lucide-react';
 import {
   getAdminStats,
@@ -20,6 +25,7 @@ import {
   updateUserAdmin,
   deleteUserAdmin,
   grantSubscriptionAdmin,
+  sendUserEmailAdmin,
   clearAdminToken,
   purgeDeletedProducts
 } from '../services/api';
@@ -45,6 +51,65 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isPurgeModalOpen, setIsPurgeModalOpen] = useState(false);
   const [subDays, setSubDays] = useState(30);
+
+  // Email Modal State
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailMessage, setEmailMessage] = useState('');
+  const [emailFiles, setEmailFiles] = useState<File[]>([]);
+  const [isSending, setIsSending] = useState(false);
+  const [activeActionId, setActiveActionId] = useState<string | null>(null);
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (activeActionId && !target.closest('.action-menu-trigger') && !target.closest('.action-menu-dropdown')) {
+        setActiveActionId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [activeActionId]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files) {
+          const files = Array.from(e.target.files);
+          const totalSize = files.reduce((acc, file) => acc + file.size, 0);
+
+          if (totalSize > 20 * 1024 * 1024) { // 20MB
+              addToast('Total file size cannot exceed 20MB', 'error');
+              return;
+          }
+          setEmailFiles(files);
+      }
+  };
+
+  const handleSendEmail = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!selectedUser) return;
+
+      setIsSending(true);
+      try {
+          const formData = new FormData();
+          formData.append('subject', emailSubject);
+          formData.append('message', emailMessage);
+          emailFiles.forEach(file => {
+              formData.append('attachments', file);
+          });
+
+          await sendUserEmailAdmin(selectedUser._id, formData);
+          addToast('Email sent successfully', 'success');
+          setIsEmailModalOpen(false);
+          setEmailSubject('');
+          setEmailMessage('');
+          setEmailFiles([]);
+      } catch (err: any) {
+          addToast(err.message || 'Failed to send email', 'error');
+      } finally {
+          setIsSending(false);
+      }
+  };
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -256,35 +321,67 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                   <td className="px-6 py-4 text-gray-500">
                     {user.lastActiveAt ? new Date(user.lastActiveAt).toLocaleDateString() : 'Never'}
                   </td>
-                  <td className="px-6 py-4 text-right">
+                  <td className="px-6 py-4 text-right relative">
                     <button
-                      onClick={() => {
-                        fetchDetails(user._id).then(() => {
-                           setIsEditModalOpen(true);
-                        });
-                      }}
-                      className="text-blue-600 hover:text-blue-800 font-bold mr-3"
+                      onClick={() => setActiveActionId(activeActionId === user._id ? null : user._id)}
+                      className="action-menu-trigger p-2 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600 transition-colors"
                     >
-                      View
+                      <MoreVertical size={20} />
                     </button>
-                    <button
-                      onClick={() => {
-                         setSelectedUser(user);
-                         setIsSubModalOpen(true);
-                      }}
-                      className="text-emerald-600 hover:text-emerald-800 font-bold mr-3"
-                    >
-                      Extend
-                    </button>
-                    <button
-                      onClick={() => {
-                        setSelectedUser(user);
-                        setIsDeleteModalOpen(true);
-                      }}
-                      className="text-red-500 hover:text-red-700 font-bold"
-                    >
-                      Delete
-                    </button>
+
+                    {activeActionId === user._id && (
+                      <div className="action-menu-dropdown absolute right-0 top-12 w-48 bg-white rounded-xl shadow-xl border z-20 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                        <button
+                           onClick={() => {
+                             fetchDetails(user._id).then(() => {
+                                setIsEditModalOpen(true);
+                                setActiveActionId(null);
+                             });
+                           }}
+                           className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center gap-3 text-sm font-bold text-gray-700 transition-colors"
+                        >
+                           <Edit size={16} className="text-blue-500" />
+                           View Details
+                        </button>
+                        <button
+                           onClick={() => {
+                              setSelectedUser(user);
+                              setIsSubModalOpen(true);
+                              setActiveActionId(null);
+                           }}
+                           className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center gap-3 text-sm font-bold text-gray-700 transition-colors"
+                        >
+                           <Calendar size={16} className="text-emerald-500" />
+                           Extend Sub
+                        </button>
+                        <button
+                           onClick={() => {
+                              setSelectedUser(user);
+                              setEmailSubject('');
+                              setEmailMessage('');
+                              setEmailFiles([]);
+                              setIsEmailModalOpen(true);
+                              setActiveActionId(null);
+                           }}
+                           className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center gap-3 text-sm font-bold text-gray-700 transition-colors"
+                        >
+                           <Mail size={16} className="text-indigo-500" />
+                           Send Email
+                        </button>
+                        <div className="border-t my-1"></div>
+                        <button
+                           onClick={() => {
+                             setSelectedUser(user);
+                             setIsDeleteModalOpen(true);
+                             setActiveActionId(null);
+                           }}
+                           className="w-full text-left px-4 py-3 hover:bg-red-50 flex items-center gap-3 text-sm font-bold text-red-600 transition-colors"
+                        >
+                           <Trash2 size={16} />
+                           Delete User
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -447,6 +544,97 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                 <button onClick={handlePurgeProducts} className="flex-1 py-3 font-bold text-white bg-red-600 rounded-xl hover:bg-red-700">Yes, Purge All</button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Email Modal */}
+      {isEmailModalOpen && selectedUser && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden">
+            <div className="p-6 border-b flex justify-between items-center bg-gray-50">
+              <h3 className="font-bold text-lg flex items-center gap-2">
+                <Mail size={20} className="text-indigo-600" />
+                Send Email
+              </h3>
+              <button onClick={() => setIsEmailModalOpen(false)}><X size={20} className="text-gray-400 hover:text-gray-600" /></button>
+            </div>
+
+            <form onSubmit={handleSendEmail} className="p-6 space-y-4">
+              <div className="p-4 bg-indigo-50 rounded-xl mb-4 border border-indigo-100">
+                 <p className="text-xs font-bold text-indigo-400 uppercase tracking-wide">Recipient</p>
+                 <p className="text-sm font-bold text-indigo-900">{selectedUser.name}</p>
+                 <p className="text-xs text-indigo-600">{selectedUser.email}</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Subject</label>
+                <input
+                  type="text"
+                  required
+                  value={emailSubject}
+                  onChange={e => setEmailSubject(e.target.value)}
+                  className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                  placeholder="e.g. Important Update for your Store"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Message</label>
+                <textarea
+                  required
+                  rows={6}
+                  value={emailMessage}
+                  onChange={e => setEmailMessage(e.target.value)}
+                  className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition-all resize-none text-sm leading-relaxed"
+                  placeholder="Type your message here..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">Attachments <span className="text-gray-400 font-normal">(Max 20MB)</span></label>
+                <div className="flex items-center gap-4">
+                    <label className="cursor-pointer flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-sm font-bold transition-colors">
+                        <Paperclip size={16} />
+                        Choose Files
+                        <input type="file" multiple className="hidden" onChange={handleFileChange} />
+                    </label>
+                    <span className="text-xs text-gray-400 font-medium">
+                        {emailFiles.length > 0 ? `${emailFiles.length} file(s) selected` : 'No files selected'}
+                    </span>
+                </div>
+
+                {emailFiles.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                        {emailFiles.map((file, idx) => (
+                            <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg text-xs border">
+                                <span className="truncate max-w-[200px] font-medium text-gray-700">{file.name}</span>
+                                <span className="text-gray-400">{(file.size / 1024 / 1024).toFixed(2)} MB</span>
+                            </div>
+                        ))}
+                    </div>
+                )}
+              </div>
+
+              <div className="pt-4 flex justify-end gap-3 border-t mt-4">
+                <button
+                  type="button"
+                  disabled={isSending}
+                  onClick={() => setIsEmailModalOpen(false)}
+                  className="px-4 py-2 text-gray-500 font-bold hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                    Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSending}
+                  className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  {isSending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                  {isSending ? 'Sending...' : 'Send Email'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

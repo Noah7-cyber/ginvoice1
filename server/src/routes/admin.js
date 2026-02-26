@@ -6,6 +6,14 @@ const Product = require('../models/Product');
 const Transaction = require('../models/Transaction');
 const Expenditure = require('../models/Expenditure');
 const adminAuth = require('../middleware/adminAuth');
+const multer = require('multer');
+const { sendSystemEmail } = require('../services/mail');
+const { buildCustomAdminEmail } = require('../services/emailTemplates');
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 } // 25MB
+});
 
 // POST /login (Admin Only)
 router.post('/login', (req, res) => {
@@ -145,6 +153,42 @@ router.post('/users/:id/grant-subscription', async (req, res) => {
     res.json({ message: 'Subscription granted', subscriptionExpiresAt: newExpiry });
   } catch (err) {
     res.status(500).json({ message: 'Failed to grant subscription' });
+  }
+});
+
+// POST /users/:id/send-email
+router.post('/users/:id/send-email', upload.array('attachments', 5), async (req, res) => {
+  try {
+    const { subject, message } = req.body;
+    const business = await Business.findById(req.params.id);
+
+    if (!business || !business.email) {
+      return res.status(404).json({ message: 'User or email not found' });
+    }
+
+    const attachments = (req.files || []).map(file => ({
+      filename: file.originalname,
+      content: file.buffer,
+      contentType: file.mimetype
+    }));
+
+    const html = buildCustomAdminEmail({ subject, message });
+
+    const result = await sendSystemEmail({
+      to: business.email,
+      subject,
+      html,
+      attachments
+    });
+
+    if (result.sent) {
+      res.json({ message: 'Email sent successfully' });
+    } else {
+      res.status(500).json({ message: 'Failed to send email' });
+    }
+  } catch (err) {
+    console.error('Send Email Error:', err);
+    res.status(500).json({ message: 'Failed to send email' });
   }
 });
 
