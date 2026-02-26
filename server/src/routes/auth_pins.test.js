@@ -1,16 +1,18 @@
 const request = require('supertest');
 const mongoose = require('mongoose');
 const { MongoMemoryServer } = require('mongodb-memory-server');
-const app = require('../index'); // Corrected path
-const Business = require('../models/Business');
 
 // Mock env variables for testing if they are not set
 process.env.JWT_SECRET = 'test_secret';
-process.env.SMTP_HOST = 'smtp.test.com'; // Fake
-process.env.SMTP_PORT = '587';
-process.env.SMTP_USER = 'user';
-process.env.SMTP_PASS = 'pass';
-process.env.MAIL_FROM = 'noreply@ginvoice.com';
+
+// Mock mail service to prevent network calls
+jest.mock('../services/mail', () => ({
+  sendSystemEmail: jest.fn().mockResolvedValue({ sent: true }),
+  sendSupportEmail: jest.fn().mockResolvedValue({ sent: true })
+}));
+
+const app = require('../index'); // Corrected path
+const Business = require('../models/Business');
 
 let mongoServer;
 

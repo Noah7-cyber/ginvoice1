@@ -14,7 +14,7 @@ const { sendTikTokEvent } = require('../services/tiktok');
 const router = express.Router();
 
 const buildToken = (businessId, role, credentialsVersion) => {
-  return jwt.sign({ businessId, role, credentialsVersion }, process.env.JWT_SECRET || '', { expiresIn: '7d' });
+  return jwt.sign({ businessId, role, credentialsVersion }, process.env.JWT_SECRET, { expiresIn: '7d' });
 };
 
 const sanitizeBusiness = (business) => ({

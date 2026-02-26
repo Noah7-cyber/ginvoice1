@@ -16,7 +16,7 @@ router.post('/login', (req, res) => {
         // Sign token strictly for admin role
         const token = jwt.sign(
             { role: 'superadmin' },
-            process.env.JWT_SECRET || '',
+            process.env.JWT_SECRET,
             { expiresIn: '12h' }
         );
         return res.json({ token });
