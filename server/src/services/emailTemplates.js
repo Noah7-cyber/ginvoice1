@@ -86,8 +86,17 @@ const buildVerificationEmail = ({ verificationUrl, businessName, code }) => {
   return baseTemplate(content, 'Verify Your Email');
 };
 
+const buildCustomAdminEmail = ({ subject, message }) => {
+  const content = `
+    <h2 style="margin-top: 0; color: #111827;">${subject}</h2>
+    <div style="white-space: pre-wrap; font-family: inherit; color: #374151;">${message}</div>
+  `;
+  return baseTemplate(content, subject);
+};
+
 module.exports = {
   buildWelcomeEmail,
   buildRecoveryEmail,
-  buildVerificationEmail
+  buildVerificationEmail,
+  buildCustomAdminEmail
 };

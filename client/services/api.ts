@@ -534,6 +534,24 @@ export const grantSubscriptionAdmin = async (id: string, days: number) => {
   });
 };
 
+export const sendUserEmailAdmin = async (id: string, formData: FormData) => {
+  const token = loadAdminToken();
+  if (!token) throw new Error('Missing admin token');
+
+  const res = await fetch(buildUrl(`/api/admin/users/${id}/send-email`), {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData
+  });
+
+  if (!res.ok) {
+     const data = await res.json().catch(() => ({}));
+     throw new Error(data.message || 'Failed to send email');
+  }
+
+  return res.json();
+};
+
 export const purgeDeletedProducts = async () => {
   const token = loadAdminToken();
   if (!token) throw new Error('Missing admin token');
