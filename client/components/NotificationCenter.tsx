@@ -83,6 +83,18 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
 
     const merged = [...sales, ...deleteNotes, ...edits]
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .filter((item, index, self) => {
+        // Filter out modifications that happen very close to a sale (likely stock deduction)
+        if (item.type === 'modification') {
+          const itemTime = new Date(item.timestamp).getTime();
+          const nearbySale = self.find(other =>
+            other.type === 'sale' &&
+            Math.abs(new Date(other.timestamp).getTime() - itemTime) < 5000 // 5 second window
+          );
+          if (nearbySale) return false;
+        }
+        return true;
+      })
       .slice(0, 10);
 
     return merged.map(item => {
