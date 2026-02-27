@@ -49,6 +49,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   const [verifyIndex, setVerifyIndex] = useState(0);
   const [countedQty, setCountedQty] = useState<number | ''>('');
   const [verifyNotes, setVerifyNotes] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
 
   // Category Management
   const [categories, setCategories] = useState<Category[]>([]);
@@ -475,6 +476,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     const current = verificationQueue[verifyIndex];
     if (!current || countedQty === '') return;
 
+    setIsVerifying(true);
     try {
       await verifyStockItem({
         productId: current.productId,
@@ -507,6 +509,8 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
       } else {
         addToast('Failed to save verification.', 'error');
       }
+    } finally {
+        setIsVerifying(false);
     }
   };
 
@@ -593,13 +597,24 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
           {!safeReadOnly && (
             <button 
               onClick={handleAddNew}
-              className="bg-primary text-white px-6 py-3 rounded-xl flex items-center gap-2 font-bold shadow-lg shadow-indigo-100 hover:opacity-90 transition-all active:scale-95"
+              className="hidden md:flex bg-primary text-white px-6 py-3 rounded-xl items-center gap-2 font-bold shadow-lg shadow-indigo-100 hover:opacity-90 transition-all active:scale-95"
             >
               <Plus size={20} /> <span className="hidden md:inline">Add New</span>
             </button>
           )}
         </div>
       </div>
+
+      {/* Mobile Floating Action Button */}
+      {!safeReadOnly && (
+        <button
+          onClick={handleAddNew}
+          className="md:hidden fixed bottom-24 right-4 z-50 p-4 bg-primary text-white rounded-full shadow-xl hover:bg-indigo-700 active:scale-95 transition-all"
+          aria-label="Add New Product"
+        >
+          <Plus size={24} />
+        </button>
+      )}
 
       {/* Filters */}
       <div className="bg-white p-4 rounded-2xl shadow-sm border mb-6 flex flex-col gap-4 shrink-0 sticky top-0 z-20">
@@ -1243,6 +1258,9 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
             {verificationQueue[verifyIndex] && (
               <div className="space-y-2">
                 <p className="font-semibold text-gray-900">{verificationQueue[verifyIndex].name}</p>
+                <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-2">
+                   {verificationQueue[verifyIndex].category || products.find(p => p.id === verificationQueue[verifyIndex].productId)?.category || 'Uncategorized'}
+                </p>
                 <p className="text-sm text-gray-600">Expected: {verificationQueue[verifyIndex].expectedQty}</p>
                 <input type="number" className="w-full px-3 py-2 border rounded-lg" value={countedQty} onChange={(e) => setCountedQty(e.target.value ? Number(e.target.value) : '')} placeholder="Counted quantity" />
                 <textarea className="w-full px-3 py-2 border rounded-lg" value={verifyNotes} onChange={(e) => setVerifyNotes(e.target.value)} placeholder="Notes (optional)" />
@@ -1250,10 +1268,12 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
               </div>
             )}
             <div className="flex gap-2">
-              <button onClick={handleVerifySkip} className="flex-1 py-2 rounded-lg border font-semibold">Skip</button>
-              <button onClick={handleVerifySaveNext} className="flex-1 py-2 rounded-lg bg-primary text-white font-semibold">Save & Next</button>
+              <button onClick={handleVerifySkip} disabled={isVerifying} className="flex-1 py-2 rounded-lg border font-semibold disabled:opacity-50">Skip</button>
+              <button onClick={handleVerifySaveNext} disabled={isVerifying} className="flex-1 py-2 rounded-lg bg-primary text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-50">
+                  {isVerifying && <Loader2 className="animate-spin" size={16} />} Save & Next
+              </button>
             </div>
-            <button onClick={() => setIsVerifyOpen(false)} className="w-full text-sm text-gray-500">Count later</button>
+            <button onClick={() => setIsVerifyOpen(false)} disabled={isVerifying} className="w-full text-sm text-gray-500 disabled:opacity-50">Count later</button>
           </div>
         </div>
       )}

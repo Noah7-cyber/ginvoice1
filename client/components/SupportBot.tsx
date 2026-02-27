@@ -129,21 +129,23 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate, uiCo
   ];
 
   const ChatWindow = (
-    <div className={`flex flex-col h-[500px] max-h-[60vh] md:max-h-[80vh] w-full max-w-md bg-white rounded-2xl overflow-hidden shadow-2xl animate-in slide-in-from-bottom duration-300 border border-gray-100`}>
+    <div className={`flex flex-col h-full max-h-none w-full max-w-none rounded-none inset-0 fixed md:relative md:inset-auto md:h-auto md:max-h-[80vh] md:w-full md:max-w-md md:rounded-2xl bg-white overflow-hidden shadow-2xl animate-in slide-in-from-bottom duration-300 border border-gray-100 z-[99999]`}>
         {/* Header */}
-        <div className="bg-gradient-to-r from-indigo-600 to-violet-600 p-4 text-white flex justify-between items-center shrink-0">
+        <div className="bg-indigo-600 p-4 text-white flex justify-between items-center shrink-0">
             <div className="flex items-center gap-3">
-                <img src={BOT_BRAND_IMAGE} alt="gBot avatar" className="w-9 h-9 rounded-full border border-white/40 bg-white/15 p-1.5 shadow-sm" />
+                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-sm border border-white/30">
+                     <Bot size={20} className="text-white" />
+                </div>
                 <div>
-                    <h3 className="font-bold text-sm">gBot Assistant</h3>
+                    <h3 className="font-bold text-base">gBot Assistant</h3>
                     <div className="flex items-center gap-1.5 opacity-80">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
                         <span className="text-[10px] font-medium uppercase tracking-wide">Online</span>
                     </div>
                 </div>
             </div>
-            <button onClick={() => setOpen(false)} className="p-4 md:p-2 -mr-2 hover:bg-white/10 rounded-full transition-colors">
-                <X size={20} />
+            <button onClick={() => setOpen(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                <X size={24} />
             </button>
         </div>
 
@@ -178,7 +180,7 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate, uiCo
         </div>
 
         {/* Input Area */}
-        <div className="p-3 bg-white border-t">
+        <div className="p-3 bg-white border-t md:rounded-b-2xl">
             {/* Quick Chips if empty input */}
             {messages.length < 3 && !inputText && (
                 <div className="flex overflow-x-auto gap-2 mb-3 pb-1 no-scrollbar">
@@ -248,8 +250,8 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate, uiCo
   }
 
   return (
-    <div className="fixed inset-0 z-[10000] flex items-end justify-end p-4 md:p-6 pointer-events-none">
-      <div className="pointer-events-auto w-full max-w-md">
+    <div className="fixed inset-0 z-[99999] flex items-end justify-end md:p-6 pointer-events-none">
+      <div className="pointer-events-auto w-full md:max-w-md h-full md:h-auto">
         {ChatWindow}
       </div>
     </div>

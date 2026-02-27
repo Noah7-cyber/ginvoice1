@@ -20,7 +20,8 @@ import {
   Loader2,
   Plus,
   Minus,
-  ShoppingBag
+  ShoppingBag,
+  Share2
 } from 'lucide-react';
 import { Transaction, BusinessProfile, Product, SaleItem, ProductUnit } from '../types';
 import { CURRENCY } from '../constants';
@@ -439,6 +440,46 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
     setViewMode('debtors');
   };
 
+  const handleShareStatement = async (debtorName: string, debtorTotalOwed: number, transactions: Transaction[]) => {
+      const unpaidInvoices = transactions
+          .filter(t => toMoneyNumber(t.balance) > 0.01)
+          .sort((a, b) => new Date(a.transactionDate).getTime() - new Date(b.transactionDate).getTime());
+
+      if (unpaidInvoices.length === 0) {
+          addToast('No unpaid invoices to share.', 'info');
+          return;
+      }
+
+      let text = `*Customer:* ${debtorName}\n`;
+      text += `*Date:* ${new Date().toLocaleDateString()}\n\n`;
+      text += `Here is your outstanding balance statement:\n\n`;
+
+      unpaidInvoices.forEach(tx => {
+          text += `📅 ${new Date(tx.transactionDate).toLocaleDateString()} - *${CURRENCY}${toMoneyNumber(tx.balance).toLocaleString()}*\n`;
+      });
+
+      text += `\n*TOTAL DUE: ${CURRENCY}${debtorTotalOwed.toLocaleString()}*\n\n`;
+      text += `Please kindly arrange payment. Thank you!`;
+
+      if (navigator.share) {
+          try {
+              await navigator.share({
+                  title: `Statement for ${debtorName}`,
+                  text: text
+              });
+          } catch (err) {
+              console.error('Error sharing:', err);
+          }
+      } else {
+          try {
+              await navigator.clipboard.writeText(text);
+              addToast('Statement copied to clipboard!', 'success');
+          } catch (err) {
+              addToast('Failed to copy statement.', 'error');
+          }
+      }
+  };
+
   const handleAutoSettle = async (customerName: string, amountPaid: number, customerTransactions: Transaction[]) => {
       if (!amountPaid || amountPaid <= 0) return;
 
@@ -751,13 +792,22 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
+                        handleShareStatement(debtor.name, debtor.totalOwed, debtor.transactions);
+                      }}
+                      className="ml-auto px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-sm font-bold rounded-lg shadow-sm hover:bg-gray-50 active:scale-95 flex items-center gap-2"
+                    >
+                      <Share2 size={16} /> <span className="hidden sm:inline">Share Statement</span>
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setSettleModalData({
                            name: debtor.name,
                            transactions: debtor.transactions,
                            totalDebt: debtor.totalOwed
                         });
                       }}
-                      className="ml-auto px-3 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-lg shadow-sm hover:bg-indigo-700 active:scale-95 flex items-center gap-2"
+                      className="px-3 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-lg shadow-sm hover:bg-indigo-700 active:scale-95 flex items-center gap-2"
                     >
                       <span>Auto Pay</span>
                     </button>
