@@ -117,7 +117,7 @@ const App: React.FC = () => {
   const [showWelcome, setShowWelcome] = useState<boolean>(!isStandalone);
   const [loginMode, setLoginMode] = useState(false);
 
-  const { status: wakeStatus } = useServerWakeup();
+  const { status: wakeStatus, showWakeupUI } = useServerWakeup();
   const wakeToastShownRef = useRef(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const isTimeBlocked = useTimeDrift();
@@ -160,13 +160,20 @@ const App: React.FC = () => {
   }, [addToast]);
 
   useEffect(() => {
+    if (!showWakeupUI) return;
     if (wakeStatus === 'waking' && !wakeToastShownRef.current) {
-      addToast('Waking up cloud sync server...', 'info');
+      addToast('Checking connection...', 'info');
       wakeToastShownRef.current = true;
     } else if (wakeStatus !== 'waking') {
       wakeToastShownRef.current = false;
     }
-  }, [wakeStatus, addToast]);
+  }, [wakeStatus, addToast, showWakeupUI]);
+
+  useEffect(() => {
+    const onUpdateReady = () => addToast('New version ready. Reloading now…', 'info');
+    window.addEventListener('app:update-ready', onUpdateReady);
+    return () => window.removeEventListener('app:update-ready', onUpdateReady);
+  }, [addToast]);
 
   // Global Auth/Permission Handler
   useEffect(() => {
@@ -487,7 +494,7 @@ const App: React.FC = () => {
         });
       } catch (err) {
         console.error(`[Safe Sync] Pre-sync push failed (${source})`, err);
-        addToast('Backup pending: local data kept safely. We will retry sync shortly.', 'warning');
+        addToast('Sync failed for now. Local data is safe; retrying shortly.', 'warning');
         return;
       }
 
@@ -559,12 +566,18 @@ const App: React.FC = () => {
   useEffect(() => {
     const handleOnline = async () => {
       setIsOnline(true);
+      if (!wasOnlineRef.current) {
+        addToast('Back online. Syncing latest changes...', 'info');
+      }
       if (!wasOnlineRef.current && state.isLoggedIn) {
         await safeSyncWithServer('online-event');
       }
       await fetchEntitlements();
     };
-    const handleOffline = () => setIsOnline(false);
+    const handleOffline = () => {
+      setIsOnline(false);
+      addToast('You are offline. Sales continue locally; sync resumes when connected.', 'warning');
+    };
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
@@ -572,7 +585,7 @@ const App: React.FC = () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [state.isLoggedIn, fetchEntitlements, safeSyncWithServer]);
+  }, [state.isLoggedIn, fetchEntitlements, safeSyncWithServer, addToast]);
 
   useEffect(() => {
     wasOnlineRef.current = isOnline;
@@ -646,6 +659,11 @@ const App: React.FC = () => {
       :root { --primary: ${state.business.theme.primaryColor}; --primary-bg: ${state.business.theme.primaryColor}15; }
       body { font-family: ${state.business.theme.fontFamily}; }
     `;
+
+    const themeMeta = document.getElementById('theme-color-meta') as HTMLMetaElement | null;
+    if (themeMeta) {
+      themeMeta.content = state.business.theme.primaryColor;
+    }
   }, [state.business.theme]);
 
   useEffect(() => { saveState(state); }, [state]);

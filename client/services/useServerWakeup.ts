@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 export type WakeStatus = 'idle' | 'waking' | 'ready' | 'failed';
 
 const API_BASE = (import.meta as any).env?.VITE_API_URL || '';
+const SHOW_WAKEUP_UI = String((import.meta as any).env?.VITE_SHOW_WAKEUP_UI || '').toLowerCase() === 'true';
 
 const buildUrl = (path: string) => {
   if (!API_BASE) return path;
@@ -82,5 +83,5 @@ export default function useServerWakeup() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { status };
+  return { status, showWakeupUI: SHOW_WAKEUP_UI };
 }

@@ -24,7 +24,14 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (!refreshing) {
       refreshing = true;
-      window.location.reload();
+      const key = 'ginvoice_last_forced_reload_at';
+      const now = Date.now();
+      const lastReloadAt = Number(localStorage.getItem(key) || '0');
+      if (now - lastReloadAt < 60_000) return;
+
+      localStorage.setItem(key, String(now));
+      window.dispatchEvent(new Event('app:update-ready'));
+      window.setTimeout(() => window.location.reload(), 700);
     }
   });
 

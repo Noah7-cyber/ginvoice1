@@ -7,3 +7,42 @@
     @apply text-gray-400 font-normal opacity-100;
   }
 }
+
+@layer utilities {
+  .bg-indigo-50,
+  .bg-blue-50,
+  .bg-indigo-100,
+  .bg-blue-100 {
+    background-color: var(--primary-bg) !important;
+  }
+
+  .text-indigo-400,
+  .text-indigo-500,
+  .text-indigo-600,
+  .text-indigo-700,
+  .text-blue-600,
+  .text-blue-700 {
+    color: var(--primary) !important;
+  }
+
+  .border-indigo-100,
+  .border-indigo-200,
+  .border-indigo-500,
+  .border-blue-200 {
+    border-color: color-mix(in srgb, var(--primary) 35%, white) !important;
+  }
+
+  .bg-indigo-600,
+  .bg-indigo-700,
+  .bg-blue-600,
+  .bg-blue-700 {
+    background-color: var(--primary) !important;
+  }
+
+  .hover\:bg-indigo-100:hover,
+  .hover\:bg-indigo-700:hover,
+  .hover\:bg-blue-100:hover,
+  .hover\:bg-blue-700:hover {
+    background-color: color-mix(in srgb, var(--primary) 16%, white) !important;
+  }
+}
