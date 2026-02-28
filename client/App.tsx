@@ -1331,7 +1331,8 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      {!(activeTab === 'expenditure' && isMobileView) && (
+      {/* Hide gBot on Inventory and Expenditure screens in mobile view so it doesn't block the Plus button */}
+      {!(['expenditure', 'inventory'].includes(activeTab) && isMobileView) && (
         <SupportBot onNavigate={handleBotNavigate} uiContext={botUiContext} />
       )}
     </div>
