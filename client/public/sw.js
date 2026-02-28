@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ginvoice-v46-security-fixes';
+const CACHE_NAME = 'ginvoice-v48';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -84,8 +84,10 @@ self.addEventListener('fetch', (event) => {
   // preventing the "white screen" or JSON error if the network is flaky.
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      caches.match('/index.html').then((cached) => {
-        return cached || fetch(event.request).catch(() => caches.match('/index.html'));
+      caches.open(CACHE_NAME).then((cache) => {
+        return cache.match('/index.html').then((cached) => {
+          return cached || fetch(event.request).catch(() => cache.match('/index.html'));
+        });
       })
     );
     return;
