@@ -46,7 +46,7 @@ self.addEventListener('install', (event) => {
       // Loop individually to prevent one 404 from failing the entire install
       await Promise.all(ASSETS_TO_CACHE.map(async (url) => {
         try {
-            const response = await fetch(url);
+            const response = await fetch(url, { cache: 'no-store' });
             if (!response.ok) throw new Error(response.statusText);
             await cache.put(url, response);
         } catch (error) {
@@ -84,10 +84,16 @@ self.addEventListener('fetch', (event) => {
   // preventing the "white screen" or JSON error if the network is flaky.
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      caches.open(CACHE_NAME).then((cache) => {
-        return cache.match('/index.html').then((cached) => {
-          return cached || fetch(event.request).catch(() => cache.match('/index.html'));
-        });
+      caches.open(CACHE_NAME).then(async (cache) => {
+        try {
+          const networkResponse = await fetch(event.request);
+          if (networkResponse && networkResponse.ok) {
+            cache.put('/index.html', networkResponse.clone());
+          }
+          return networkResponse;
+        } catch (_err) {
+          return cache.match('/index.html');
+        }
       })
     );
     return;
