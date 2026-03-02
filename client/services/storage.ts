@@ -70,9 +70,7 @@ export const pushToBackend = async (payload: any) => {
     const lastSyncTime = getLastSync();
     const thresholdTime = lastSyncTime ? lastSyncTime.getTime() - 5 * 60 * 1000 : Date.now() - 24 * 60 * 60 * 1000;
 
-    const isNewItem = (item: any) => String(item.id).includes('-');
-    const isRecentlyUpdated = (item: any) => new Date(item.updatedAt).getTime() > thresholdTime;
-    const shouldKeep = (item: any) => isNewItem(item) || isRecentlyUpdated(item);
+    const shouldKeep = (item: any) => !item.updatedAt || new Date(item.updatedAt).getTime() > thresholdTime;
 
     const deltaPayload = {
       ...payload,
