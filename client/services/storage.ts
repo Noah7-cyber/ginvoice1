@@ -53,11 +53,33 @@ export const getLastSync = (): Date | null => {
   return t ? new Date(t) : null;
 };
 
+export const clearLocalData = () => {
+  try {
+    localStorage.removeItem('ginvoice_v1_state');
+    localStorage.removeItem('ginvoice_last_sync_time');
+    localStorage.removeItem('ginvoice_data_version');
+  } catch (err) {
+    console.warn('clearLocalData failed', err);
+  }
+};
+
 // --- THE CRITICAL EXPORT ---
 // This was missing/renamed in snippets, causing frontend crash.
 export const pushToBackend = async (payload: any) => {
   try {
-    const res = await syncState(payload);
+    const lastSyncTime = getLastSync();
+    const thresholdTime = lastSyncTime ? lastSyncTime.getTime() - 5 * 60 * 1000 : Date.now() - 24 * 60 * 60 * 1000;
+
+    const shouldKeep = (item: any) => !item.updatedAt || new Date(item.updatedAt).getTime() > thresholdTime;
+
+    const deltaPayload = {
+      ...payload,
+      transactions: payload.transactions?.filter(shouldKeep) || [],
+      products: payload.products?.filter(shouldKeep) || [],
+      expenditures: payload.expenditures?.filter(shouldKeep) || [],
+    };
+
+    const res = await syncState(deltaPayload);
     return res;
   } catch (err) {
     console.error('Push failed', err);

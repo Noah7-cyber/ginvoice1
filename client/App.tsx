@@ -24,7 +24,7 @@ import { useStockVerification } from './hooks/useStockVerification';
 import { useTimeDrift } from './hooks/useTimeDrift';
 import { INITIAL_PRODUCTS } from './constants';
 import { safeCalculate } from './utils/math';
-import { saveState, loadState, pushToBackend, getDataVersion, saveDataVersion, getLastSync, saveLastSync } from './services/storage';
+import { saveState, loadState, pushToBackend, getDataVersion, saveDataVersion, getLastSync, saveLastSync, clearLocalData } from './services/storage';
 import { login, registerBusiness, saveAuthToken, clearAuthToken, getEntitlements, initializePayment, fetchRemoteState, deleteExpenditure, snoozeStockVerification, dismissNotification, checkServerVersion } from './services/api';
 import { useToast } from './components/ToastProvider';
 import SalesScreen from './components/SalesScreen';
@@ -187,6 +187,7 @@ const App: React.FC = () => {
         } else {
           clearAuthToken();
           clearAdminToken();
+          clearLocalData();
           setState(prev => ({ ...prev, isLoggedIn: false }));
           addToast(detail?.message || 'Session expired. Please log in again.', 'error');
         }
@@ -507,6 +508,7 @@ const App: React.FC = () => {
   const handleLogout = useCallback(() => {
     clearAuthToken();
     clearAdminToken();
+    clearLocalData();
     localStorage.clear();
     sessionStorage.clear();
 
