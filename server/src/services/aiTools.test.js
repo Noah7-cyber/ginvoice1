@@ -144,6 +144,69 @@ describe('get_business_report Logic Check', () => {
         expect(result.topSellingProducts.length).toBeGreaterThan(0);
         expect(result.topSellingProducts[0].name).toBe('Item B');
     });
+
+    it('separates top-selling rows by productId when names are the same', async () => {
+        const businessId = new mongoose.Types.ObjectId();
+        const today = new Date().toISOString().slice(0, 10);
+
+        await Product.insertMany([
+            {
+                businessId: businessId.toString(),
+                id: 'prod-black-zip',
+                name: 'Black Zip',
+                category: 'Zips',
+                costPrice: 100,
+                sellingPrice: 150,
+                stock: 10
+            },
+            {
+                businessId: businessId.toString(),
+                id: 'prod-black-thread',
+                name: 'Black Zip',
+                category: 'Thread',
+                costPrice: 80,
+                sellingPrice: 120,
+                stock: 10
+            }
+        ]);
+
+        await Transaction.create({
+            businessId,
+            id: 'txn-top-1',
+            totalAmount: 900,
+            transactionDate: new Date(),
+            items: [
+                { productId: 'prod-black-zip', productName: 'Black Zip', quantity: 6, total: 900 }
+            ]
+        });
+
+        await Transaction.create({
+            businessId,
+            id: 'txn-top-2',
+            totalAmount: 600,
+            transactionDate: new Date(),
+            items: [
+                { productId: 'prod-black-thread', productName: 'Black Zip', quantity: 4, total: 600 }
+            ]
+        });
+
+        const result = await executeTool({
+            name: 'get_business_report',
+            args: { startDate: today, endDate: today }
+        }, businessId.toString(), 'owner');
+
+        expect(result.topSellingProducts).toHaveLength(2);
+        expect(result.topSellingProducts[0]).toMatchObject({
+            name: 'Black Zip',
+            category: 'Zips',
+            sold: 6
+        });
+        expect(result.topSellingProducts[1]).toMatchObject({
+            name: 'Black Zip',
+            category: 'Thread',
+            sold: 4
+        });
+    });
 });
 
 describe('product_search Logic Check', () => {

@@ -278,8 +278,18 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
         { $unwind: { path: '$productDetails', preserveNullAndEmptyArrays: true } },
         {
              $group: {
-                 _id: '$items.productName',
+                 _id: {
+                    productId: { $ifNull: ['$items.productId', null] },
+                    productName: {
+                        $cond: [
+                            { $or: [ { $eq: ['$items.productId', null] }, { $eq: ['$items.productId', ''] } ] },
+                            { $ifNull: ['$items.productName', 'Unknown Item'] },
+                            null
+                        ]
+                    }
+                 },
                  sold: { $sum: '$items.quantity' },
+                 name: { $first: '$items.productName' },
                  category: { $first: '$productDetails.category' }
              }
         },
@@ -287,7 +297,7 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
         { $limit: 3 }
     ]);
     const topSellingProducts = topProductResult.map(p => ({
-        name: p._id,
+        name: p.name || p._id.productName || 'Unknown Item',
         category: p.category || 'Uncategorized',
         sold: p.sold
     }));
