@@ -351,13 +351,14 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
           const increaseAmount = !Number.isNaN(stockDelta) ? stockDelta : (nextStockAbsolute - prevStock);
 
           if (isManualIncrease && increaseAmount > 0) {
+             const productName = p.name || existing.name || productId;
              // Only log significant increases (avoid noise)
              productNotifications.push({
               businessId,
               type: 'modification',
-              title: 'Stock Increased',
-              message: `Stock increased for ${p.name || productId}`,
-              body: `Stock increased by +${increaseAmount}`,
+              title: `${productName} increased by +${increaseAmount}`,
+              message: `${productName} increased by +${increaseAmount}`,
+              body: `Quantity update: ${productName} increased by +${increaseAmount}`,
               amount: increaseAmount,
               performedBy: req.userRole === 'owner' ? 'Owner' : 'Staff',
               payload: { productId, productName: p.name || '', field: 'stock', delta: increaseAmount }
@@ -369,12 +370,13 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
           const decreaseAmount = !Number.isNaN(stockDelta) ? Math.abs(stockDelta) : (prevStock - nextStockAbsolute);
 
           if (isManualDecrease && decreaseAmount > 0 && !p.isDeleted) {
+             const productName = p.name || existing.name || productId;
              productNotifications.push({
               businessId,
               type: 'modification',
-              title: 'Stock Reduced',
-              message: `Stock reduced for ${p.name || productId}`,
-              body: `Stock reduced by -${decreaseAmount}`,
+              title: `${productName} reduced by -${decreaseAmount}`,
+              message: `${productName} reduced by -${decreaseAmount}`,
+              body: `Quantity update: ${productName} reduced by -${decreaseAmount}`,
               amount: decreaseAmount,
               performedBy: req.userRole === 'owner' ? 'Owner' : 'Staff',
               payload: { productId, productName: p.name || '', field: 'stock', delta: -decreaseAmount }
