@@ -68,21 +68,63 @@ const extendSubscription = async (business, days) => {
 };
 
 const updatePaystackCodes = async (business, data) => {
-  if (data?.customer?.customer_code && business.paystackCustomerCode !== data.customer.customer_code) {
-    business.paystackCustomerCode = data.customer.customer_code;
+  const customerCode = data?.customer?.customer_code || data?.customer_code;
+  if (customerCode && business.paystackCustomerCode !== customerCode) {
+    business.paystackCustomerCode = customerCode;
   }
-  if (data?.subscription_code && business.paystackSubscriptionCode !== data.subscription_code) {
-    business.paystackSubscriptionCode = data.subscription_code;
+
+  const subscriptionCode = data?.subscription_code || data?.subscription?.subscription_code;
+  if (subscriptionCode && business.paystackSubscriptionCode !== subscriptionCode) {
+    business.paystackSubscriptionCode = subscriptionCode;
   }
-  if (data?.email_token && business.paystackEmailToken !== data.email_token) {
-    business.paystackEmailToken = data.email_token;
+
+  const emailToken = data?.email_token || data?.subscription?.email_token;
+  if (emailToken && business.paystackEmailToken !== emailToken) {
+    business.paystackEmailToken = emailToken;
   }
-  const planCode = data?.plan?.plan_code || data?.plan_code;
+
+  const planCode =
+    data?.plan?.plan_code ||
+    data?.plan_code ||
+    data?.subscription?.plan?.plan_code ||
+    data?.subscription?.plan_code;
+
   if (planCode && business.paystackPlanCode !== planCode) {
     business.paystackPlanCode = planCode;
   }
 };
 
+
+const resolveBusinessForWebhook = async (eventData = {}) => {
+  const metadataBusinessId = eventData?.metadata?.businessId;
+  if (metadataBusinessId) {
+    const business = await Business.findById(metadataBusinessId);
+    if (business) return business;
+  }
+
+  const subscriptionCode =
+    eventData?.subscription?.subscription_code ||
+    eventData?.subscription_code ||
+    eventData?.subscription?.subscriptionCode ||
+    eventData?.subscriptionCode;
+
+  if (subscriptionCode) {
+    const business = await Business.findOne({ paystackSubscriptionCode: subscriptionCode });
+    if (business) return business;
+  }
+
+  const customerCode =
+    eventData?.customer?.customer_code ||
+    eventData?.customer_code ||
+    eventData?.customer?.customerCode;
+
+  if (customerCode) {
+    const business = await Business.findOne({ paystackCustomerCode: customerCode });
+    if (business) return business;
+  }
+
+  return null;
+};
 const verifyReference = async (reference, secretKey) => {
   const response = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
     method: 'GET',
@@ -374,8 +416,8 @@ router.post('/webhook', async (req, res) => {
     const event = req.body;
 
     // Helper to process extension
-    const processExtension = async (businessId, reference, amount, data) => {
-        if (!businessId) return;
+    const processExtension = async (reference, amount, data, preResolvedBusiness = null) => {
+        if (!reference) return;
         if (amount < planPriceKobo) return;
 
         if (expectedPlanCode) {
@@ -388,31 +430,33 @@ router.post('/webhook', async (req, res) => {
              }
         }
 
-        const business = await Business.findById(businessId);
-        if (business) {
-             if (await claimReference(reference, event.event, business._id)) {
-                 await updatePaystackCodes(business, data);
-                 await extendSubscription(business, 30);
-                 await markAttemptStatus(reference, 'processed');
+        const business = preResolvedBusiness || await resolveBusinessForWebhook(data);
+        if (!business) {
+            console.warn(`Webhook extension skipped: business could not be resolved for reference ${reference}`);
+            return;
+        }
 
-                 if (business.email) {
-                    sendSystemEmail({
-                        to: business.email,
-                        subject: 'Ginvoice Subscription Active',
-                        text: `Your subscription is active until ${business.subscriptionExpiresAt.toDateString()}.`,
-                        html: `<p>Your subscription is active until <strong>${business.subscriptionExpiresAt.toDateString()}</strong>.</p>`
-                    });
-                 }
-             }
+        if (await claimReference(reference, event.event, business._id)) {
+            await updatePaystackCodes(business, data);
+            await extendSubscription(business, 30);
+            await markAttemptStatus(reference, 'processed');
+
+            if (business.email) {
+               sendSystemEmail({
+                   to: business.email,
+                   subject: 'Ginvoice Subscription Active',
+                   text: `Your subscription is active until ${business.subscriptionExpiresAt.toDateString()}.`,
+                   html: `<p>Your subscription is active until <strong>${business.subscriptionExpiresAt.toDateString()}</strong>.</p>`
+               });
+            }
         }
     };
 
     if (event?.event === 'charge.success') {
-      const businessId = event?.data?.metadata?.businessId;
       const amountKobo = Number(event?.data?.amount || 0);
       const referenceKey = event?.data?.reference;
 
-      await processExtension(businessId, referenceKey, amountKobo, event.data);
+      await processExtension(referenceKey, amountKobo, event.data);
     }
 
     if (event?.event === 'subscription.create') {
@@ -441,11 +485,10 @@ router.post('/webhook', async (req, res) => {
     }
 
     if (event?.event === 'invoice.payment_succeeded') {
-      const businessId = event?.data?.metadata?.businessId;
-      const referenceKey = event?.data?.invoice?.id || event?.data?.id;
+      const referenceKey = event?.data?.invoice?.id || event?.data?.reference || event?.data?.id;
       const amountKobo = Number(event?.data?.amount || 0);
 
-      await processExtension(businessId, referenceKey, amountKobo, event.data?.subscription || event.data);
+      await processExtension(referenceKey, amountKobo, event.data);
     }
 
     return res.json({ received: true });

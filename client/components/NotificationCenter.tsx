@@ -31,12 +31,12 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
   onDismissVerification
 }) => {
   const [activeTab, setActiveTab] = useState<'transactions' | 'system'>('transactions');
+  const TRANSACTION_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 
   // Derive Recent Activity (Sales + Delete + Edit Notifications)
   const recentActivity = useMemo(() => {
     const sales = [...transactions]
       .sort((a, b) => new Date(b.createdAt || b.transactionDate).getTime() - new Date(a.createdAt || a.transactionDate).getTime())
-      .slice(0, 10)
       .map(t => ({
         id: t.id,
         type: 'sale',
@@ -52,7 +52,6 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
     const deleteNotes = notifications
       .filter(n => n.type === 'deletion')
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-      .slice(0, 10)
       .map(n => ({
         id: n.id,
         type: 'deletion',
@@ -68,7 +67,6 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
     const edits = notifications
       .filter(n => n.type === 'modification')
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-      .slice(0, 10)
       .map(n => ({
         id: n.id,
         type: 'modification',
@@ -81,8 +79,14 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
         payload: n.payload || null
       }));
 
+    const cutoff = Date.now() - TRANSACTION_TTL_MS;
+
     const merged = [...sales, ...deleteNotes, ...edits]
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .filter((item) => {
+        const ts = new Date(item.timestamp).getTime();
+        return Number.isFinite(ts) && ts >= cutoff;
+      })
       .filter((item, index, self) => {
         // Filter out modifications that happen very close to a sale (likely stock deduction)
         if (item.type === 'modification') {
@@ -94,8 +98,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
           if (nearbySale) return false;
         }
         return true;
-      })
-      .slice(0, 10);
+      });
 
     return merged.map(item => {
       const timeDiff = Math.floor((Date.now() - new Date(item.timestamp).getTime()) / 60000);

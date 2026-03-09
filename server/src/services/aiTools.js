@@ -368,6 +368,23 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
         .map(([category, amount]) => ({ category, amount }))
         .sort((a, b) => b.amount - a.amount);
 
+    // 7. Inventory Intelligence Snapshot (reuses the dedicated intelligence tool)
+    // Keep this lightweight to avoid bloating report payload.
+    const diffMs = Math.max(24 * 60 * 60 * 1000, end.getTime() - start.getTime());
+    const periodDays = Math.max(1, Math.ceil(diffMs / (24 * 60 * 60 * 1000)));
+    const inventoryIntelRaw = await get_inventory_intelligence(
+        { days: periodDays, restockHorizonDays: 30, topN: 5 },
+        { businessId, userRole }
+    );
+
+    const inventoryIntelligence = {
+        periodDays,
+        topSelling: (inventoryIntelRaw?.topSelling || []).slice(0, 3),
+        deadStockCandidates: (inventoryIntelRaw?.deadStockCandidates || []).slice(0, 3),
+        restockRecommendations: (inventoryIntelRaw?.restockRecommendations || []).slice(0, 3),
+        message: inventoryIntelRaw?.message || 'Inventory intelligence unavailable.'
+    };
+
     return {
         period: { start: startDate, end: endDate },
         revenue: {
@@ -386,7 +403,8 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
             netCashFlow,       // <--- The number users care about for "How much cash do I have?"
             note: "Profit = Sales - Business Costs. Cash Flow = (Sales + Money In) - All Money Out."
         },
-        topSellingProducts: topSellingProducts
+        topSellingProducts: topSellingProducts,
+        inventoryIntelligence
     };
 };
 
