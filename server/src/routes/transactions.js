@@ -1,16 +1,18 @@
 const express = require('express');
 const router = express.Router();
 const Transaction = require('../models/Transaction');
-const Product = require('../models/Product');
 const Notification = require('../models/Notification');
 const Business = require('../models/Business');
 const auth = require('../middleware/auth');
 const requireActiveSubscription = require('../middleware/subscription');
+const { resolveShopId } = require('../services/shopContext');
+const { decrementStock, restoreStock, reconcileSaleEdit } = require('../services/stockAdapter');
 
 // CREATE Transaction
 router.post('/', auth, requireActiveSubscription, async (req, res) => {
   try {
-    const { items, customerName, totalAmount, amountPaid, paymentMethod, transactionDate, id, staffId, discountCode } = req.body;
+    const { items, customerName, totalAmount, amountPaid, paymentMethod, transactionDate, id, staffId, discountCode, shopId: requestedShopId } = req.body;
+    const shopId = await resolveShopId({ businessId: req.businessId, requestedShopId });
 
     // 1. Determine Staff ID (Trust frontend "Store Staff" if provided, otherwise fallback to user)
     // NOTE: This logic ensures Owner can't accidentally attribute to themselves if they selected "Staff" mode on frontend
@@ -20,6 +22,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
 
     const newTransaction = new Transaction({
       businessId: req.businessId,
+      shopId,
       id,
       transactionDate: transactionDate || new Date(),
       customerName,
@@ -40,16 +43,10 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
 
     // 2. Decrement Stock
     if (items && items.length > 0) {
-      const bulkOps = items.map(item => {
+      for (const item of items) {
         const multiplier = item.multiplier || (item.selectedUnit ? item.selectedUnit.multiplier : 1);
-        return {
-          updateOne: {
-            filter: { id: item.productId, businessId: req.businessId },
-            update: { $inc: { stock: -1 * (item.quantity * multiplier) } }
-          }
-        };
-      });
-      await Product.bulkWrite(bulkOps);
+        await decrementStock({ businessId: req.businessId, shopId, productId: item.productId, qty: item.quantity * multiplier });
+      }
     }
 
     // 3. Increment Data Version (Smart Sync)
@@ -66,39 +63,16 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
 router.put('/:id', auth, requireActiveSubscription, async (req, res) => {
   try {
     const { id } = req.params;
-    const { items: newItems, totalAmount, amountPaid, paymentMethod, customerName, date } = req.body;
+    const { items: newItems, totalAmount, amountPaid, paymentMethod, customerName, date, shopId: requestedShopId } = req.body;
 
     // 1. Fetch Original
     const originalTx = await Transaction.findOne({ id, businessId: req.businessId });
     if (!originalTx) return res.status(404).json({ message: 'Transaction not found' });
+    const shopId = await resolveShopId({ businessId: req.businessId, requestedShopId: requestedShopId || originalTx.shopId });
+    if (!originalTx.shopId) originalTx.shopId = shopId;
 
     // 2. Rollback Stock (Restock Original Items)
-    if (originalTx.items && originalTx.items.length > 0) {
-      const restockOps = originalTx.items.map(item => {
-        const multiplier = item.multiplier || (item.selectedUnit ? item.selectedUnit.multiplier : 1);
-        return {
-          updateOne: {
-            filter: { id: item.productId, businessId: req.businessId },
-            update: { $inc: { stock: item.quantity * multiplier } }
-          }
-        };
-      });
-      await Product.bulkWrite(restockOps);
-    }
-
-    // 3. Deduct New Stock (Destock New Items)
-    if (newItems && newItems.length > 0) {
-      const destockOps = newItems.map(item => {
-        const multiplier = item.multiplier || (item.selectedUnit ? item.selectedUnit.multiplier : 1);
-        return {
-          updateOne: {
-            filter: { id: item.productId, businessId: req.businessId },
-            update: { $inc: { stock: -1 * (item.quantity * multiplier) } }
-          }
-        };
-      });
-      await Product.bulkWrite(destockOps);
-    }
+    await reconcileSaleEdit({ businessId: req.businessId, shopId, originalItems: originalTx.items, newItems });
 
     // 4. Update Transaction Fields
     // RECALCULATE LOGIC: Ensure data integrity by recalculating totals
@@ -132,6 +106,7 @@ router.put('/:id', auth, requireActiveSubscription, async (req, res) => {
     }
 
     originalTx.items = newItems;
+    originalTx.shopId = shopId;
     originalTx.subtotal = subtotal;
     originalTx.globalDiscount = finalGlobalDiscount;
     originalTx.totalAmount = calculatedTotal;
@@ -236,23 +211,12 @@ router.delete('/:id', auth, requireActiveSubscription, async (req, res) => {
     // Default to true if not specified, or handle logic here
     const shouldRestock = req.query.restock !== 'false';
 
+    const shopId = await resolveShopId({ businessId: req.businessId, requestedShopId: req.query.shopId || transaction.shopId });
     if (shouldRestock && transaction.items.length > 0) {
-      const bulkOps = transaction.items.map(item => {
-        // Calculate total units to restore
-        // Fallback logic matches your existing pattern
+      for (const item of transaction.items) {
         const multiplier = item.multiplier || (item.selectedUnit ? item.selectedUnit.multiplier : 1);
-        const quantityRestored = item.quantity * multiplier;
-
-        return {
-          updateOne: {
-            filter: { id: item.productId, businessId: req.businessId },
-            // CORRECTED: Using 'stock' to match Product.js schema
-            update: { $inc: { stock: quantityRestored } }
-          }
-        };
-      });
-
-      await Product.bulkWrite(bulkOps);
+        await restoreStock({ businessId: req.businessId, shopId, productId: item.productId, qty: item.quantity * multiplier });
+      }
     }
 
     // 2. GHOST NOTE: Create Notification
