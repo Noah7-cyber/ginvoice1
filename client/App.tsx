@@ -18,14 +18,14 @@ import {
   Bell,
   AlertCircle
 } from 'lucide-react';
-import { InventoryState, UserRole, Product, ProductUnit, Transaction, BusinessProfile, TabId, SaleItem, PaymentMethod, Expenditure, ActivityLog } from './types';
+import { InventoryState, UserRole, Product, ProductUnit, Transaction, BusinessProfile, TabId, SaleItem, PaymentMethod, Expenditure, ActivityLog, Shop } from './types';
 import useTabRouting from './hooks/useTabRouting';
 import { useStockVerification } from './hooks/useStockVerification';
 import { useTimeDrift } from './hooks/useTimeDrift';
 import { INITIAL_PRODUCTS } from './constants';
 import { safeCalculate } from './utils/math';
 import { saveState, loadState, pushToBackend, getDataVersion, saveDataVersion, getLastSync, saveLastSync, clearLocalData } from './services/storage';
-import { login, registerBusiness, saveAuthToken, clearAuthToken, getEntitlements, initializePayment, fetchRemoteState, deleteExpenditure, snoozeStockVerification, dismissNotification, checkServerVersion } from './services/api';
+import { login, registerBusiness, saveAuthToken, clearAuthToken, getEntitlements, initializePayment, fetchRemoteState, deleteExpenditure, snoozeStockVerification, dismissNotification, checkServerVersion, createShop, renameShop } from './services/api';
 import { useToast } from './components/ToastProvider';
 import SalesScreen from './components/SalesScreen';
 import InventoryScreen from './components/InventoryScreen';
@@ -66,6 +66,8 @@ const hasActiveAlerts = (products: Product[], business: BusinessProfile, lowStoc
 
    return hasLowStock || hasTrialAlert;
 };
+
+const ALL_SHOPS_ID = 'all';
 
 const TAB_LABELS: Record<string, string> = {
   sales: 'Sales',
@@ -217,7 +219,10 @@ const App: React.FC = () => {
       },
       expenditures: [],
       activities: [],
-      notifications: []
+      notifications: [],
+      shops: [],
+      activeShopId: undefined,
+      allShopsMode: false
     };
     if (!base.expenditures) base.expenditures = [];
     if (!base.activities) base.activities = [];
@@ -442,10 +447,14 @@ const App: React.FC = () => {
     setIsSyncing(true);
     try {
       // TRUE = Force Full Fetch (Ignore versions)
-      const response = await fetchRemoteState(true);
+      const requestedShopId = currentState.activeShopId;
+      const response = await fetchRemoteState(true, {
+        shopId: requestedShopId && requestedShopId !== ALL_SHOPS_ID ? requestedShopId : undefined,
+        allShops: requestedShopId === ALL_SHOPS_ID
+      });
 
       if (response.status === 200 && response.data) {
-         const { products, transactions, categories, expenditures, business, notifications } = response.data;
+         const { products, transactions, categories, expenditures, business, notifications, shops, activeShopId, allShopsMode } = response.data;
 
          const nextState: InventoryState = {
            ...currentState,
@@ -455,6 +464,9 @@ const App: React.FC = () => {
            categories: categories || [],
            expenditures: expenditures || [],
            notifications: notifications || [],
+           shops: shops || currentState.shops || [],
+           activeShopId: activeShopId || currentState.activeShopId || business?.defaultShopId,
+           allShopsMode: Boolean(allShopsMode),
            business: business ? { ...currentState.business, ...business } : currentState.business,
            lastSyncedAt: new Date().toISOString(),
            isLoggedIn: true
@@ -491,7 +503,8 @@ const App: React.FC = () => {
         await pushToBackend({
           transactions: currentState.transactions,
           products: currentState.products,
-          expenditures: currentState.expenditures
+          expenditures: currentState.expenditures,
+          shopId: currentState.activeShopId && currentState.activeShopId !== ALL_SHOPS_ID ? currentState.activeShopId : undefined
         });
       } catch (err) {
         console.error(`[Safe Sync] Pre-sync push failed (${source})`, err);
@@ -675,9 +688,19 @@ const App: React.FC = () => {
         addToast('Please connect to the internet to perform this action.', 'error');
         return;
     }
+    if (stateRef.current.activeShopId === ALL_SHOPS_ID) {
+      addToast('Select a specific shop to add an expense.', 'warning');
+      return;
+    }
+
+    const payload = {
+      ...newExpenditure,
+      shopId: stateRef.current.activeShopId || stateRef.current.business.defaultShopId
+    };
+
     setState(prev => {
-      const updated = [newExpenditure, ...prev.expenditures];
-      if (navigator.onLine) pushToBackend({ expenditures: [newExpenditure] });
+      const updated = [payload, ...prev.expenditures];
+      if (navigator.onLine) pushToBackend({ expenditures: [payload], shopId: payload.shopId });
       return { ...prev, expenditures: updated };
     });
   };
@@ -702,9 +725,14 @@ const App: React.FC = () => {
         addToast('Please connect to the internet to perform this action.', 'error');
         return;
     }
+      if (stateRef.current.activeShopId === ALL_SHOPS_ID) {
+        addToast('Select a specific shop to edit expenses.', 'warning');
+        return;
+      }
+      const payload = { ...updated, shopId: updated.shopId || stateRef.current.activeShopId || stateRef.current.business.defaultShopId };
       setState(prev => {
-          const newExp = prev.expenditures.map(e => e.id === updated.id ? updated : e);
-          if (navigator.onLine) pushToBackend({ expenditures: [updated] });
+          const newExp = prev.expenditures.map(e => e.id === payload.id ? payload : e);
+          if (navigator.onLine) pushToBackend({ expenditures: [payload], shopId: payload.shopId });
           return { ...prev, expenditures: newExp };
       });
   };
@@ -753,7 +781,10 @@ const App: React.FC = () => {
         transactions: [],
         categories: [],
         expenditures: [],
-        notifications: []
+        notifications: [],
+        shops: [],
+        activeShopId: response.business?.defaultShopId,
+        allShopsMode: false
       };
 
       setState(newState);
@@ -794,7 +825,9 @@ const App: React.FC = () => {
           ...state,
           role: response.role,
           isLoggedIn: true,
-          business: { ...state.business, ...response.business }
+          business: { ...state.business, ...response.business },
+          activeShopId: response.business?.defaultShopId || state.activeShopId,
+          allShopsMode: false
         };
 
         setState(newState);
@@ -905,9 +938,19 @@ const App: React.FC = () => {
   };
 
   const handleCompleteSale = (transaction: Transaction) => {
+    if (state.activeShopId === ALL_SHOPS_ID) {
+      addToast('Select a specific shop to record sales.', 'warning');
+      return;
+    }
+
+    const txWithShop: Transaction = {
+      ...transaction,
+      shopId: state.activeShopId || state.business.defaultShopId
+    };
+
     // 1. Calculate new state first (with Delta Accumulation)
     const updatedProducts = state.products.map(p => {
-      const itemsInSale = transaction.items.filter(i => i.productId === p.id);
+      const itemsInSale = txWithShop.items.filter(i => i.productId === p.id);
       if (itemsInSale.length === 0) return p;
 
       const totalDeduction = itemsInSale.reduce((sum, item) => {
@@ -929,14 +972,14 @@ const App: React.FC = () => {
       type: 'sale',
       title: 'Sale Recorded',
       description: `Invoice #${transaction.id}`,
-      actor: transaction.createdByRole || state.role, // Use role from transaction
+      actor: txWithShop.createdByRole || state.role, // Use role from transaction
       timestamp: new Date().toISOString()
     };
 
     const nextState = {
       ...state,
       products: updatedProducts,
-      transactions: [transaction, ...state.transactions],
+      transactions: [txWithShop, ...state.transactions],
       activities: [saleLog, ...(state.activities || [])]
     };
 
@@ -948,7 +991,7 @@ const App: React.FC = () => {
     // 3. PUSH to Server immediately
     if (navigator.onLine) {
       // Use the stable timestamp from state, don't generate new one on retry
-      pushToBackend({ transactions: [transaction], products: updatedProducts })
+      pushToBackend({ transactions: [txWithShop], products: updatedProducts, shopId: txWithShop.shopId })
         .then(() => {
              // CRITICAL: On success, subtract the sent delta to prevent double-counting but keep new offline changes
              setState(prev => ({
@@ -979,7 +1022,7 @@ const App: React.FC = () => {
     stateRef.current = nextState;
     setState(nextState);
     if (navigator.onLine) {
-      pushToBackend({ products: stampedProducts })
+      pushToBackend({ products: stampedProducts, shopId: stateRef.current.activeShopId && stateRef.current.activeShopId !== ALL_SHOPS_ID ? stateRef.current.activeShopId : undefined })
         .then(() => {
             // Clear accumulated deltas on success (Subtract sent delta)
             setState(prev => ({
@@ -1000,6 +1043,53 @@ const App: React.FC = () => {
   const perms = (state.business.staffPermissions as any) || {};
   const canManageStock = state.role === 'owner' || perms.canEditInventory;
   const canManageHistory = state.role === 'owner' || perms.canEditHistory;
+  const isAllShopsMode = state.activeShopId === ALL_SHOPS_ID || Boolean(state.allShopsMode);
+
+  const visibleTransactions = useMemo(() => {
+    if (isAllShopsMode) return state.transactions;
+    if (!state.activeShopId) return state.transactions;
+    return state.transactions.filter((tx) => !tx.shopId || tx.shopId === state.activeShopId);
+  }, [state.transactions, state.activeShopId, isAllShopsMode]);
+
+  const visibleExpenditures = useMemo(() => {
+    if (isAllShopsMode) return state.expenditures;
+    if (!state.activeShopId) return state.expenditures;
+    return (state.expenditures || []).filter((exp) => !exp.shopId || exp.shopId === state.activeShopId);
+  }, [state.expenditures, state.activeShopId, isAllShopsMode]);
+
+  const handleShopSwitch = async (nextShopId: string) => {
+    const nextState = { ...stateRef.current, activeShopId: nextShopId, allShopsMode: nextShopId === ALL_SHOPS_ID };
+    stateRef.current = nextState;
+    setState(nextState);
+    await refreshData(nextState);
+  };
+
+  const handleCreateShop = async () => {
+    const name = window.prompt('Enter new shop name');
+    if (!name) return;
+    try {
+      await createShop(name);
+      await refreshData();
+      addToast('Shop created.', 'success');
+    } catch (err: any) {
+      addToast(err?.message || 'Could not create shop', 'error');
+    }
+  };
+
+  const handleRenameActiveShop = async () => {
+    const targetId = state.activeShopId;
+    if (!targetId || targetId === ALL_SHOPS_ID) return;
+    const currentName = (state.shops || []).find((s: Shop) => s.id === targetId)?.name || 'Shop';
+    const nextName = window.prompt('Rename shop', currentName);
+    if (!nextName || nextName === currentName) return;
+    try {
+      await renameShop(targetId, nextName);
+      await refreshData();
+      addToast('Shop renamed.', 'success');
+    } catch (err: any) {
+      addToast(err?.message || 'Could not rename shop', 'error');
+    }
+  };
 
   const allowedTabs = useMemo(() => {
     const hasPro = entitlements?.plan === 'PRO' || state.business.isSubscribed;
@@ -1165,6 +1255,22 @@ const App: React.FC = () => {
             <span>{state.role} Mode</span> <span className="opacity-30">/</span> <span>{activeTab}</span>
           </div>
           <div className="flex items-center gap-2">
+            {state.role === 'owner' && (
+              <>
+                <select
+                  value={state.activeShopId || state.business.defaultShopId || ''}
+                  onChange={(e) => handleShopSwitch(e.target.value)}
+                  className="hidden md:block text-xs font-bold border rounded-lg px-2 py-1.5"
+                >
+                  {(state.shops || []).map((shop) => (
+                    <option key={shop.id} value={shop.id}>{shop.name}</option>
+                  ))}
+                  <option value={ALL_SHOPS_ID}>All Shops (read-only)</option>
+                </select>
+                <button onClick={handleCreateShop} className="hidden md:block text-xs font-bold px-2 py-1.5 rounded-lg border bg-white hover:bg-gray-50">+ Shop</button>
+                <button onClick={handleRenameActiveShop} className="hidden md:block text-xs font-bold px-2 py-1.5 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50" disabled={!state.activeShopId || state.activeShopId === ALL_SHOPS_ID}>Rename</button>
+              </>
+            )}
             {isSyncing && <RefreshCw className="animate-spin text-gray-400 mr-2" size={20} />}
             <button onClick={handleLogout} className="md:hidden p-2 text-gray-400 hover:text-red-500">
               <LogOut size={24} />
@@ -1197,6 +1303,12 @@ const App: React.FC = () => {
           </div>
         )}
 
+        {isAllShopsMode && (
+          <div className="bg-blue-50 border-b border-blue-100 p-3 text-sm shrink-0">
+            <span className="font-bold text-blue-700">All Shops mode is read-only for writes. Select a specific shop to sell or edit stock/expenses.</span>
+          </div>
+        )}
+
         {/* Content Area - Independent Scrolling for Performance */}
         <div className="flex-1 relative overflow-hidden">
 
@@ -1205,7 +1317,7 @@ const App: React.FC = () => {
                className="absolute inset-0 overflow-y-auto p-4 md:p-8"
                style={{ display: activeTab === 'sales' ? 'block' : 'none' }}
             >
-               <SalesScreen products={state.products} onAddToCart={addToCart} isReadOnly={subscriptionLocked} />
+               <SalesScreen products={state.products} onAddToCart={addToCart} isReadOnly={subscriptionLocked || isAllShopsMode} />
             </div>
           )}
 
@@ -1218,7 +1330,7 @@ const App: React.FC = () => {
                 products={state.products}
                 onUpdateProducts={handleUpdateProducts}
                 isOwner={state.role === 'owner'}
-                isReadOnly={!canManageStock || subscriptionLocked}
+                isReadOnly={!canManageStock || subscriptionLocked || isAllShopsMode}
                 isOnline={isOnline}
                 initialParams={deepLinkParams}
               />
@@ -1231,32 +1343,33 @@ const App: React.FC = () => {
                style={{ display: activeTab === 'history' ? 'block' : 'none' }}
             >
                <HistoryScreen
-                transactions={state.transactions}
+                transactions={visibleTransactions}
                 products={state.products}
                 business={state.business}
                 onDeleteTransaction={handleDeleteTransaction}
                 onUpdateTransaction={(t, options) => {
+                  const payload = { ...t, shopId: t.shopId || stateRef.current.activeShopId || stateRef.current.business.defaultShopId, updatedAt: new Date().toISOString() };
                   setState(prev => ({
                     ...prev,
-                    transactions: prev.transactions.map(tx => tx.id === t.id ? { ...t, updatedAt: new Date().toISOString() } : tx)
+                    transactions: prev.transactions.map(tx => tx.id === t.id ? payload : tx)
                   }));
                   if (navigator.onLine && !options?.skipSync) {
-                    pushToBackend({ transactions: [{ ...t, updatedAt: new Date().toISOString() }] }).catch(err => console.error("Failed to sync edit", err));
+                    pushToBackend({ transactions: [payload], shopId: payload.shopId }).catch(err => console.error("Failed to sync edit", err));
                   }
                 }}
                 onCreatePreviousDebt={(t) => {
-                  const created = { ...t, updatedAt: new Date().toISOString(), isPreviousDebt: true };
+                  const created = { ...t, shopId: t.shopId || stateRef.current.activeShopId || stateRef.current.business.defaultShopId, updatedAt: new Date().toISOString(), isPreviousDebt: true };
                   setState(prev => ({
                     ...prev,
                     transactions: [created, ...prev.transactions]
                   }));
                   if (navigator.onLine) {
-                    pushToBackend({ transactions: [created] }).catch(err => console.error('Failed to sync opening debt', err));
+                    pushToBackend({ transactions: [created], shopId: created.shopId }).catch(err => console.error('Failed to sync opening debt', err));
                   }
                 }}
                 isSubscriptionExpired={subscriptionLocked}
                 onRenewSubscription={openPaymentLink}
-               isReadOnly={!canManageHistory || subscriptionLocked}
+               isReadOnly={!canManageHistory || subscriptionLocked || isAllShopsMode}
                isOnline={isOnline}
                initialParams={deepLinkParams}
                onSelectedInvoiceChange={setHistorySelectedInvoice}
@@ -1270,11 +1383,13 @@ const App: React.FC = () => {
                    className="absolute inset-0 overflow-y-auto p-4 md:p-8"
                    style={{ display: activeTab === 'dashboard' ? 'block' : 'none' }}
                 >
-                   <DashboardScreen
-                    transactions={state.transactions}
+                  <DashboardScreen
+                    transactions={visibleTransactions}
                     products={state.products}
-                    expenditures={state.expenditures}
+                    expenditures={visibleExpenditures}
                     business={state.business}
+                    activeShopId={state.activeShopId}
+                    allShopsMode={isAllShopsMode}
                     onUpdateBusiness={b => setState(prev => ({ ...prev, business: { ...prev.business, ...b } }))}
                   />
                 </div>
@@ -1287,12 +1402,12 @@ const App: React.FC = () => {
                style={{ display: activeTab === 'expenditure' ? 'block' : 'none' }}
             >
                <ExpenditureScreen
-                expenditures={state.expenditures}
+                expenditures={visibleExpenditures}
                 onAddExpenditure={handleAddExpenditure}
                 onDeleteExpenditure={handleDeleteExpenditure}
                 onEditExpenditure={handleEditExpenditure}
                 isOnline={isOnline}
-                isReadOnly={subscriptionLocked}
+                isReadOnly={subscriptionLocked || isAllShopsMode}
               />
             </div>
           )}
@@ -1332,7 +1447,7 @@ const App: React.FC = () => {
       <NotificationCenter
         isOpen={isNotificationOpen}
         onClose={() => setIsNotificationOpen(false)}
-        transactions={state.transactions}
+        transactions={visibleTransactions}
         activities={state.activities}
         notifications={state.notifications}
         products={state.products}

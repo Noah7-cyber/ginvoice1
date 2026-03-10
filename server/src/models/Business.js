@@ -59,6 +59,8 @@ const BusinessSchema = new mongoose.Schema({
     }
   },
 
+  defaultShopId: { type: String, default: null, index: true },
+
   taxSettings: {
     isEnabled: { type: Boolean, default: false }, // User MUST opt-in
     jurisdiction: { type: String, default: 'NG' }, // Default to Nigeria

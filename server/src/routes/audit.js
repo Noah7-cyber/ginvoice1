@@ -6,6 +6,8 @@ const Notification = require('../models/Notification');
 const Business = require('../models/Business');
 const StockVerificationEvent = require('../models/StockVerificationEvent');
 const { computeRiskScore, generateVerificationQueue, getStockVerificationSettings } = require('../services/stockVerification');
+const { resolveShopId } = require('../services/shopContext');
+const { getOnHand, setCountedQuantity } = require('../services/stockAdapter');
 
 const router = express.Router();
 
@@ -27,7 +29,7 @@ router.post('/dismiss/:notificationId', auth, async (req, res) => {
 });
 
 router.post('/verify', auth, requireActiveSubscription, async (req, res) => {
-  const { productId, countedQty, expectedQtyAtOpen, reasonCode = 'CYCLE_COUNT', notes = '', confirmChangedExpected = false } = req.body || {};
+  const { productId, countedQty, expectedQtyAtOpen, reasonCode = 'CYCLE_COUNT', notes = '', confirmChangedExpected = false, shopId: requestedShopId } = req.body || {};
   const numericCounted = Number(countedQty);
 
   if (!productId || Number.isNaN(numericCounted)) {
@@ -36,8 +38,9 @@ router.post('/verify', auth, requireActiveSubscription, async (req, res) => {
 
   const product = await Product.findOne({ businessId: req.businessId, id: productId });
   if (!product) return res.status(404).json({ message: 'Product not found.' });
+  const shopId = await resolveShopId({ businessId: req.businessId, requestedShopId });
 
-  const expectedQty = Number(product.stock || 0);
+  const expectedQty = await getOnHand({ businessId: req.businessId, shopId, productId });
   if (!confirmChangedExpected && expectedQtyAtOpen !== undefined && Number(expectedQtyAtOpen) !== expectedQty) {
     return res.status(409).json({
       message: 'On-hand quantity changed since you opened this count.',
@@ -50,7 +53,9 @@ router.post('/verify', auth, requireActiveSubscription, async (req, res) => {
   const riskBefore = computeRiskScore(product, {}, new Date(), settings);
 
   const variance = numericCounted - expectedQty;
-  if (variance !== 0) product.stock = numericCounted;
+  if (variance !== 0) {
+    await setCountedQuantity({ businessId: req.businessId, shopId, productId, countedQty: numericCounted });
+  }
 
   product.lastVerifiedAt = new Date();
   product.lastVerifiedQty = numericCounted;
@@ -62,6 +67,7 @@ router.post('/verify', auth, requireActiveSubscription, async (req, res) => {
 
   await StockVerificationEvent.create({
     businessId: req.businessId,
+    shopId,
     productId,
     expectedQty,
     countedQty: numericCounted,

@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "test": "MONGODB_URI=mongodb://localhost:27017/ginvoice-test jest --detectOpenHandles"
+    "test": "MONGODB_URI=mongodb://localhost:27017/ginvoice-test jest --detectOpenHandles",
+    "migrate:multishop-foundation": "node src/scripts/migrateMultiShopFoundation.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

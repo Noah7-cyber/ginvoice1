@@ -9,7 +9,11 @@ const Business = require('../models/Business');
 const Expenditure = require('../models/Expenditure');
 const Category = require('../models/Category');
 const Notification = require('../models/Notification');
+const Shop = require('../models/Shop');
+const ProductShopStock = require('../models/ProductShopStock');
 const { maybeCreateStockVerificationNotification } = require('../services/stockVerification');
+const { resolveShopId } = require('../services/shopContext');
+const { applyManualAdjustment, restoreStock } = require('../services/stockAdapter');
 
 // Middleware
 const auth = require('../middleware/auth');
@@ -77,17 +81,33 @@ router.get('/', auth, async (req, res) => {
 
     console.log(`[SYNC] 🚀 STARTING FETCH for Business ID: "${businessId}"`);
 
+    const businessData = await Business.findById(businessId).lean();
+    const defaultShopId = await resolveShopId({ businessId, requestedShopId: businessData?.defaultShopId });
+    const requestedShopId = req.query.shopId ? String(req.query.shopId) : defaultShopId;
+    const allShopsMode = req.query.allShops === 'true';
+
+    const transactionFilter = { businessId, ...(allShopsMode ? {} : { shopId: requestedShopId }) };
+    const expenditureFilter = { business: businessId, ...(allShopsMode ? {} : { shopId: requestedShopId }) };
+
     // Fetch All Data (Simple Query)
-    const [businessData, rawProducts, rawTransactions, rawExpenditures, rawCategories, rawNotifications] = await Promise.all([
-      Business.findById(businessId).lean(),
+    const [rawProducts, rawTransactions, rawExpenditures, rawCategories, rawNotifications, rawShops, rawShopStocks] = await Promise.all([
       Product.find({
         businessId: { $in: [businessId, new ObjectId(businessId)] }
       }).lean(),
-      Transaction.find({ businessId }).sort({ createdAt: -1 }).limit(1000).lean(),
-      Expenditure.find({ business: businessId }).lean(),
+      Transaction.find(transactionFilter).sort({ createdAt: -1 }).limit(1000).lean(),
+      Expenditure.find(expenditureFilter).lean(),
       Category.find({ businessId }).sort({ usageCount: -1, name: 1 }).lean(),
-      Notification.find({ businessId, dismissedAt: null }).sort({ timestamp: -1 }).limit(50).lean()
+      Notification.find({ businessId, dismissedAt: null }).sort({ timestamp: -1 }).limit(50).lean(),
+      Shop.find({ businessId }).sort({ isMain: -1, createdAt: 1 }).lean(),
+      ProductShopStock.find({ businessId, ...(allShopsMode ? {} : { shopId: requestedShopId }) }).lean()
     ]);
+
+    const productStockMap = new Map();
+    for (const row of rawShopStocks) {
+      const key = String(row.productId);
+      const current = Number(productStockMap.get(key) || 0);
+      productStockMap.set(key, current + Number(row.onHand || 0));
+    }
 
     // --- DETECTIVE MODE: DIAGNOSE EMPTY PRODUCTS ---
     console.log(`[SYNC] Found ${rawProducts.length} products.`);
@@ -128,7 +148,9 @@ router.get('/', auth, async (req, res) => {
     const products = rawProducts.map(p => ({
       ...p,
       id: (p.id && p.id !== 'undefined' && p.id !== 'null') ? p.id : p._id.toString(),
-      currentStock: p.stock !== undefined ? p.stock : (p.currentStock || 0),
+      currentStock: productStockMap.has((p.id && p.id !== 'undefined' && p.id !== 'null') ? p.id : p._id.toString())
+        ? Number(productStockMap.get((p.id && p.id !== 'undefined' && p.id !== 'null') ? p.id : p._id.toString()) || 0)
+        : (p.stock !== undefined ? p.stock : (p.currentStock || 0)),
       sellingPrice: parseDecimal(p.sellingPrice),
       costPrice: parseDecimal(p.costPrice),
       units: (p.units || []).map(u => ({
@@ -141,6 +163,7 @@ router.get('/', auth, async (req, res) => {
     const transactions = rawTransactions.map(t => ({
       ...t,
       id: (t.id && t.id !== 'undefined' && t.id !== 'null') ? t.id : t._id.toString(),
+      shopId: t.shopId || (businessData?.defaultShopId || null),
       isPreviousDebt: Boolean(t.isPreviousDebt),
       items: (t.items || []).map(i => ({
         ...i,
@@ -176,6 +199,7 @@ router.get('/', auth, async (req, res) => {
       return {
         ...e,
         id: (e.id && e.id !== 'undefined' && e.id !== 'null') ? e.id : e._id.toString(),
+        shopId: e.shopId || (businessData?.defaultShopId || null),
         amount: finalAmount,
         flowType: finalFlow
       };
@@ -210,11 +234,20 @@ router.get('/', auth, async (req, res) => {
         address: businessData.address,
         staffPermissions: businessData.staffPermissions,
         settings: businessData.settings,
+        defaultShopId: businessData.defaultShopId || defaultShopId,
         trialEndsAt: businessData.trialEndsAt,
         isSubscribed: businessData.isSubscribed,
         logo: businessData.logo,
         theme: businessData.theme
-      } : undefined
+      } : undefined,
+      shops: rawShops.map((shop) => ({
+        id: String(shop._id),
+        name: shop.name,
+        isMain: Boolean(shop.isMain),
+        status: shop.status || 'active'
+      })),
+      activeShopId: allShopsMode ? 'all' : requestedShopId,
+      allShopsMode
     });
 
   } catch (err) {
@@ -228,6 +261,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
   try {
     const { products = [], transactions = [], expenditures = [], business, categories = [] } = req.body || {};
     const businessId = req.businessId;
+    const defaultShopId = await resolveShopId({ businessId, requestedShopId: req.body?.shopId });
 
     if (business && typeof business === 'object') {
        const { staffPermissions, trialEndsAt, isSubscribed, ...safeUpdates } = business;
@@ -261,6 +295,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
 
       const existingProductMap = new Map(existingProducts.map((p) => [p.id, p]));
       const productNotifications = [];
+      const stockMirrorOps = [];
 
       const productOps = products.map((p) => {
         const productId = String(p?.id || '').trim();
@@ -271,6 +306,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
         if (Number.isNaN(incomingUpdatedAt.getTime())) return null;
 
         const stockDelta = Number(p.stockDelta); // Optional Delta
+        const productShopId = p.shopId || defaultShopId;
 
         // Idempotency / Stale Check
         // If we have a delta, we want to apply it even if the timestamp is "stale" (out of order),
@@ -411,8 +447,10 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
         // DELTA SYNC MAGIC: Use $inc if delta is provided, otherwise fallback to $set
         if (typeof stockDelta === 'number' && !Number.isNaN(stockDelta)) {
             updateOp.$inc = { stock: stockDelta };
+            stockMirrorOps.push(applyManualAdjustment({ businessId, shopId: productShopId, productId, delta: stockDelta }));
         } else {
             updateSet.stock = nextStockAbsolute; // Legacy/Absolute overwrite
+            stockMirrorOps.push(applyManualAdjustment({ businessId, shopId: productShopId, productId, currentStock: nextStockAbsolute }));
         }
 
         return {
@@ -426,6 +464,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
 
       if (productOps.length > 0) {
         await Product.bulkWrite(productOps);
+        await Promise.allSettled(stockMirrorOps);
       }
 
       if (productNotifications.length > 0) {
@@ -488,6 +527,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
 
         const updateData = {
           businessId,
+          shopId: t.shopId || defaultShopId,
           id: txId,
           transactionDate: t.transactionDate ? new Date(t.transactionDate) : null,
           customerName: normalizeCustomerName(t.customerName),
@@ -553,6 +593,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
             update: {
               $set: {
                 business: businessId,
+                shopId: e.shopId || defaultShopId,
                 id: e.id,
                 date: e.date ? new Date(e.date) : new Date(),
                 amount: toDecimal(e.amount),
@@ -628,6 +669,7 @@ router.delete('/transactions/:id', auth, requireActiveSubscription, async (req, 
   try {
     const { id } = req.params;
     const businessId = new mongoose.Types.ObjectId(req.businessId); // Transactions use ObjectId
+    const defaultShopId = await resolveShopId({ businessId: req.businessId, requestedShopId: req.query.shopId });
 
     // 1. Find transaction first (needed for both restock and notification)
     const transaction = await Transaction.findOne({ businessId, id });
@@ -635,12 +677,11 @@ router.delete('/transactions/:id', auth, requireActiveSubscription, async (req, 
 
     // 2. Restock if requested
     if (req.query.restock === 'true' && transaction.items) {
+        const transactionShopId = transaction.shopId || defaultShopId;
         // Restore stock
         for (const item of transaction.items) {
-             await Product.updateOne(
-                { businessId: req.businessId, id: item.productId },
-                { $inc: { stock: item.quantity } }
-             );
+             const multiplier = item.multiplier || 1;
+             await restoreStock({ businessId: req.businessId, shopId: transactionShopId, productId: item.productId, qty: item.quantity * multiplier });
         }
     }
 
