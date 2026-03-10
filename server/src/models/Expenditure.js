@@ -5,6 +5,7 @@ const ExpenditureSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
 
   business: { type: mongoose.Schema.Types.ObjectId, ref: 'Business', required: true },
+  shopId: { type: String, default: null, index: true },
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 
   title: { type: String, required: false },
