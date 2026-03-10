@@ -25,6 +25,7 @@ const sanitizeBusiness = (business) => ({
   address: business.address,
   logo: business.logo,
   theme: business.theme,
+  defaultShopId: business.defaultShopId || null,
   trialEndsAt: business.trialEndsAt,
   isSubscribed: business.isSubscribed,
   subscriptionExpiresAt: business.subscriptionExpiresAt,
