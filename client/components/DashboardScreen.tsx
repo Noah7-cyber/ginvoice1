@@ -26,7 +26,7 @@ import {
 } from 'recharts';
 import { Transaction, Product, BusinessProfile, Expenditure } from '../types';
 import { CURRENCY } from '../constants';
-import { getAnalytics, updateBusinessProfile } from '../services/api';
+import { getAnalyticsByShop, updateBusinessProfile } from '../services/api';
 import { safeCalculate, safeSum } from '../utils/math';
 import ComplianceShieldWidget from './ComplianceShieldWidget';
 import ComplianceShieldModal from './ComplianceShieldModal';
@@ -36,10 +36,12 @@ interface DashboardScreenProps {
   products: Product[];
   expenditures?: Expenditure[];
   business?: BusinessProfile;
+  activeShopId?: string;
+  allShopsMode?: boolean;
   onUpdateBusiness?: (business: Partial<BusinessProfile>) => void;
 }
 
-const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, products, expenditures = [], business, onUpdateBusiness }) => {
+const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, products, expenditures = [], business, activeShopId, allShopsMode, onUpdateBusiness }) => {
   const [showShieldModal, setShowShieldModal] = useState(false);
 
   const [remoteAnalytics, setRemoteAnalytics] = useState<{
@@ -71,7 +73,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
     let active = true;
     if (!navigator.onLine) return;
     if (!localStorage.getItem('ginvoice_auth_token_v1')) return;
-    getAnalytics(timeRange)
+    getAnalyticsByShop({ range: timeRange, shopId: allShopsMode ? undefined : activeShopId, allShops: allShopsMode })
       .then((data) => {
         if (active) setRemoteAnalytics(data);
       })
@@ -86,7 +88,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
     return () => {
       active = false;
     };
-  }, [transactions, timeRange]);
+  }, [transactions, timeRange, activeShopId, allShopsMode]);
 
   const localStats = useMemo(() => {
     const salesTransactions = transactions.filter(tx => !tx.isPreviousDebt);

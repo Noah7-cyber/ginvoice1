@@ -1,4 +1,4 @@
-import { InventoryState, BusinessProfile, Product, Category, DiscountCode } from '../types';
+import { InventoryState, BusinessProfile, Product, Category, DiscountCode, Shop } from '../types';
 
 const API_BASE = (import.meta as any).env?.VITE_API_URL || '';
 const TOKEN_KEY = 'ginvoice_auth_token_v1';
@@ -153,15 +153,19 @@ export const syncState = async (state: InventoryState) => {
 };
 
 // Updated: supports forceFull mode to ignore versions and get full state
-export const fetchRemoteState = async (forceFull = false) => {
+export const fetchRemoteState = async (forceFull = false, options?: { shopId?: string; allShops?: boolean }) => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');
 
   // If forceFull is true, send NO query params to trigger server legacy fallback
-  const query = forceFull ? '' : new URLSearchParams({
-    version: '0',
-    lastSync: ''
-  }).toString();
+  const params = new URLSearchParams();
+  if (!forceFull) {
+    params.set('version', '0');
+    params.set('lastSync', '');
+  }
+  if (options?.shopId) params.set('shopId', options.shopId);
+  if (options?.allShops) params.set('allShops', 'true');
+  const query = params.toString();
 
   const url = buildUrl(`/api/sync${query ? `?${query}` : ''}`);
 
@@ -744,6 +748,62 @@ export const getAnalytics = async (range?: '7d' | '30d' | '1y') => {
     headers: {
       Authorization: `Bearer ${token}`
     }
+  });
+};
+
+export const getAnalyticsByShop = async (params: { range?: '7d' | '30d' | '1y'; shopId?: string; allShops?: boolean }) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  const query = new URLSearchParams();
+  if (params.range) query.set('range', params.range);
+  if (params.shopId) query.set('shopId', params.shopId);
+  if (params.allShops) query.set('allShops', 'true');
+
+  return request(`/api/analytics${query.toString() ? `?${query.toString()}` : ''}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+};
+
+export const listShops = async (): Promise<{ shops: Shop[]; defaultShopId: string; meta: { activeShopCount: number; totalShopCount: number } }> => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/shops', {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+};
+
+export const createShop = async (name: string): Promise<{ shop: Shop }> => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+  return request('/api/shops', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ name })
+  });
+};
+
+export const renameShop = async (shopId: string, name: string): Promise<{ shop: Shop }> => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+  return request(`/api/shops/${shopId}`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ name })
+  });
+};
+
+export const getShopsOverview = async () => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+  return request('/api/shops/summary/overview', {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` }
   });
 };
 
