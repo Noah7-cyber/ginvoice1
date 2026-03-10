@@ -10,6 +10,8 @@ const Expenditure = require('../models/Expenditure');
 const Category = require('../models/Category');
 const Notification = require('../models/Notification');
 const { maybeCreateStockVerificationNotification } = require('../services/stockVerification');
+const { resolveShopId } = require('../services/shopContext');
+const { applyManualAdjustment, restoreStock } = require('../services/stockAdapter');
 
 // Middleware
 const auth = require('../middleware/auth');
@@ -141,6 +143,7 @@ router.get('/', auth, async (req, res) => {
     const transactions = rawTransactions.map(t => ({
       ...t,
       id: (t.id && t.id !== 'undefined' && t.id !== 'null') ? t.id : t._id.toString(),
+      shopId: t.shopId || (businessData?.defaultShopId || null),
       isPreviousDebt: Boolean(t.isPreviousDebt),
       items: (t.items || []).map(i => ({
         ...i,
@@ -176,6 +179,7 @@ router.get('/', auth, async (req, res) => {
       return {
         ...e,
         id: (e.id && e.id !== 'undefined' && e.id !== 'null') ? e.id : e._id.toString(),
+        shopId: e.shopId || (businessData?.defaultShopId || null),
         amount: finalAmount,
         flowType: finalFlow
       };
@@ -228,6 +232,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
   try {
     const { products = [], transactions = [], expenditures = [], business, categories = [] } = req.body || {};
     const businessId = req.businessId;
+    const defaultShopId = await resolveShopId({ businessId, requestedShopId: req.body?.shopId });
 
     if (business && typeof business === 'object') {
        const { staffPermissions, trialEndsAt, isSubscribed, ...safeUpdates } = business;
@@ -261,6 +266,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
 
       const existingProductMap = new Map(existingProducts.map((p) => [p.id, p]));
       const productNotifications = [];
+      const stockMirrorOps = [];
 
       const productOps = products.map((p) => {
         const productId = String(p?.id || '').trim();
@@ -271,6 +277,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
         if (Number.isNaN(incomingUpdatedAt.getTime())) return null;
 
         const stockDelta = Number(p.stockDelta); // Optional Delta
+        const productShopId = p.shopId || defaultShopId;
 
         // Idempotency / Stale Check
         // If we have a delta, we want to apply it even if the timestamp is "stale" (out of order),
@@ -411,8 +418,10 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
         // DELTA SYNC MAGIC: Use $inc if delta is provided, otherwise fallback to $set
         if (typeof stockDelta === 'number' && !Number.isNaN(stockDelta)) {
             updateOp.$inc = { stock: stockDelta };
+            stockMirrorOps.push(applyManualAdjustment({ businessId, shopId: productShopId, productId, delta: stockDelta }));
         } else {
             updateSet.stock = nextStockAbsolute; // Legacy/Absolute overwrite
+            stockMirrorOps.push(applyManualAdjustment({ businessId, shopId: productShopId, productId, currentStock: nextStockAbsolute }));
         }
 
         return {
@@ -426,6 +435,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
 
       if (productOps.length > 0) {
         await Product.bulkWrite(productOps);
+        await Promise.allSettled(stockMirrorOps);
       }
 
       if (productNotifications.length > 0) {
@@ -488,6 +498,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
 
         const updateData = {
           businessId,
+          shopId: t.shopId || defaultShopId,
           id: txId,
           transactionDate: t.transactionDate ? new Date(t.transactionDate) : null,
           customerName: normalizeCustomerName(t.customerName),
@@ -553,6 +564,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
             update: {
               $set: {
                 business: businessId,
+                shopId: e.shopId || defaultShopId,
                 id: e.id,
                 date: e.date ? new Date(e.date) : new Date(),
                 amount: toDecimal(e.amount),
@@ -628,6 +640,7 @@ router.delete('/transactions/:id', auth, requireActiveSubscription, async (req, 
   try {
     const { id } = req.params;
     const businessId = new mongoose.Types.ObjectId(req.businessId); // Transactions use ObjectId
+    const defaultShopId = await resolveShopId({ businessId: req.businessId, requestedShopId: req.query.shopId });
 
     // 1. Find transaction first (needed for both restock and notification)
     const transaction = await Transaction.findOne({ businessId, id });
@@ -635,12 +648,11 @@ router.delete('/transactions/:id', auth, requireActiveSubscription, async (req, 
 
     // 2. Restock if requested
     if (req.query.restock === 'true' && transaction.items) {
+        const transactionShopId = transaction.shopId || defaultShopId;
         // Restore stock
         for (const item of transaction.items) {
-             await Product.updateOne(
-                { businessId: req.businessId, id: item.productId },
-                { $inc: { stock: item.quantity } }
-             );
+             const multiplier = item.multiplier || 1;
+             await restoreStock({ businessId: req.businessId, shopId: transactionShopId, productId: item.productId, qty: item.quantity * multiplier });
         }
     }
 
