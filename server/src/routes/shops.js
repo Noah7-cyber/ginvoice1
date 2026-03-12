@@ -51,7 +51,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
     if (!name) return res.status(400).json({ message: 'Shop name is required.' });
 
     await ensureDefaultShopForBusiness(businessId);
-    const shop = await Shop.create({ businessId, name, isMain: false, status: 'active' });
+    const shop = await Shop.create({ businessId, name, normalizedName: name.toLowerCase(), isMain: false, status: 'active' });
 
     res.status(201).json({
       shop: {
@@ -84,8 +84,8 @@ router.put('/:shopId', auth, requireActiveSubscription, async (req, res) => {
 
     const shop = await Shop.findOneAndUpdate(
       { _id: req.params.shopId, businessId },
-      { $set: { name } },
-      { new: true }
+      { $set: { name, normalizedName: name.toLowerCase() } },
+      { new: true, runValidators: true }
     );
     if (!shop) return res.status(404).json({ message: 'Shop not found.' });
 

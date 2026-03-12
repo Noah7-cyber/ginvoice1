@@ -12,9 +12,11 @@ const ensureDefaultShopForBusiness = async (businessId) => {
 
   let mainShop = await Shop.findOne({ businessId: normalizedBusinessId, isMain: true }).select('_id').lean();
   if (!mainShop) {
+    const fallbackName = business.name ? `${business.name} Main Shop` : 'Main Shop';
     mainShop = await Shop.create({
       businessId: normalizedBusinessId,
-      name: business.name ? `${business.name} Main Shop` : 'Main Shop',
+      name: fallbackName,
+      normalizedName: fallbackName.toLowerCase(),
       isMain: true,
       status: 'active'
     });
@@ -26,11 +28,43 @@ const ensureDefaultShopForBusiness = async (businessId) => {
 };
 
 const resolveShopId = async ({ businessId, requestedShopId }) => {
-  if (requestedShopId) return String(requestedShopId);
-  return ensureDefaultShopForBusiness(businessId);
+  const normalizedBusinessId = String(businessId);
+  const defaultShopId = await ensureDefaultShopForBusiness(normalizedBusinessId);
+  if (!defaultShopId) return null;
+
+  if (!requestedShopId) return defaultShopId;
+
+  const requested = await Shop.findOne({
+    _id: String(requestedShopId),
+    businessId: normalizedBusinessId,
+    status: 'active'
+  }).select('_id').lean();
+
+  return requested ? String(requested._id) : defaultShopId;
+};
+
+const isAllShopsMode = (value) => value === true || value === 'true' || value === '1';
+
+const ensureWritableShopContext = async ({ businessId, requestedShopId, allShops }) => {
+  if (isAllShopsMode(allShops)) {
+    const err = new Error('All Shops mode is read-only. Select a specific shop to continue.');
+    err.status = 400;
+    throw err;
+  }
+
+  const shopId = await resolveShopId({ businessId, requestedShopId });
+  if (!shopId) {
+    const err = new Error('Could not resolve active shop for this business.');
+    err.status = 400;
+    throw err;
+  }
+
+  return shopId;
 };
 
 module.exports = {
   ensureDefaultShopForBusiness,
-  resolveShopId
+  resolveShopId,
+  isAllShopsMode,
+  ensureWritableShopContext
 };

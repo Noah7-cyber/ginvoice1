@@ -16,7 +16,8 @@ import {
   Wallet,
   Loader2,
   Bell,
-  AlertCircle
+  AlertCircle,
+  X
 } from 'lucide-react';
 import { InventoryState, UserRole, Product, ProductUnit, Transaction, BusinessProfile, TabId, SaleItem, PaymentMethod, Expenditure, ActivityLog, Shop } from './types';
 import useTabRouting from './hooks/useTabRouting';
@@ -122,6 +123,9 @@ const App: React.FC = () => {
   const { status: wakeStatus, showWakeupUI } = useServerWakeup();
   const wakeToastShownRef = useRef(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [shopModalMode, setShopModalMode] = useState<'create' | 'rename' | null>(null);
+  const [shopNameInput, setShopNameInput] = useState('');
+  const [isSavingShop, setIsSavingShop] = useState(false);
   const isTimeBlocked = useTimeDrift();
 
   /* // TEMPORARILY DISABLED TO FIX CRASH
@@ -1065,31 +1069,55 @@ const App: React.FC = () => {
   };
 
   const handleCreateShop = async () => {
-    const name = window.prompt('Enter new shop name');
-    if (!name) return;
-    try {
-      await createShop(name);
-      await refreshData();
-      addToast('Shop created.', 'success');
-    } catch (err: any) {
-      addToast(err?.message || 'Could not create shop', 'error');
-    }
+    setShopNameInput('');
+    setShopModalMode('create');
   };
 
   const handleRenameActiveShop = async () => {
     const targetId = state.activeShopId;
     if (!targetId || targetId === ALL_SHOPS_ID) return;
     const currentName = (state.shops || []).find((s: Shop) => s.id === targetId)?.name || 'Shop';
-    const nextName = window.prompt('Rename shop', currentName);
-    if (!nextName || nextName === currentName) return;
+    setShopNameInput(currentName);
+    setShopModalMode('rename');
+  };
+
+  const closeShopModal = () => {
+    if (isSavingShop) return;
+    setShopModalMode(null);
+    setShopNameInput('');
+  };
+
+  const handleSubmitShopModal = async () => {
+    if (isSavingShop) return;
+    const name = shopNameInput.trim();
+    if (!name) return;
+    if (!isOnline) return;
+
+    const targetId = state.activeShopId;
+    const currentName = (state.shops || []).find((s: Shop) => s.id === targetId)?.name || '';
+    if (shopModalMode === 'rename' && (!targetId || targetId === ALL_SHOPS_ID || name === currentName)) {
+      closeShopModal();
+      return;
+    }
+
+    setIsSavingShop(true);
     try {
-      await renameShop(targetId, nextName);
+      if (shopModalMode === 'create') {
+        await createShop(name);
+      } else if (shopModalMode === 'rename' && targetId) {
+        await renameShop(targetId, name);
+      }
       await refreshData();
-      addToast('Shop renamed.', 'success');
+      addToast(shopModalMode === 'create' ? 'Shop created.' : 'Shop renamed.', 'success');
+      closeShopModal();
     } catch (err: any) {
-      addToast(err?.message || 'Could not rename shop', 'error');
+      addToast(err?.message || `Could not ${shopModalMode === 'create' ? 'create' : 'rename'} shop`, 'error');
+    } finally {
+      setIsSavingShop(false);
     }
   };
+
+  const hasMultipleShops = (state.shops || []).length > 1;
 
   const allowedTabs = useMemo(() => {
     const hasPro = entitlements?.plan === 'PRO' || state.business.isSubscribed;
@@ -1257,18 +1285,22 @@ const App: React.FC = () => {
           <div className="flex items-center gap-2">
             {state.role === 'owner' && (
               <>
-                <select
-                  value={state.activeShopId || state.business.defaultShopId || ''}
-                  onChange={(e) => handleShopSwitch(e.target.value)}
-                  className="hidden md:block text-xs font-bold border rounded-lg px-2 py-1.5"
-                >
-                  {(state.shops || []).map((shop) => (
-                    <option key={shop.id} value={shop.id}>{shop.name}</option>
-                  ))}
-                  <option value={ALL_SHOPS_ID}>All Shops (read-only)</option>
-                </select>
-                <button onClick={handleCreateShop} className="hidden md:block text-xs font-bold px-2 py-1.5 rounded-lg border bg-white hover:bg-gray-50">+ Shop</button>
-                <button onClick={handleRenameActiveShop} className="hidden md:block text-xs font-bold px-2 py-1.5 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50" disabled={!state.activeShopId || state.activeShopId === ALL_SHOPS_ID}>Rename</button>
+                {hasMultipleShops && (
+                  <select
+                    value={state.activeShopId || state.business.defaultShopId || ''}
+                    onChange={(e) => handleShopSwitch(e.target.value)}
+                    className="hidden md:block text-xs font-bold border rounded-lg px-2 py-1.5"
+                  >
+                    {(state.shops || []).map((shop) => (
+                      <option key={shop.id} value={shop.id}>{shop.name}</option>
+                    ))}
+                    <option value={ALL_SHOPS_ID}>All Shops (read-only)</option>
+                  </select>
+                )}
+                <button onClick={handleCreateShop} className="hidden md:block text-xs font-bold px-2 py-1.5 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed" disabled={!isOnline || isSavingShop}>+ Shop</button>
+                {hasMultipleShops && (
+                  <button onClick={handleRenameActiveShop} className="hidden md:block text-xs font-bold px-2 py-1.5 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed" disabled={!state.activeShopId || state.activeShopId === ALL_SHOPS_ID || !isOnline || isSavingShop}>Rename</button>
+                )}
               </>
             )}
             {isSyncing && <RefreshCw className="animate-spin text-gray-400 mr-2" size={20} />}
@@ -1457,6 +1489,44 @@ const App: React.FC = () => {
         onSnoozeVerification={snoozeVerification}
         onDismissVerification={dismissVerification}
       />
+
+      {shopModalMode && (
+        <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={closeShopModal}>
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-gray-100" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b flex items-center justify-between">
+              <h3 className="text-lg font-black text-gray-900">{shopModalMode === 'create' ? 'Create Shop' : 'Rename Shop'}</h3>
+              <button onClick={closeShopModal} disabled={isSavingShop} className="text-gray-400 hover:text-gray-600 disabled:opacity-50"><X size={20} /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <label className="block text-sm font-bold text-gray-700">
+                Shop name
+                <input
+                  type="text"
+                  value={shopNameInput}
+                  onChange={(e) => setShopNameInput(e.target.value)}
+                  maxLength={60}
+                  autoFocus
+                  disabled={isSavingShop}
+                  className="mt-2 w-full rounded-xl border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:bg-gray-100"
+                  placeholder="e.g. Island Branch"
+                />
+              </label>
+              {!isOnline && <p className="text-xs font-semibold text-orange-600">You need internet connection to manage shops.</p>}
+            </div>
+            <div className="px-6 pb-6 flex items-center justify-end gap-2">
+              <button onClick={closeShopModal} disabled={isSavingShop} className="px-4 py-2 text-sm font-bold rounded-xl border text-gray-700 hover:bg-gray-50 disabled:opacity-50">Cancel</button>
+              <button
+                onClick={handleSubmitShopModal}
+                disabled={isSavingShop || !isOnline || !shopNameInput.trim()}
+                className="px-4 py-2 text-sm font-bold rounded-xl bg-primary text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {isSavingShop && <Loader2 size={14} className="animate-spin" />}
+                {shopModalMode === 'create' ? 'Create Shop' : 'Save Name'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Cart Sidebar */}
       <div className={`fixed inset-y-0 right-0 z-[60] transition-all duration-300 ease-in-out md:relative md:inset-auto md:z-auto ${isCartOpen ? 'translate-x-0 w-full max-w-sm md:w-80 lg:w-96 border-l shadow-2xl md:shadow-none' : 'translate-x-full w-0 overflow-hidden'}`}>

@@ -12,7 +12,7 @@ const Notification = require('../models/Notification');
 const Shop = require('../models/Shop');
 const ProductShopStock = require('../models/ProductShopStock');
 const { maybeCreateStockVerificationNotification } = require('../services/stockVerification');
-const { resolveShopId } = require('../services/shopContext');
+const { resolveShopId, isAllShopsMode } = require('../services/shopContext');
 const { applyManualAdjustment, restoreStock } = require('../services/stockAdapter');
 
 // Middleware
@@ -260,6 +260,9 @@ router.get('/', auth, async (req, res) => {
 router.post('/', auth, requireActiveSubscription, async (req, res) => {
   try {
     const { products = [], transactions = [], expenditures = [], business, categories = [] } = req.body || {};
+    if (isAllShopsMode(req.body?.allShops)) {
+      return res.status(400).json({ message: 'All Shops mode is read-only. Select a specific shop to continue.' });
+    }
     const businessId = req.businessId;
     const defaultShopId = await resolveShopId({ businessId, requestedShopId: req.body?.shopId });
 
