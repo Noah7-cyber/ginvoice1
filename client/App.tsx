@@ -324,6 +324,8 @@ const App: React.FC = () => {
       }));
   }, [state.transactions]);
 
+  const isAllShopsMode = state.activeShopId === ALL_SHOPS_ID || Boolean(state.allShopsMode);
+
   const botUiContext = useMemo(() => {
     const baseShopContext = {
       activeShopId: state.activeShopId || state.business.defaultShopId || null,
@@ -1063,7 +1065,6 @@ const App: React.FC = () => {
   const perms = (state.business.staffPermissions as any) || {};
   const canManageStock = state.role === 'owner' || perms.canEditInventory;
   const canManageHistory = state.role === 'owner' || perms.canEditHistory;
-  const isAllShopsMode = state.activeShopId === ALL_SHOPS_ID || Boolean(state.allShopsMode);
 
   const visibleTransactions = useMemo(() => {
     if (isAllShopsMode) return state.transactions;
