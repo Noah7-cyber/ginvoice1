@@ -6,6 +6,7 @@ const NotificationSchema = new mongoose.Schema({
   message: { type: String, required: true },
   body: { type: String, default: '' },
   type: { type: String, enum: ['deletion', 'modification', 'stock_verification', 'stock_variance'], required: true },
+  shopId: { type: String, default: null, index: true },
   amount: { type: Number, default: 0 },
   performedBy: { type: String, default: 'System' },
   payload: { type: mongoose.Schema.Types.Mixed, default: null },

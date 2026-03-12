@@ -223,13 +223,13 @@ const formatToolResult = (result, fallbackMessage) => {
 };
 
 
-const tryHandleCheapIntent = async (message, businessId, userRole) => {
+const tryHandleCheapIntent = async (message, businessId, userRole, shopContext = {}) => {
   const text = normalizeText(message);
   if (!text) return null;
 
   // 1. Stock Check
   if (/low\s*stock|out\s*of\s*stock|stock\s*running\s*low/.test(text)) {
-    const result = await executeTool({ name: 'check_low_stock', args: {} }, businessId, userRole);
+    const result = await executeTool({ name: 'check_low_stock', args: {} }, businessId, userRole, shopContext);
     return {
       text: formatToolResult(result, 'Stock check complete.'),
       action: result?.special_action === 'NAVIGATE'
@@ -240,7 +240,7 @@ const tryHandleCheapIntent = async (message, businessId, userRole) => {
 
   // 2. Debtors Check
   if (/debtor|owe|owing|unpaid|credit\s*sales?/.test(text)) {
-    const result = await executeTool({ name: 'check_debtors', args: {} }, businessId, userRole);
+    const result = await executeTool({ name: 'check_debtors', args: {} }, businessId, userRole, shopContext);
     return {
       text: formatToolResult(result, 'Debtor check complete.'),
       action: result?.special_action === 'NAVIGATE'
@@ -252,7 +252,7 @@ const tryHandleCheapIntent = async (message, businessId, userRole) => {
   // 3. Today's Summary (Fast Report)
   if (/today.*(sales?|revenue|profit)|(sales?|revenue|profit).*today/.test(text)) {
     const today = new Date().toISOString().slice(0, 10);
-    const result = await executeTool({ name: 'get_business_report', args: { startDate: today, endDate: today } }, businessId, userRole);
+    const result = await executeTool({ name: 'get_business_report', args: { startDate: today, endDate: today } }, businessId, userRole, shopContext);
 
     if (result && result.financials) {
         const { netBusinessProfit, netCashFlow } = result.financials;
@@ -268,7 +268,7 @@ const tryHandleCheapIntent = async (message, businessId, userRole) => {
 
   // 4. Inventory Intelligence
   if (/(top\s*selling|best\s*selling|dead\s*stock|restock|what\s*to\s*buy|buy\s*list|slow\s*moving)/.test(text)) {
-    const result = await executeTool({ name: 'get_inventory_intelligence', args: { days: 30, restockHorizonDays: 30, topN: 10 } }, businessId, userRole);
+    const result = await executeTool({ name: 'get_inventory_intelligence', args: { days: 30, restockHorizonDays: 30, topN: 10 } }, businessId, userRole, shopContext);
 
     if (result?.error) return { text: result.error, action: null };
 
@@ -330,6 +330,10 @@ router.post('/chat', auth, async (req, res) => {
     const userMessage = typeof req.body.message === 'string' ? req.body.message.slice(0, MAX_MESSAGE_LENGTH) : '';
     const history = Array.isArray(req.body.history) ? req.body.history : [];
     const uiContext = req.body.uiContext && typeof req.body.uiContext === 'object' ? req.body.uiContext : null;
+    const shopContext = {
+      activeShopId: uiContext?.activeShopId ? String(uiContext.activeShopId) : null,
+      allShopsMode: Boolean(uiContext?.allShopsMode)
+    };
     const businessId = req.business?._id || req.businessId;
     const userRole = req.user?.role || 'staff';
 
@@ -342,7 +346,7 @@ router.post('/chat', auth, async (req, res) => {
 
     // Deterministic fast-paths for high-confidence intents.
     if (trimmedMessage) {
-      const cheapIntent = await tryHandleCheapIntent(trimmedMessage, businessId, userRole);
+      const cheapIntent = await tryHandleCheapIntent(trimmedMessage, businessId, userRole, shopContext);
       if (cheapIntent) {
         return res.json({ text: cheapIntent.text, action: cheapIntent.action || null, usage: null });
       }
@@ -505,7 +509,7 @@ RESPONSE STYLE: Plain text only. Do NOT use markdown bolding (like **text**) or 
                 }
 
                 // Execute Tool
-                const toolResult = await executeTool({ name: functionName, args: functionArgs }, businessId, userRole);
+                const toolResult = await executeTool({ name: functionName, args: functionArgs }, businessId, userRole, shopContext);
 
                 // SPECIAL INTERCEPTION: Large Data Sets / Direct Navigation
                 if (toolResult && toolResult.special_action === 'NAVIGATE') {

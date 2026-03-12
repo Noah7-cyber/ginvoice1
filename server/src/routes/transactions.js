@@ -5,14 +5,14 @@ const Notification = require('../models/Notification');
 const Business = require('../models/Business');
 const auth = require('../middleware/auth');
 const requireActiveSubscription = require('../middleware/subscription');
-const { resolveShopId } = require('../services/shopContext');
+const { resolveShopId, ensureWritableShopContext } = require('../services/shopContext');
 const { decrementStock, restoreStock, reconcileSaleEdit } = require('../services/stockAdapter');
 
 // CREATE Transaction
 router.post('/', auth, requireActiveSubscription, async (req, res) => {
   try {
-    const { items, customerName, totalAmount, amountPaid, paymentMethod, transactionDate, id, staffId, discountCode, shopId: requestedShopId } = req.body;
-    const shopId = await resolveShopId({ businessId: req.businessId, requestedShopId });
+    const { items, customerName, totalAmount, amountPaid, paymentMethod, transactionDate, id, staffId, discountCode, shopId: requestedShopId, allShops } = req.body;
+    const shopId = await ensureWritableShopContext({ businessId: req.businessId, requestedShopId, allShops });
 
     // 1. Determine Staff ID (Trust frontend "Store Staff" if provided, otherwise fallback to user)
     // NOTE: This logic ensures Owner can't accidentally attribute to themselves if they selected "Staff" mode on frontend
@@ -54,6 +54,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
 
     res.status(201).json(newTransaction);
   } catch (err) {
+    if (err?.status) return res.status(err.status).json({ message: err.message });
     console.error('Create Transaction Error:', err);
     res.status(500).json({ message: 'Server Error' });
   }
@@ -63,12 +64,12 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
 router.put('/:id', auth, requireActiveSubscription, async (req, res) => {
   try {
     const { id } = req.params;
-    const { items: newItems, totalAmount, amountPaid, paymentMethod, customerName, date, shopId: requestedShopId } = req.body;
+    const { items: newItems, totalAmount, amountPaid, paymentMethod, customerName, date, shopId: requestedShopId, allShops } = req.body;
 
     // 1. Fetch Original
     const originalTx = await Transaction.findOne({ id, businessId: req.businessId });
     if (!originalTx) return res.status(404).json({ message: 'Transaction not found' });
-    const shopId = await resolveShopId({ businessId: req.businessId, requestedShopId: requestedShopId || originalTx.shopId });
+    const shopId = await ensureWritableShopContext({ businessId: req.businessId, requestedShopId: requestedShopId || originalTx.shopId, allShops });
     if (!originalTx.shopId) originalTx.shopId = shopId;
 
     // 2. Rollback Stock (Restock Original Items)
@@ -127,7 +128,8 @@ router.put('/:id', auth, requireActiveSubscription, async (req, res) => {
       message: `Sale to ${customerName || 'Customer'} edited`,
       amount: originalTx.totalAmount,
       performedBy: performerName,
-      type: 'modification'
+      type: 'modification',
+      shopId
     });
 
     // Helper to format Decimal128
@@ -148,6 +150,7 @@ router.put('/:id', auth, requireActiveSubscription, async (req, res) => {
     res.json(formattedTx);
 
   } catch (err) {
+    if (err?.status) return res.status(err.status).json({ message: err.message });
     console.error('Edit Transaction Error:', err);
     res.status(500).json({ message: 'Server Error' });
   }
@@ -211,7 +214,11 @@ router.delete('/:id', auth, requireActiveSubscription, async (req, res) => {
     // Default to true if not specified, or handle logic here
     const shouldRestock = req.query.restock !== 'false';
 
-    const shopId = await resolveShopId({ businessId: req.businessId, requestedShopId: req.query.shopId || transaction.shopId });
+    const shopId = await ensureWritableShopContext({
+      businessId: req.businessId,
+      requestedShopId: req.query.shopId || transaction.shopId,
+      allShops: req.query.allShops
+    });
     if (shouldRestock && transaction.items.length > 0) {
       for (const item of transaction.items) {
         const multiplier = item.multiplier || (item.selectedUnit ? item.selectedUnit.multiplier : 1);
@@ -227,7 +234,8 @@ router.delete('/:id', auth, requireActiveSubscription, async (req, res) => {
       amount: transaction.totalAmount || 0,
       performedBy: performerName,
       type: 'deletion',
-      payload: { transactionId: transaction.id }
+      shopId,
+      payload: { transactionId: transaction.id, shopId }
     });
     await notification.save();
 
@@ -236,6 +244,7 @@ router.delete('/:id', auth, requireActiveSubscription, async (req, res) => {
 
     res.json({ message: 'Transaction deleted and inventory restocked' });
   } catch (err) {
+    if (err?.status) return res.status(err.status).json({ message: err.message });
     console.error('Delete Transaction Error:', err);
     res.status(500).json({ message: 'Server Error' });
   }
