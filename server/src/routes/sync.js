@@ -12,7 +12,7 @@ const Notification = require('../models/Notification');
 const Shop = require('../models/Shop');
 const ProductShopStock = require('../models/ProductShopStock');
 const { maybeCreateStockVerificationNotification } = require('../services/stockVerification');
-const { resolveShopId } = require('../services/shopContext');
+const { resolveShopId, isAllShopsMode } = require('../services/shopContext');
 const { applyManualAdjustment, restoreStock } = require('../services/stockAdapter');
 
 // Middleware
@@ -205,12 +205,20 @@ router.get('/', auth, async (req, res) => {
       };
     });
 
-    const notifications = (rawNotifications || []).map(n => ({
+    const notifications = (rawNotifications || [])
+      .filter((n) => {
+        if (allShopsMode) return true;
+        const noteShopId = n.shopId || n?.payload?.shopId;
+        if (!noteShopId) return true;
+        return String(noteShopId) === String(requestedShopId);
+      })
+      .map(n => ({
         id: n._id.toString(),
         title: n.title || '',
         message: n.message,
         body: n.body || '',
         type: n.type,
+        shopId: n.shopId || n?.payload?.shopId || null,
         amount: n.amount,
         performedBy: n.performedBy,
         payload: n.payload || null,
@@ -260,6 +268,9 @@ router.get('/', auth, async (req, res) => {
 router.post('/', auth, requireActiveSubscription, async (req, res) => {
   try {
     const { products = [], transactions = [], expenditures = [], business, categories = [] } = req.body || {};
+    if (isAllShopsMode(req.body?.allShops)) {
+      return res.status(400).json({ message: 'All Shops mode is read-only. Select a specific shop to continue.' });
+    }
     const businessId = req.businessId;
     const defaultShopId = await resolveShopId({ businessId, requestedShopId: req.body?.shopId });
 
@@ -294,6 +305,11 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
         : [];
 
       const existingProductMap = new Map(existingProducts.map((p) => [p.id, p]));
+      const stockRows = incomingProductIds.length > 0
+        ? await ProductShopStock.find({ businessId, productId: { $in: incomingProductIds } }).lean()
+        : [];
+      const stockByShopProduct = new Map(stockRows.map((row) => [`${String(row.shopId)}::${String(row.productId)}`, Number(row.onHand || 0)]));
+
       const productNotifications = [];
       const stockMirrorOps = [];
 
@@ -348,7 +364,8 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
                    body: 'An item was removed from inventory.',
                    amount: 0,
                    performedBy: req.userRole === 'owner' ? 'Owner' : 'Staff',
-                   payload: { productId }
+                   shopId: productShopId,
+                   payload: { productId, shopId: productShopId }
                });
            }
            return {
@@ -366,7 +383,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
 
         if (existing) {
           const prevSelling = parseDecimal(existing.sellingPrice);
-          const prevStock = Number(existing.stock || 0);
+          const prevStock = Number(stockByShopProduct.get(`${productShopId}::${productId}`) ?? existing.stock ?? 0);
 
           // 1. Price Change Notification
           if (nextSelling !== prevSelling) {
@@ -378,7 +395,8 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
               body: `Selling price: ${prevSelling} → ${nextSelling}`,
               amount: Math.abs(nextSelling - prevSelling),
               performedBy: req.userRole === 'owner' ? 'Owner' : 'Staff',
-              payload: { productId, productName: p.name || '', field: 'sellingPrice', previous: prevSelling, next: nextSelling }
+              shopId: productShopId,
+              payload: { productId, shopId: productShopId, productName: p.name || '', field: 'sellingPrice', previous: prevSelling, next: nextSelling }
             });
           }
 
@@ -397,7 +415,8 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
               body: `Quantity update: ${productName} increased by +${increaseAmount}`,
               amount: increaseAmount,
               performedBy: req.userRole === 'owner' ? 'Owner' : 'Staff',
-              payload: { productId, productName: p.name || '', field: 'stock', delta: increaseAmount }
+              shopId: productShopId,
+              payload: { productId, shopId: productShopId, productName: p.name || '', field: 'stock', delta: increaseAmount }
             });
           }
 
@@ -415,7 +434,8 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
               body: `Quantity update: ${productName} reduced by -${decreaseAmount}`,
               amount: decreaseAmount,
               performedBy: req.userRole === 'owner' ? 'Owner' : 'Staff',
-              payload: { productId, productName: p.name || '', field: 'stock', delta: -decreaseAmount }
+              shopId: productShopId,
+              payload: { productId, shopId: productShopId, productName: p.name || '', field: 'stock', delta: -decreaseAmount }
             });
           }
         }
@@ -444,12 +464,10 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
 
         const updateOp = { $set: updateSet };
 
-        // DELTA SYNC MAGIC: Use $inc if delta is provided, otherwise fallback to $set
+        // Shop-scoped stock mirror (legacy product.stock is read fallback only and is not written).
         if (typeof stockDelta === 'number' && !Number.isNaN(stockDelta)) {
-            updateOp.$inc = { stock: stockDelta };
             stockMirrorOps.push(applyManualAdjustment({ businessId, shopId: productShopId, productId, delta: stockDelta }));
         } else {
-            updateSet.stock = nextStockAbsolute; // Legacy/Absolute overwrite
             stockMirrorOps.push(applyManualAdjustment({ businessId, shopId: productShopId, productId, currentStock: nextStockAbsolute }));
         }
 
@@ -656,7 +674,7 @@ router.delete('/products/:id', auth, requireActiveSubscription, async (req, res)
       amount: 0,
       performedBy: req.userRole === 'owner' ? 'Owner' : 'Staff',
       type: 'deletion',
-      payload: { productId: id }
+      payload: { productId: id, shopId: req.query.shopId || null }
     });
 
     res.json({ success: true, id });
@@ -693,7 +711,8 @@ router.delete('/transactions/:id', auth, requireActiveSubscription, async (req, 
         amount: transaction.totalAmount || 0,
         performedBy: performerName,
         type: 'deletion',
-        payload: { transactionId: transaction.id }
+        shopId: transaction.shopId || defaultShopId,
+        payload: { transactionId: transaction.id, shopId: transaction.shopId || defaultShopId }
     });
 
     // 4. Hard Delete

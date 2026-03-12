@@ -7,7 +7,18 @@ const Business = require('../models/Business');
 const Transaction = require('../models/Transaction');
 const Expenditure = require('../models/Expenditure');
 const ProductShopStock = require('../models/ProductShopStock');
-const { ensureDefaultShopForBusiness } = require('../services/shopContext');
+const { ensureDefaultShopForBusiness, resolveShopId } = require('../services/shopContext');
+
+const parseDecimal = (val) => {
+  if (val === null || val === undefined) return 0;
+  if (typeof val === 'number') return val;
+  if (typeof val?.toString === 'function') {
+    const parsed = Number(val.toString());
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  const parsed = Number(val);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
 
 const router = express.Router();
 
@@ -48,10 +59,45 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
 
     const businessId = String(req.businessId);
     const name = String(req.body?.name || '').trim();
+    const initializationMode = String(req.body?.initializationMode || 'fresh');
+    const sourceShopId = req.body?.sourceShopId ? String(req.body.sourceShopId) : null;
     if (!name) return res.status(400).json({ message: 'Shop name is required.' });
+    if (!['fresh', 'copy_inventory', 'share_catalog'].includes(initializationMode)) {
+      return res.status(400).json({ message: 'Invalid shop initialization mode.' });
+    }
 
-    await ensureDefaultShopForBusiness(businessId);
-    const shop = await Shop.create({ businessId, name, isMain: false, status: 'active' });
+    const defaultShopId = await ensureDefaultShopForBusiness(businessId);
+    const shop = await Shop.create({ businessId, name, normalizedName: name.toLowerCase(), isMain: false, status: 'active' });
+
+    if (initializationMode === 'copy_inventory') {
+      const safeSourceShopId = await resolveShopId({
+        businessId,
+        requestedShopId: sourceShopId || defaultShopId
+      });
+
+      const sourceStock = await ProductShopStock.find({ businessId, shopId: safeSourceShopId }).lean();
+      if (sourceStock.length > 0) {
+        const rows = sourceStock.map((row) => ({
+          updateOne: {
+            filter: {
+              businessId,
+              shopId: String(shop._id),
+              productId: String(row.productId)
+            },
+            update: {
+              $set: {
+                businessId,
+                shopId: String(shop._id),
+                productId: String(row.productId),
+                onHand: Number(row.onHand || 0)
+              }
+            },
+            upsert: true
+          }
+        }));
+        await ProductShopStock.bulkWrite(rows);
+      }
+    }
 
     res.status(201).json({
       shop: {
@@ -61,7 +107,8 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
         status: shop.status,
         createdAt: shop.createdAt,
         updatedAt: shop.updatedAt
-      }
+      },
+      initializationMode
     });
   } catch (err) {
     if (err?.code === 11000) {
@@ -84,8 +131,8 @@ router.put('/:shopId', auth, requireActiveSubscription, async (req, res) => {
 
     const shop = await Shop.findOneAndUpdate(
       { _id: req.params.shopId, businessId },
-      { $set: { name } },
-      { new: true }
+      { $set: { name, normalizedName: name.toLowerCase() } },
+      { new: true, runValidators: true }
     );
     if (!shop) return res.status(404).json({ message: 'Shop not found.' });
 
@@ -113,8 +160,9 @@ router.get('/summary/overview', auth, async (req, res) => {
     const businessId = String(req.businessId);
     const shops = await Shop.find({ businessId, status: 'active' }).lean();
     const shopIds = shops.map((s) => String(s._id));
+    const businessObjectId = mongoose.isValidObjectId(req.businessId) ? new mongoose.Types.ObjectId(req.businessId) : null;
 
-    const [sales, expenses, stock] = await Promise.all([
+    const [sales, expenses, stock, inventoryValue, lastSales, lastExpenses] = await Promise.all([
       Transaction.aggregate([
         { $match: { businessId: req.businessId, shopId: { $in: shopIds } } },
         { $group: { _id: '$shopId', sales: { $sum: { $toDouble: '$totalAmount' } } } }
@@ -126,26 +174,81 @@ router.get('/summary/overview', auth, async (req, res) => {
       ProductShopStock.aggregate([
         { $match: { businessId, shopId: { $in: shopIds } } },
         { $group: { _id: '$shopId', itemCount: { $sum: '$onHand' } } }
+      ]),
+      ProductShopStock.aggregate([
+        { $match: { businessId, shopId: { $in: shopIds } } },
+        {
+          $lookup: {
+            from: 'products',
+            let: { pid: '$productId' },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [
+                      { $eq: ['$id', '$$pid'] },
+                      { $or: [
+                        { $eq: ['$businessId', businessId] },
+                        ...(businessObjectId ? [{ $eq: ['$businessId', businessObjectId] }] : [])
+                      ] }
+                    ]
+                  }
+                }
+              }
+            ],
+            as: 'product'
+          }
+        },
+        { $unwind: { path: '$product', preserveNullAndEmptyArrays: true } },
+        {
+          $group: {
+            _id: '$shopId',
+            inventoryValue: {
+              $sum: {
+                $multiply: [
+                  { $toDouble: '$onHand' },
+                  { $toDouble: { $ifNull: ['$product.costPrice', 0] } }
+                ]
+              }
+            }
+          }
+        }
+      ]),
+      Transaction.aggregate([
+        { $match: { businessId: req.businessId, shopId: { $in: shopIds } } },
+        { $group: { _id: '$shopId', lastActivity: { $max: '$transactionDate' } } }
+      ]),
+      Expenditure.aggregate([
+        { $match: { business: new mongoose.Types.ObjectId(req.businessId), shopId: { $in: shopIds } } },
+        { $group: { _id: '$shopId', lastExpenseAt: { $max: '$date' } } }
       ])
     ]);
 
     const salesMap = new Map(sales.map((x) => [x._id, Number(x.sales || 0)]));
     const expMap = new Map(expenses.map((x) => [x._id, Number(x.expenses || 0)]));
     const stockMap = new Map(stock.map((x) => [x._id, Number(x.itemCount || 0)]));
+    const inventoryValueMap = new Map(inventoryValue.map((x) => [x._id, parseDecimal(x.inventoryValue)]));
+    const lastSalesMap = new Map(lastSales.map((x) => [x._id, x.lastActivity]));
+    const lastExpenseMap = new Map(lastExpenses.map((x) => [x._id, x.lastExpenseAt]));
 
     const rows = shops.map((s) => ({
       shopId: String(s._id),
       name: s.name,
       sales: salesMap.get(String(s._id)) || 0,
       expenses: expMap.get(String(s._id)) || 0,
-      inventoryUnits: stockMap.get(String(s._id)) || 0
+      profit: (salesMap.get(String(s._id)) || 0) - (expMap.get(String(s._id)) || 0),
+      inventoryUnits: stockMap.get(String(s._id)) || 0,
+      inventoryValue: inventoryValueMap.get(String(s._id)) || 0,
+      lastActivity: [lastSalesMap.get(String(s._id)), lastExpenseMap.get(String(s._id))].filter(Boolean).sort().slice(-1)[0] || null
     }));
 
     const totals = rows.reduce((acc, row) => ({
       sales: acc.sales + row.sales,
       expenses: acc.expenses + row.expenses,
-      inventoryUnits: acc.inventoryUnits + row.inventoryUnits
-    }), { sales: 0, expenses: 0, inventoryUnits: 0 });
+      profit: acc.profit + row.profit,
+      inventoryUnits: acc.inventoryUnits + row.inventoryUnits,
+      inventoryValue: acc.inventoryValue + row.inventoryValue
+    }), { sales: 0, expenses: 0, profit: 0, inventoryUnits: 0, inventoryValue: 0 });
 
     res.json({ rows, totals });
   } catch (err) {

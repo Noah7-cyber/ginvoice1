@@ -16,7 +16,8 @@ import {
   Wallet,
   Loader2,
   Bell,
-  AlertCircle
+  AlertCircle,
+  X
 } from 'lucide-react';
 import { InventoryState, UserRole, Product, ProductUnit, Transaction, BusinessProfile, TabId, SaleItem, PaymentMethod, Expenditure, ActivityLog, Shop } from './types';
 import useTabRouting from './hooks/useTabRouting';
@@ -25,7 +26,7 @@ import { useTimeDrift } from './hooks/useTimeDrift';
 import { INITIAL_PRODUCTS } from './constants';
 import { safeCalculate } from './utils/math';
 import { saveState, loadState, pushToBackend, getDataVersion, saveDataVersion, getLastSync, saveLastSync, clearLocalData } from './services/storage';
-import { login, registerBusiness, saveAuthToken, clearAuthToken, getEntitlements, initializePayment, fetchRemoteState, deleteExpenditure, snoozeStockVerification, dismissNotification, checkServerVersion, createShop, renameShop } from './services/api';
+import { login, registerBusiness, saveAuthToken, clearAuthToken, getEntitlements, initializePayment, fetchRemoteState, deleteExpenditure, snoozeStockVerification, dismissNotification, checkServerVersion, createShop, renameShop, getShopsOverview } from './services/api';
 import { useToast } from './components/ToastProvider';
 import SalesScreen from './components/SalesScreen';
 import InventoryScreen from './components/InventoryScreen';
@@ -122,6 +123,12 @@ const App: React.FC = () => {
   const { status: wakeStatus, showWakeupUI } = useServerWakeup();
   const wakeToastShownRef = useRef(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [shopModalMode, setShopModalMode] = useState<'create' | 'rename' | 'switch' | null>(null);
+  const [shopNameInput, setShopNameInput] = useState('');
+  const [shopInitMode, setShopInitMode] = useState<'fresh' | 'copy_inventory' | 'share_catalog'>('fresh');
+  const [shopSourceId, setShopSourceId] = useState('');
+  const [isSavingShop, setIsSavingShop] = useState(false);
+  const [hubOverview, setHubOverview] = useState<{ rows: any[]; totals: any } | null>(null);
   const isTimeBlocked = useTimeDrift();
 
   /* // TEMPORARILY DISABLED TO FIX CRASH
@@ -1057,6 +1064,17 @@ const App: React.FC = () => {
     return (state.expenditures || []).filter((exp) => !exp.shopId || exp.shopId === state.activeShopId);
   }, [state.expenditures, state.activeShopId, isAllShopsMode]);
 
+  const visibleNotifications = useMemo(() => {
+    const notes = state.notifications || [];
+    if (isAllShopsMode) return notes;
+    if (!state.activeShopId) return notes;
+    return notes.filter((n: any) => {
+      const noteShopId = n.shopId || n?.payload?.shopId;
+      if (!noteShopId) return true;
+      return String(noteShopId) === String(state.activeShopId);
+    });
+  }, [state.notifications, state.activeShopId, isAllShopsMode]);
+
   const handleShopSwitch = async (nextShopId: string) => {
     const nextState = { ...stateRef.current, activeShopId: nextShopId, allShopsMode: nextShopId === ALL_SHOPS_ID };
     stateRef.current = nextState;
@@ -1064,32 +1082,80 @@ const App: React.FC = () => {
     await refreshData(nextState);
   };
 
+  const openShopSwitcherModal = () => {
+    setShopModalMode('switch');
+  };
+
   const handleCreateShop = async () => {
-    const name = window.prompt('Enter new shop name');
-    if (!name) return;
-    try {
-      await createShop(name);
-      await refreshData();
-      addToast('Shop created.', 'success');
-    } catch (err: any) {
-      addToast(err?.message || 'Could not create shop', 'error');
-    }
+    setShopNameInput('');
+    setShopInitMode('fresh');
+    setShopSourceId(state.activeShopId && state.activeShopId !== ALL_SHOPS_ID ? state.activeShopId : state.business.defaultShopId || '');
+    setShopModalMode('create');
   };
 
   const handleRenameActiveShop = async () => {
     const targetId = state.activeShopId;
     if (!targetId || targetId === ALL_SHOPS_ID) return;
     const currentName = (state.shops || []).find((s: Shop) => s.id === targetId)?.name || 'Shop';
-    const nextName = window.prompt('Rename shop', currentName);
-    if (!nextName || nextName === currentName) return;
+    setShopNameInput(currentName);
+    setShopModalMode('rename');
+  };
+
+  const closeShopModal = () => {
+    if (isSavingShop) return;
+    setShopModalMode(null);
+    setShopNameInput('');
+    setShopInitMode('fresh');
+    setShopSourceId('');
+  };
+
+  const handleSubmitShopModal = async () => {
+    if (isSavingShop) return;
+    if (shopModalMode === 'switch') return;
+
+    const name = shopNameInput.trim();
+    if (!name || !isOnline) return;
+
+    const targetId = state.activeShopId;
+    const currentName = (state.shops || []).find((s: Shop) => s.id === targetId)?.name || '';
+    if (shopModalMode === 'rename' && (!targetId || targetId === ALL_SHOPS_ID || name === currentName)) {
+      closeShopModal();
+      return;
+    }
+
+    setIsSavingShop(true);
     try {
-      await renameShop(targetId, nextName);
+      if (shopModalMode === 'create') {
+        await createShop({ name, initializationMode: shopInitMode, sourceShopId: shopInitMode === 'copy_inventory' ? shopSourceId : undefined });
+      } else if (shopModalMode === 'rename' && targetId) {
+        await renameShop(targetId, name);
+      }
       await refreshData();
-      addToast('Shop renamed.', 'success');
+      addToast(shopModalMode === 'create' ? 'Shop created.' : 'Shop renamed.', 'success');
+      closeShopModal();
     } catch (err: any) {
-      addToast(err?.message || 'Could not rename shop', 'error');
+      addToast(err?.message || `Could not ${shopModalMode === 'create' ? 'create' : 'rename'} shop`, 'error');
+    } finally {
+      setIsSavingShop(false);
     }
   };
+
+  const hasMultipleShops = (state.shops || []).length > 1;
+
+  useEffect(() => {
+    if (!state.isLoggedIn || !isOnline || !isAllShopsMode) return;
+    let active = true;
+    getShopsOverview()
+      .then((data) => {
+        if (active) setHubOverview(data);
+      })
+      .catch((err) => {
+        console.error('Shops overview failed', err);
+      });
+    return () => {
+      active = false;
+    };
+  }, [state.isLoggedIn, isOnline, isAllShopsMode, state.transactions, state.expenditures, state.products]);
 
   const allowedTabs = useMemo(() => {
     const hasPro = entitlements?.plan === 'PRO' || state.business.isSubscribed;
@@ -1257,18 +1323,30 @@ const App: React.FC = () => {
           <div className="flex items-center gap-2">
             {state.role === 'owner' && (
               <>
-                <select
-                  value={state.activeShopId || state.business.defaultShopId || ''}
-                  onChange={(e) => handleShopSwitch(e.target.value)}
-                  className="hidden md:block text-xs font-bold border rounded-lg px-2 py-1.5"
-                >
-                  {(state.shops || []).map((shop) => (
-                    <option key={shop.id} value={shop.id}>{shop.name}</option>
-                  ))}
-                  <option value={ALL_SHOPS_ID}>All Shops (read-only)</option>
-                </select>
-                <button onClick={handleCreateShop} className="hidden md:block text-xs font-bold px-2 py-1.5 rounded-lg border bg-white hover:bg-gray-50">+ Shop</button>
-                <button onClick={handleRenameActiveShop} className="hidden md:block text-xs font-bold px-2 py-1.5 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50" disabled={!state.activeShopId || state.activeShopId === ALL_SHOPS_ID}>Rename</button>
+                {(state.shops || []).length > 0 && (
+                  <button
+                    onClick={openShopSwitcherModal}
+                    className="md:hidden text-[11px] font-black px-2 py-1.5 rounded-lg border bg-white hover:bg-gray-50"
+                  >
+                    {isAllShopsMode ? 'All Shops' : ((state.shops || []).find((s) => s.id === state.activeShopId)?.name || 'Shop')}
+                  </button>
+                )}
+                {hasMultipleShops && (
+                  <select
+                    value={state.activeShopId || state.business.defaultShopId || ''}
+                    onChange={(e) => handleShopSwitch(e.target.value)}
+                    className="hidden md:block text-xs font-bold border rounded-lg px-2 py-1.5"
+                  >
+                    {(state.shops || []).map((shop) => (
+                      <option key={shop.id} value={shop.id}>{shop.name}</option>
+                    ))}
+                    <option value={ALL_SHOPS_ID}>All Shops (read-only)</option>
+                  </select>
+                )}
+                <button onClick={handleCreateShop} className="text-xs font-bold px-2 py-1.5 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed" disabled={!isOnline || isSavingShop}>+ Shop</button>
+                {hasMultipleShops && (
+                  <button onClick={handleRenameActiveShop} className="hidden sm:block text-xs font-bold px-2 py-1.5 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed" disabled={!state.activeShopId || state.activeShopId === ALL_SHOPS_ID || !isOnline || isSavingShop}>Rename</button>
+                )}
               </>
             )}
             {isSyncing && <RefreshCw className="animate-spin text-gray-400 mr-2" size={20} />}
@@ -1304,8 +1382,23 @@ const App: React.FC = () => {
         )}
 
         {isAllShopsMode && (
-          <div className="bg-blue-50 border-b border-blue-100 p-3 text-sm shrink-0">
-            <span className="font-bold text-blue-700">All Shops mode is read-only for writes. Select a specific shop to sell or edit stock/expenses.</span>
+          <div className="bg-blue-50 border-b border-blue-100 p-3 text-sm shrink-0 space-y-2">
+            <span className="font-bold text-blue-700 block">All Shops mode is read-only for writes. Select a specific shop to sell or edit stock/expenses.</span>
+            {hubOverview?.rows?.length ? (
+              <div className="bg-white border border-blue-100 rounded-xl overflow-hidden">
+                <div className="px-3 py-2 text-xs font-black text-blue-700 border-b bg-blue-50/60">Hub Overview</div>
+                <div className="max-h-44 overflow-auto">
+                  {hubOverview.rows.map((row: any) => (
+                    <button key={row.shopId} onClick={() => handleShopSwitch(row.shopId)} className="w-full px-3 py-2 text-left hover:bg-gray-50 border-b last:border-b-0">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-gray-800">{row.name}</span>
+                        <span className="text-gray-500">Profit: {Number(row.profit || 0).toLocaleString()}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
         )}
 
@@ -1390,6 +1483,8 @@ const App: React.FC = () => {
                     business={state.business}
                     activeShopId={state.activeShopId}
                     allShopsMode={isAllShopsMode}
+                    hubOverview={hubOverview}
+                    onSelectShop={(shopId) => handleShopSwitch(shopId)}
                     onUpdateBusiness={b => setState(prev => ({ ...prev, business: { ...prev.business, ...b } }))}
                   />
                 </div>
@@ -1449,7 +1544,9 @@ const App: React.FC = () => {
         onClose={() => setIsNotificationOpen(false)}
         transactions={visibleTransactions}
         activities={state.activities}
-        notifications={state.notifications}
+        notifications={visibleNotifications}
+        activeShopId={state.activeShopId}
+        allShopsMode={isAllShopsMode}
         products={state.products}
         business={state.business}
         lowStockThreshold={state.business.settings?.lowStockThreshold || 10}
@@ -1457,6 +1554,85 @@ const App: React.FC = () => {
         onSnoozeVerification={snoozeVerification}
         onDismissVerification={dismissVerification}
       />
+
+      {shopModalMode && (
+        <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={closeShopModal}>
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-gray-100" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b flex items-center justify-between">
+              <h3 className="text-lg font-black text-gray-900">{shopModalMode === 'create' ? 'Create Shop' : shopModalMode === 'rename' ? 'Rename Shop' : 'Switch Shop'}</h3>
+              <button onClick={closeShopModal} disabled={isSavingShop} className="text-gray-400 hover:text-gray-600 disabled:opacity-50"><X size={20} /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              {shopModalMode === 'switch' ? (
+                <div className="space-y-2 max-h-80 overflow-auto">
+                  {(state.shops || []).map((shop) => (
+                    <button key={shop.id} onClick={async () => { await handleShopSwitch(shop.id); closeShopModal(); }} className="w-full px-3 py-2 rounded-xl border text-left hover:bg-gray-50 font-semibold">
+                      {shop.name}
+                    </button>
+                  ))}
+                  {hasMultipleShops && (
+                    <button onClick={async () => { await handleShopSwitch(ALL_SHOPS_ID); closeShopModal(); }} className="w-full px-3 py-2 rounded-xl border text-left hover:bg-gray-50 font-semibold">
+                      All Shops (read-only)
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <label className="block text-sm font-bold text-gray-700">
+                    Shop name
+                    <input
+                      type="text"
+                      value={shopNameInput}
+                      onChange={(e) => setShopNameInput(e.target.value)}
+                      maxLength={60}
+                      autoFocus
+                      disabled={isSavingShop}
+                      className="mt-2 w-full rounded-xl border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:bg-gray-100"
+                      placeholder="e.g. Island Branch"
+                    />
+                  </label>
+                  {shopModalMode === 'create' && (
+                    <>
+                      <label className="block text-sm font-bold text-gray-700">
+                        New shop setup
+                        <select value={shopInitMode} onChange={(e) => setShopInitMode(e.target.value as any)} className="mt-2 w-full rounded-xl border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
+                          <option value="fresh">Start Fresh (clean stock/history)</option>
+                          <option value="copy_inventory">Copy Inventory from Existing Shop</option>
+                          <option value="share_catalog">Share Product Catalog Only (stock 0)</option>
+                        </select>
+                      </label>
+                      {shopInitMode === 'copy_inventory' && (
+                        <label className="block text-sm font-bold text-gray-700">
+                          Copy from shop
+                          <select value={shopSourceId} onChange={(e) => setShopSourceId(e.target.value)} className="mt-2 w-full rounded-xl border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
+                            {(state.shops || []).map((shop) => (
+                              <option key={shop.id} value={shop.id}>{shop.name}</option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+              {!isOnline && <p className="text-xs font-semibold text-orange-600">You need internet connection to manage shops.</p>}
+            </div>
+            <div className="px-6 pb-6 flex items-center justify-end gap-2">
+              <button onClick={closeShopModal} disabled={isSavingShop} className="px-4 py-2 text-sm font-bold rounded-xl border text-gray-700 hover:bg-gray-50 disabled:opacity-50">Cancel</button>
+              {shopModalMode !== 'switch' && (
+                <button
+                  onClick={handleSubmitShopModal}
+                  disabled={isSavingShop || !isOnline || !shopNameInput.trim() || (shopModalMode === 'create' && shopInitMode === 'copy_inventory' && !shopSourceId)}
+                  className="px-4 py-2 text-sm font-bold rounded-xl bg-primary text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {isSavingShop && <Loader2 size={14} className="animate-spin" />}
+                  {shopModalMode === 'create' ? 'Create Shop' : 'Save Name'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Cart Sidebar */}
       <div className={`fixed inset-y-0 right-0 z-[60] transition-all duration-300 ease-in-out md:relative md:inset-auto md:z-auto ${isCartOpen ? 'translate-x-0 w-full max-w-sm md:w-80 lg:w-96 border-l shadow-2xl md:shadow-none' : 'translate-x-full w-0 overflow-hidden'}`}>
