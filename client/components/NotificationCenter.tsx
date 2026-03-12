@@ -15,6 +15,8 @@ interface NotificationCenterProps {
   products: Product[];
   business: BusinessProfile;
   lowStockThreshold: number;
+  activeShopId?: string;
+  allShopsMode?: boolean;
 }
 
 const NotificationCenter: React.FC<NotificationCenterProps> = ({

@@ -38,10 +38,12 @@ interface DashboardScreenProps {
   business?: BusinessProfile;
   activeShopId?: string;
   allShopsMode?: boolean;
+  hubOverview?: { rows: Array<{ shopId: string; name: string; sales: number; expenses: number; profit: number; inventoryValue?: number; lastActivity?: string | null }>; totals?: { sales?: number; expenses?: number; profit?: number; inventoryValue?: number } } | null;
+  onSelectShop?: (shopId: string) => void;
   onUpdateBusiness?: (business: Partial<BusinessProfile>) => void;
 }
 
-const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, products, expenditures = [], business, activeShopId, allShopsMode, onUpdateBusiness }) => {
+const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, products, expenditures = [], business, activeShopId, allShopsMode, hubOverview, onSelectShop, onUpdateBusiness }) => {
   const [showShieldModal, setShowShieldModal] = useState(false);
 
   const [remoteAnalytics, setRemoteAnalytics] = useState<{
@@ -463,6 +465,43 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
           color="bg-purple-50"
         />
       </div>
+
+      {allShopsMode && hubOverview?.rows?.length ? (
+        <section className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b bg-gray-50 flex items-center justify-between">
+            <h3 className="text-sm font-black text-gray-800">Per-Shop Summary</h3>
+            <span className="text-xs text-gray-500">Read-only hub view</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="bg-gray-50 text-gray-600">
+                <tr>
+                  <th className="text-left px-4 py-2 font-bold">Shop</th>
+                  <th className="text-right px-4 py-2 font-bold">Revenue</th>
+                  <th className="text-right px-4 py-2 font-bold">Expenses</th>
+                  <th className="text-right px-4 py-2 font-bold">Profit</th>
+                  <th className="text-right px-4 py-2 font-bold">Inventory Value</th>
+                  <th className="text-right px-4 py-2 font-bold">Last Activity</th>
+                </tr>
+              </thead>
+              <tbody>
+                {hubOverview.rows.map((row) => (
+                  <tr key={row.shopId} className="border-t hover:bg-gray-50">
+                    <td className="px-4 py-2">
+                      <button className="font-bold text-primary hover:underline" onClick={() => onSelectShop?.(row.shopId)}>{row.name}</button>
+                    </td>
+                    <td className="px-4 py-2 text-right">{CURRENCY}{Number(row.sales || 0).toLocaleString()}</td>
+                    <td className="px-4 py-2 text-right">{CURRENCY}{Number(row.expenses || 0).toLocaleString()}</td>
+                    <td className="px-4 py-2 text-right font-semibold">{CURRENCY}{Number(row.profit || 0).toLocaleString()}</td>
+                    <td className="px-4 py-2 text-right">{CURRENCY}{Number(row.inventoryValue || 0).toLocaleString()}</td>
+                    <td className="px-4 py-2 text-right text-xs text-gray-500">{row.lastActivity ? new Date(row.lastActivity).toLocaleDateString('en-NG') : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-8">
         {/* Sales Chart */}
