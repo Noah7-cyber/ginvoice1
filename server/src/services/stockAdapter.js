@@ -38,7 +38,6 @@ const applyManualAdjustment = async ({ businessId, shopId, productId, delta = 0,
       { $set: { onHand: next } },
       { upsert: true }
     );
-    await Product.updateOne({ businessId, id: productId }, { $set: { stock: next } });
     return next;
   }
 
@@ -48,7 +47,6 @@ const applyManualAdjustment = async ({ businessId, shopId, productId, delta = 0,
       { $inc: { onHand: normalizedDelta } },
       { upsert: true }
     );
-    await Product.updateOne({ businessId, id: productId }, { $inc: { stock: normalizedDelta } });
   }
 
   return getOnHand({ businessId, shopId, productId });

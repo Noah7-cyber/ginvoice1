@@ -778,13 +778,13 @@ export const listShops = async (): Promise<{ shops: Shop[]; defaultShopId: strin
   });
 };
 
-export const createShop = async (name: string): Promise<{ shop: Shop }> => {
+export const createShop = async (payload: { name: string; initializationMode: 'fresh' | 'copy_inventory' | 'share_catalog'; sourceShopId?: string }): Promise<{ shop: Shop; initializationMode?: string }> => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');
   return request('/api/shops', {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ name })
+    body: JSON.stringify(payload)
   });
 };
 

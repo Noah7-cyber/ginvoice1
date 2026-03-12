@@ -128,7 +128,8 @@ router.put('/:id', auth, requireActiveSubscription, async (req, res) => {
       message: `Sale to ${customerName || 'Customer'} edited`,
       amount: originalTx.totalAmount,
       performedBy: performerName,
-      type: 'modification'
+      type: 'modification',
+      shopId
     });
 
     // Helper to format Decimal128
@@ -233,7 +234,8 @@ router.delete('/:id', auth, requireActiveSubscription, async (req, res) => {
       amount: transaction.totalAmount || 0,
       performedBy: performerName,
       type: 'deletion',
-      payload: { transactionId: transaction.id }
+      shopId,
+      payload: { transactionId: transaction.id, shopId }
     });
     await notification.save();
 
