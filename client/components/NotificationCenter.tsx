@@ -43,7 +43,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
         id: t.id,
         type: 'sale',
         amount: Number(t.totalAmount || 0),
-        actor: t.createdByRole || (t.staffId ? 'Staff' : 'Owner'),
+        actor: t.createdByRole === 'staff' ? (t.staffId || 'Staff') : 'Owner',
         timestamp: t.createdAt || t.transactionDate,
         title: '',
         message: '',
@@ -120,8 +120,14 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
 
       if (item.type === 'sale') {
         title = `New Sale • ${amountStr}`;
-        const role = (item.actor || 'Staff').toLowerCase() === 'owner' ? 'Owner' : 'Staff';
-        subtext = `Sold by ${role}`;
+        const actorLabel = String(item.actor || '').trim();
+        if (!actorLabel || actorLabel.toLowerCase() === 'staff') {
+          subtext = 'Sold by Staff';
+        } else if (actorLabel.toLowerCase() === 'owner') {
+          subtext = 'Sold by Owner';
+        } else {
+          subtext = `Sold by ${actorLabel}`;
+        }
       } else if (item.type === 'deletion') {
         const isTxDelete = Boolean(item.payload?.transactionId);
         if (isTxDelete) {

@@ -83,8 +83,8 @@ router.get('/', auth, async (req, res) => {
 
     const businessData = await Business.findById(businessId).lean();
     const defaultShopId = await resolveShopId({ businessId, requestedShopId: businessData?.defaultShopId });
-    const requestedShopId = req.query.shopId ? String(req.query.shopId) : defaultShopId;
-    const allShopsMode = req.query.allShops === 'true';
+    const requestedShopId = req.assignedShopId || (req.query.shopId ? String(req.query.shopId) : defaultShopId);
+    const allShopsMode = req.assignedShopId ? false : (req.query.allShops === 'true');
 
     const transactionFilter = { businessId, ...(allShopsMode ? {} : { shopId: requestedShopId }) };
     const expenditureFilter = { business: businessId, ...(allShopsMode ? {} : { shopId: requestedShopId }) };
@@ -282,7 +282,12 @@ router.get('/', auth, async (req, res) => {
         status: shop.status || 'active'
       })),
       activeShopId: allShopsMode ? 'all' : requestedShopId,
-      allShopsMode
+      allShopsMode,
+      staffContext: req.userRole === 'staff' ? {
+        assignedShopId: req.assignedShopId || requestedShopId,
+        assignedShopName: req.user?.assignedShopName || selectedShop?.name || '',
+        staffName: req.user?.staffName || ''
+      } : null
     });
 
   } catch (err) {
@@ -299,7 +304,10 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
       return res.status(400).json({ message: 'All Shops mode is read-only. Select a specific shop to continue.' });
     }
     const businessId = req.businessId;
-    const defaultShopId = await resolveShopId({ businessId, requestedShopId: req.body?.shopId });
+    const defaultShopId = req.assignedShopId || await resolveShopId({ businessId, requestedShopId: req.body?.shopId });
+    if (req.assignedShopId && req.body?.shopId && String(req.body.shopId) !== String(req.assignedShopId)) {
+      return res.status(403).json({ message: 'Staff account is locked to an assigned shop.' });
+    }
 
     if (business && typeof business === 'object') {
        const { staffPermissions, trialEndsAt, isSubscribed, ...safeUpdates } = business;
@@ -350,7 +358,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
         if (Number.isNaN(incomingUpdatedAt.getTime())) return null;
 
         const stockDelta = Number(p.stockDelta); // Optional Delta
-        const productShopId = p.shopId || defaultShopId;
+        const productShopId = req.assignedShopId || p.shopId || defaultShopId;
         shopPresenceOps.push({
           updateOne: {
             filter: { businessId, shopId: productShopId, productId },
@@ -541,7 +549,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
 
         const updateData = {
           businessId,
-          shopId: t.shopId || defaultShopId,
+          shopId: req.assignedShopId || t.shopId || defaultShopId,
           id: txId,
           transactionDate: t.transactionDate ? new Date(t.transactionDate) : null,
           customerName: normalizeCustomerName(t.customerName),
@@ -607,7 +615,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
             update: {
               $set: {
                 business: businessId,
-                shopId: e.shopId || defaultShopId,
+                shopId: req.assignedShopId || e.shopId || defaultShopId,
                 id: e.id,
                 date: e.date ? new Date(e.date) : new Date(),
                 amount: toDecimal(e.amount),
