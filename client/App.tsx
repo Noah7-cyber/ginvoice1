@@ -124,7 +124,6 @@ const App: React.FC = () => {
   const wakeToastShownRef = useRef(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [shopModalMode, setShopModalMode] = useState<'menu' | 'create' | 'rename' | 'switch' | 'delete' | null>(null);
-  const [shopModalMode, setShopModalMode] = useState<'create' | 'rename' | 'switch' | 'delete' | null>(null);
   const [shopNameInput, setShopNameInput] = useState('');
   const [shopInitMode, setShopInitMode] = useState<'fresh' | 'copy_inventory' | 'share_catalog'>('fresh');
   const [shopSourceId, setShopSourceId] = useState('');
@@ -1109,13 +1108,10 @@ const App: React.FC = () => {
 
   const openShopSwitcherModal = () => {
     setShopModalMode('switch');
-<<<<<<< codex/implement-multi-shop-support-4taf4x
   };
 
   const openShopManagementMenu = () => {
     setShopModalMode('menu');
-=======
->>>>>>> main
   };
 
 
@@ -1152,11 +1148,7 @@ const App: React.FC = () => {
 
   const handleSubmitShopModal = async () => {
     if (isSavingShop) return;
-<<<<<<< codex/implement-multi-shop-support-4taf4x
     if (shopModalMode === 'switch' || shopModalMode === 'menu') return;
-=======
-    if (shopModalMode === 'switch') return;
->>>>>>> main
 
     if (shopModalMode === 'delete') {
       const targetId = state.activeShopId;
@@ -1416,16 +1408,6 @@ const App: React.FC = () => {
                     <option value={ALL_SHOPS_ID}>All Shops (read-only)</option>
                   </select>
                 )}
-<<<<<<< codex/implement-multi-shop-support-4taf4x
-=======
-                <button onClick={handleCreateShop} className="text-xs font-bold px-2 py-1.5 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed" disabled={!isOnline || isSavingShop || isSwitchingShop}>+ Shop</button>
-                {hasMultipleShops && (
-                  <button onClick={handleRenameActiveShop} className="hidden sm:block text-xs font-bold px-2 py-1.5 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed" disabled={!state.activeShopId || state.activeShopId === ALL_SHOPS_ID || !isOnline || isSavingShop || isSwitchingShop}>Rename</button>
-                )}
-                {hasMultipleShops && (
-                  <button onClick={handleDeleteActiveShop} className="hidden lg:block text-xs font-bold px-2 py-1.5 rounded-lg border border-red-200 text-red-600 bg-white hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed" disabled={!state.activeShopId || state.activeShopId === ALL_SHOPS_ID || !isOnline || isSavingShop || isSwitchingShop}>Delete Shop</button>
-                )}
->>>>>>> main
               </>
             )}
             {isSwitchingShop && <span className="text-[10px] font-bold text-indigo-600">Switching…</span>}
@@ -1644,7 +1626,6 @@ const App: React.FC = () => {
         <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={closeShopModal}>
           <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-gray-100" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b flex items-center justify-between">
-<<<<<<< codex/implement-multi-shop-support-4taf4x
               <h3 className="text-lg font-black text-gray-900">{shopModalMode === 'menu' ? 'Manage Shops' : shopModalMode === 'create' ? 'Create Shop' : shopModalMode === 'rename' ? 'Rename Shop' : shopModalMode === 'delete' ? 'Delete Shop' : 'Switch Shop'}</h3>
               <button onClick={closeShopModal} disabled={isSavingShop} className="text-gray-400 hover:text-gray-600 disabled:opacity-50"><X size={20} /></button>
             </div>
@@ -1657,13 +1638,6 @@ const App: React.FC = () => {
                   <button onClick={openShopSwitcherModal} className="w-full px-3 py-2 rounded-xl border text-left hover:bg-gray-50 font-semibold">Switch Shop</button>
                 </div>
               ) : shopModalMode === 'switch' ? (
-=======
-              <h3 className="text-lg font-black text-gray-900">{shopModalMode === 'create' ? 'Create Shop' : shopModalMode === 'rename' ? 'Rename Shop' : shopModalMode === 'delete' ? 'Delete Shop' : 'Switch Shop'}</h3>
-              <button onClick={closeShopModal} disabled={isSavingShop} className="text-gray-400 hover:text-gray-600 disabled:opacity-50"><X size={20} /></button>
-            </div>
-            <div className="p-6 space-y-4">
-              {shopModalMode === 'switch' ? (
->>>>>>> main
                 <div className="space-y-2 max-h-80 overflow-auto">
                   {(state.shops || []).map((shop) => (
                     <button key={shop.id} onClick={async () => { await handleShopSwitch(shop.id); closeShopModal(); }} className="w-full px-3 py-2 rounded-xl border text-left hover:bg-gray-50 font-semibold">
@@ -1731,11 +1705,7 @@ const App: React.FC = () => {
             </div>
             <div className="px-6 pb-6 flex items-center justify-end gap-2">
               <button onClick={closeShopModal} disabled={isSavingShop} className="px-4 py-2 text-sm font-bold rounded-xl border text-gray-700 hover:bg-gray-50 disabled:opacity-50">Cancel</button>
-<<<<<<< codex/implement-multi-shop-support-4taf4x
               {(shopModalMode !== 'switch' && shopModalMode !== 'menu') && (
-=======
-              {shopModalMode !== 'switch' && (
->>>>>>> main
                 <button
                   onClick={handleSubmitShopModal}
                   disabled={isSavingShop || !isOnline || ((shopModalMode === 'create' || shopModalMode === 'rename') && !shopNameInput.trim()) || (shopModalMode === 'create' && shopInitMode === 'copy_inventory' && !shopSourceId) || (shopModalMode === 'delete' && !deleteReplacementShopId)}
