@@ -6,6 +6,8 @@ const Shop = require('../models/Shop');
 const Business = require('../models/Business');
 const Transaction = require('../models/Transaction');
 const Expenditure = require('../models/Expenditure');
+const Notification = require('../models/Notification');
+const Product = require('../models/Product');
 const ProductShopStock = require('../models/ProductShopStock');
 const { ensureDefaultShopForBusiness, resolveShopId } = require('../services/shopContext');
 
@@ -26,7 +28,7 @@ router.get('/', auth, async (req, res) => {
   try {
     const businessId = String(req.businessId);
     const defaultShopId = await ensureDefaultShopForBusiness(businessId);
-    const shops = await Shop.find({ businessId }).sort({ isMain: -1, createdAt: 1 }).lean();
+    const shops = await Shop.find({ businessId, status: 'active' }).sort({ isMain: -1, createdAt: 1 }).lean();
 
     const payload = shops.map((shop) => ({
       id: String(shop._id),
@@ -67,7 +69,40 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
     }
 
     const defaultShopId = await ensureDefaultShopForBusiness(businessId);
-    const shop = await Shop.create({ businessId, name, normalizedName: name.toLowerCase(), isMain: false, status: 'active' });
+    const shop = await Shop.create({
+      businessId,
+      name,
+      normalizedName: name.toLowerCase(),
+      isMain: false,
+      status: 'active',
+      inventoryMode: 'explicit'
+    });
+
+    if (initializationMode === 'share_catalog') {
+      const catalogProducts = await Product.find({ businessId, isDeleted: { $ne: true } }).select('id').lean();
+      if (catalogProducts.length > 0) {
+        const rows = catalogProducts.map((product) => ({
+          updateOne: {
+            filter: {
+              businessId,
+              shopId: String(shop._id),
+              productId: String(product.id)
+            },
+            update: {
+              $set: {
+                businessId,
+                shopId: String(shop._id),
+                productId: String(product.id),
+                onHand: 0,
+                isListed: true
+              }
+            },
+            upsert: true
+          }
+        }));
+        await ProductShopStock.bulkWrite(rows);
+      }
+    }
 
     if (initializationMode === 'copy_inventory') {
       const safeSourceShopId = await resolveShopId({
@@ -75,7 +110,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
         requestedShopId: sourceShopId || defaultShopId
       });
 
-      const sourceStock = await ProductShopStock.find({ businessId, shopId: safeSourceShopId }).lean();
+      const sourceStock = await ProductShopStock.find({ businessId, shopId: safeSourceShopId, isListed: { $ne: false } }).lean();
       if (sourceStock.length > 0) {
         const rows = sourceStock.map((row) => ({
           updateOne: {
@@ -89,7 +124,8 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
                 businessId,
                 shopId: String(shop._id),
                 productId: String(row.productId),
-                onHand: Number(row.onHand || 0)
+                onHand: Number(row.onHand || 0),
+                isListed: true
               }
             },
             upsert: true
@@ -152,6 +188,56 @@ router.put('/:shopId', auth, requireActiveSubscription, async (req, res) => {
     }
     console.error('Rename shop error:', err);
     res.status(500).json({ message: 'Could not rename shop' });
+  }
+});
+
+router.delete('/:shopId', auth, requireActiveSubscription, async (req, res) => {
+  try {
+    if (req.userRole !== 'owner') {
+      return res.status(403).json({ message: 'Only owner can delete shops.' });
+    }
+
+    const businessId = String(req.businessId);
+    const targetShopId = String(req.params.shopId);
+    const replacementShopId = req.body?.replacementShopId ? String(req.body.replacementShopId) : null;
+
+    const shops = await Shop.find({ businessId, status: 'active' }).sort({ isMain: -1, createdAt: 1 }).lean();
+    if (shops.length <= 1) {
+      return res.status(400).json({ message: 'You must keep at least one active shop.' });
+    }
+
+    const target = shops.find((s) => String(s._id) === targetShopId);
+    if (!target) return res.status(404).json({ message: 'Shop not found.' });
+
+    const business = await Business.findById(businessId).select('defaultShopId').lean();
+    const isDefault = String(business?.defaultShopId || '') === targetShopId;
+
+    if ((target.isMain || isDefault) && !replacementShopId) {
+      return res.status(400).json({ message: 'Select a replacement shop before deleting the main/default shop.' });
+    }
+
+    if (replacementShopId) {
+      const replacement = shops.find((s) => String(s._id) === replacementShopId && String(s._id) !== targetShopId);
+      if (!replacement) return res.status(400).json({ message: 'Replacement shop must be another active shop.' });
+
+      await Shop.updateOne({ _id: replacementShopId, businessId }, { $set: { isMain: true } });
+      await Business.updateOne({ _id: businessId }, { $set: { defaultShopId: replacementShopId } });
+      await Shop.updateOne({ _id: targetShopId, businessId }, { $set: { isMain: false } });
+    }
+
+    await Shop.updateOne({ _id: targetShopId, businessId }, { $set: { status: 'inactive' } });
+
+    await Promise.all([
+      ProductShopStock.deleteMany({ businessId, shopId: targetShopId }),
+      Transaction.deleteMany({ businessId, shopId: targetShopId }),
+      Expenditure.deleteMany({ business: new mongoose.Types.ObjectId(req.businessId), shopId: targetShopId }),
+      Notification.deleteMany({ businessId: new mongoose.Types.ObjectId(req.businessId), shopId: targetShopId })
+    ]);
+
+    return res.json({ success: true, shopId: targetShopId });
+  } catch (err) {
+    console.error('Delete shop error:', err);
+    return res.status(500).json({ message: 'Could not delete shop' });
   }
 });
 

@@ -5,6 +5,7 @@ const ProductShopStockSchema = new mongoose.Schema({
   shopId: { type: String, required: true, index: true },
   productId: { type: String, required: true, index: true },
   onHand: { type: Number, default: 0 },
+  isListed: { type: Boolean, default: true, index: true },
   sellPriceOverride: { type: mongoose.Types.Decimal128, default: null }
 }, { timestamps: true });
 

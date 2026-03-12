@@ -5,7 +5,8 @@ const ShopSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   normalizedName: { type: String, required: true, trim: true, lowercase: true },
   isMain: { type: Boolean, default: false, index: true },
-  status: { type: String, enum: ['active', 'inactive'], default: 'active' }
+  status: { type: String, enum: ['active', 'inactive'], default: 'active' },
+  inventoryMode: { type: String, enum: ['legacy', 'explicit'], default: 'legacy' }
 }, { timestamps: true });
 
 ShopSchema.index({ businessId: 1, normalizedName: 1 }, { unique: true });

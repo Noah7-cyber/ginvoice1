@@ -26,7 +26,7 @@ import { useTimeDrift } from './hooks/useTimeDrift';
 import { INITIAL_PRODUCTS } from './constants';
 import { safeCalculate } from './utils/math';
 import { saveState, loadState, pushToBackend, getDataVersion, saveDataVersion, getLastSync, saveLastSync, clearLocalData } from './services/storage';
-import { login, registerBusiness, saveAuthToken, clearAuthToken, getEntitlements, initializePayment, fetchRemoteState, deleteExpenditure, snoozeStockVerification, dismissNotification, checkServerVersion, createShop, renameShop, getShopsOverview } from './services/api';
+import { login, registerBusiness, saveAuthToken, clearAuthToken, getEntitlements, initializePayment, fetchRemoteState, deleteExpenditure, snoozeStockVerification, dismissNotification, checkServerVersion, createShop, renameShop, getShopsOverview, deleteShop } from './services/api';
 import { useToast } from './components/ToastProvider';
 import SalesScreen from './components/SalesScreen';
 import InventoryScreen from './components/InventoryScreen';
@@ -123,12 +123,14 @@ const App: React.FC = () => {
   const { status: wakeStatus, showWakeupUI } = useServerWakeup();
   const wakeToastShownRef = useRef(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
-  const [shopModalMode, setShopModalMode] = useState<'create' | 'rename' | 'switch' | null>(null);
+  const [shopModalMode, setShopModalMode] = useState<'create' | 'rename' | 'switch' | 'delete' | null>(null);
   const [shopNameInput, setShopNameInput] = useState('');
   const [shopInitMode, setShopInitMode] = useState<'fresh' | 'copy_inventory' | 'share_catalog'>('fresh');
   const [shopSourceId, setShopSourceId] = useState('');
   const [isSavingShop, setIsSavingShop] = useState(false);
+  const [isSwitchingShop, setIsSwitchingShop] = useState(false);
   const [hubOverview, setHubOverview] = useState<{ rows: any[]; totals: any } | null>(null);
+  const [deleteReplacementShopId, setDeleteReplacementShopId] = useState('');
   const isTimeBlocked = useTimeDrift();
 
   /* // TEMPORARILY DISABLED TO FIX CRASH
@@ -323,9 +325,15 @@ const App: React.FC = () => {
   }, [state.transactions]);
 
   const botUiContext = useMemo(() => {
+    const baseShopContext = {
+      activeShopId: state.activeShopId || state.business.defaultShopId || null,
+      allShopsMode: isAllShopsMode
+    };
+
     if (activeTab === 'sales') {
       const cartSubtotal = cart.reduce((sum, item) => sum + (item.total || 0), 0);
       return {
+        ...baseShopContext,
         tab: 'sales',
         cart: {
           itemCount: cart.length,
@@ -355,6 +363,7 @@ const App: React.FC = () => {
       }).length;
 
       return {
+        ...baseShopContext,
         tab: 'inventory',
         inventory: {
             totalProducts: state.products.length,
@@ -392,6 +401,7 @@ const App: React.FC = () => {
         const thisMonthTotal = thisMonthExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
 
         return {
+            ...baseShopContext,
             tab: 'expenditure',
             expenditure: {
                 totalCount: state.expenditures.length,
@@ -403,6 +413,7 @@ const App: React.FC = () => {
     if (activeTab === 'dashboard') {
         const totalRevenue = state.transactions.reduce((sum, t) => sum + (t.totalAmount || 0), 0);
         return {
+            ...baseShopContext,
             tab: 'dashboard',
             dashboard: {
                 totalRevenue,
@@ -414,6 +425,7 @@ const App: React.FC = () => {
 
     if (activeTab === 'settings') {
         return {
+            ...baseShopContext,
             tab: 'settings',
             settings: {
                 plan: entitlements?.plan || (state.business.isSubscribed ? 'PRO' : 'FREE'),
@@ -424,6 +436,7 @@ const App: React.FC = () => {
 
     if (activeTab === 'history') {
       return {
+        ...baseShopContext,
         tab: 'history',
         selectedInvoice: historySelectedInvoice
           ? {
@@ -441,8 +454,8 @@ const App: React.FC = () => {
       };
     }
 
-    return { tab: activeTab };
-  }, [activeTab, cart, historySelectedInvoice, customerName, state.products, state.transactions, state.expenditures, state.business, entitlements, topSellingPreview, recentTransactionsPreview, inventorySalesSnapshot]);
+    return { ...baseShopContext, tab: activeTab };
+  }, [activeTab, cart, historySelectedInvoice, customerName, state.products, state.transactions, state.expenditures, state.business, entitlements, topSellingPreview, recentTransactionsPreview, inventorySalesSnapshot, isAllShopsMode]);
 
   const refreshData = useCallback(async (overrideState?: InventoryState) => {
     if (!navigator.onLine) return;
@@ -1076,10 +1089,24 @@ const App: React.FC = () => {
   }, [state.notifications, state.activeShopId, isAllShopsMode]);
 
   const handleShopSwitch = async (nextShopId: string) => {
+    if (isSwitchingShop) return;
+    if (nextShopId === stateRef.current.activeShopId) {
+      closeShopModal();
+      return;
+    }
+    setIsSwitchingShop(true);
     const nextState = { ...stateRef.current, activeShopId: nextShopId, allShopsMode: nextShopId === ALL_SHOPS_ID };
     stateRef.current = nextState;
     setState(nextState);
-    await refreshData(nextState);
+    try {
+      await refreshData(nextState);
+    } finally {
+      setIsSwitchingShop(false);
+    }
+  };
+
+  const openShopSwitcherModal = () => {
+    setShopModalMode('switch');
   };
 
   const openShopSwitcherModal = () => {
@@ -1101,17 +1128,46 @@ const App: React.FC = () => {
     setShopModalMode('rename');
   };
 
+  const handleDeleteActiveShop = () => {
+    const targetId = state.activeShopId;
+    if (!targetId || targetId === ALL_SHOPS_ID) return;
+    setDeleteReplacementShopId(((state.shops || []).find((s) => s.id !== targetId)?.id) || '');
+    setShopModalMode('delete');
+  };
+
   const closeShopModal = () => {
     if (isSavingShop) return;
     setShopModalMode(null);
     setShopNameInput('');
     setShopInitMode('fresh');
     setShopSourceId('');
+    setDeleteReplacementShopId('');
   };
 
   const handleSubmitShopModal = async () => {
     if (isSavingShop) return;
     if (shopModalMode === 'switch') return;
+
+    if (shopModalMode === 'delete') {
+      const targetId = state.activeShopId;
+      if (!targetId || targetId === ALL_SHOPS_ID) return;
+      setIsSavingShop(true);
+      try {
+        await deleteShop(targetId, deleteReplacementShopId || undefined);
+        const fallbackShopId = deleteReplacementShopId || state.business.defaultShopId;
+        const nextState = { ...stateRef.current, activeShopId: fallbackShopId, allShopsMode: false };
+        stateRef.current = nextState;
+        setState(nextState);
+        await refreshData(nextState);
+        addToast('Shop deleted.', 'success');
+        closeShopModal();
+      } catch (err: any) {
+        addToast(err?.message || 'Could not delete shop', 'error');
+      } finally {
+        setIsSavingShop(false);
+      }
+      return;
+    }
 
     const name = shopNameInput.trim();
     if (!name || !isOnline) return;
@@ -1335,7 +1391,8 @@ const App: React.FC = () => {
                   <select
                     value={state.activeShopId || state.business.defaultShopId || ''}
                     onChange={(e) => handleShopSwitch(e.target.value)}
-                    className="hidden md:block text-xs font-bold border rounded-lg px-2 py-1.5"
+                    disabled={isSwitchingShop}
+                    className="hidden md:block text-xs font-bold border rounded-lg px-2 py-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {(state.shops || []).map((shop) => (
                       <option key={shop.id} value={shop.id}>{shop.name}</option>
@@ -1343,12 +1400,16 @@ const App: React.FC = () => {
                     <option value={ALL_SHOPS_ID}>All Shops (read-only)</option>
                   </select>
                 )}
-                <button onClick={handleCreateShop} className="text-xs font-bold px-2 py-1.5 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed" disabled={!isOnline || isSavingShop}>+ Shop</button>
+                <button onClick={handleCreateShop} className="text-xs font-bold px-2 py-1.5 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed" disabled={!isOnline || isSavingShop || isSwitchingShop}>+ Shop</button>
                 {hasMultipleShops && (
-                  <button onClick={handleRenameActiveShop} className="hidden sm:block text-xs font-bold px-2 py-1.5 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed" disabled={!state.activeShopId || state.activeShopId === ALL_SHOPS_ID || !isOnline || isSavingShop}>Rename</button>
+                  <button onClick={handleRenameActiveShop} className="hidden sm:block text-xs font-bold px-2 py-1.5 rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed" disabled={!state.activeShopId || state.activeShopId === ALL_SHOPS_ID || !isOnline || isSavingShop || isSwitchingShop}>Rename</button>
+                )}
+                {hasMultipleShops && (
+                  <button onClick={handleDeleteActiveShop} className="hidden lg:block text-xs font-bold px-2 py-1.5 rounded-lg border border-red-200 text-red-600 bg-white hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed" disabled={!state.activeShopId || state.activeShopId === ALL_SHOPS_ID || !isOnline || isSavingShop || isSwitchingShop}>Delete Shop</button>
                 )}
               </>
             )}
+            {isSwitchingShop && <span className="text-[10px] font-bold text-indigo-600">Switching…</span>}
             {isSyncing && <RefreshCw className="animate-spin text-gray-400 mr-2" size={20} />}
             <button onClick={handleLogout} className="md:hidden p-2 text-gray-400 hover:text-red-500">
               <LogOut size={24} />
@@ -1425,6 +1486,7 @@ const App: React.FC = () => {
                 isOwner={state.role === 'owner'}
                 isReadOnly={!canManageStock || subscriptionLocked || isAllShopsMode}
                 isOnline={isOnline}
+                activeShopId={state.activeShopId}
                 initialParams={deepLinkParams}
               />
             </div>
@@ -1559,7 +1621,7 @@ const App: React.FC = () => {
         <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={closeShopModal}>
           <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-gray-100" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b flex items-center justify-between">
-              <h3 className="text-lg font-black text-gray-900">{shopModalMode === 'create' ? 'Create Shop' : shopModalMode === 'rename' ? 'Rename Shop' : 'Switch Shop'}</h3>
+              <h3 className="text-lg font-black text-gray-900">{shopModalMode === 'create' ? 'Create Shop' : shopModalMode === 'rename' ? 'Rename Shop' : shopModalMode === 'delete' ? 'Delete Shop' : 'Switch Shop'}</h3>
               <button onClick={closeShopModal} disabled={isSavingShop} className="text-gray-400 hover:text-gray-600 disabled:opacity-50"><X size={20} /></button>
             </div>
             <div className="p-6 space-y-4">
@@ -1576,6 +1638,18 @@ const App: React.FC = () => {
                     </button>
                   )}
                 </div>
+              ) : shopModalMode === 'delete' ? (
+                <>
+                  <p className="text-sm text-gray-700">This removes the shop and archives its operational data. Other shops will remain unchanged.</p>
+                  <label className="block text-sm font-bold text-gray-700">
+                    Replacement default shop
+                    <select value={deleteReplacementShopId} onChange={(e) => setDeleteReplacementShopId(e.target.value)} className="mt-2 w-full rounded-xl border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
+                      {(state.shops || []).filter((shop) => shop.id !== state.activeShopId).map((shop) => (
+                        <option key={shop.id} value={shop.id}>{shop.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                </>
               ) : (
                 <>
                   <label className="block text-sm font-bold text-gray-700">
@@ -1622,11 +1696,11 @@ const App: React.FC = () => {
               {shopModalMode !== 'switch' && (
                 <button
                   onClick={handleSubmitShopModal}
-                  disabled={isSavingShop || !isOnline || !shopNameInput.trim() || (shopModalMode === 'create' && shopInitMode === 'copy_inventory' && !shopSourceId)}
+                  disabled={isSavingShop || !isOnline || ((shopModalMode === 'create' || shopModalMode === 'rename') && !shopNameInput.trim()) || (shopModalMode === 'create' && shopInitMode === 'copy_inventory' && !shopSourceId) || (shopModalMode === 'delete' && !deleteReplacementShopId)}
                   className="px-4 py-2 text-sm font-bold rounded-xl bg-primary text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   {isSavingShop && <Loader2 size={14} className="animate-spin" />}
-                  {shopModalMode === 'create' ? 'Create Shop' : 'Save Name'}
+                  {shopModalMode === 'create' ? 'Create Shop' : shopModalMode === 'rename' ? 'Save Name' : 'Delete Shop'}
                 </button>
               )}
             </div>

@@ -448,7 +448,9 @@ export const sendChat = async (message: string, history: any[], uiContext?: any)
               paymentStatus: String(tx?.paymentStatus || '').slice(0, 20),
               transactionDate: String(tx?.transactionDate || '').slice(0, 40)
             }))
-          : []
+          : [],
+        activeShopId: uiContext.activeShopId ? String(uiContext.activeShopId).slice(0, 64) : undefined,
+        allShopsMode: Boolean(uiContext.allShopsMode)
       }
     : undefined;
 
@@ -798,6 +800,16 @@ export const renameShop = async (shopId: string, name: string): Promise<{ shop: 
   });
 };
 
+export const deleteShop = async (shopId: string, replacementShopId?: string): Promise<{ success: boolean; shopId: string }> => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+  return request(`/api/shops/${shopId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ replacementShopId })
+  });
+};
+
 export const getShopsOverview = async () => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');
@@ -852,11 +864,15 @@ export const initializePayment = async (amount: number, email: string) => {
   }
 };
 
-export const deleteProduct = async (id: string, hard = false) => {
+export const deleteProduct = async (id: string, hard = false, shopId?: string) => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');
 
-  return request(`/api/sync/products/${id}${hard ? '?hard=true' : ''}`, {
+  const query = new URLSearchParams();
+  if (hard) query.set('hard', 'true');
+  if (shopId) query.set('shopId', shopId);
+
+  return request(`/api/sync/products/${id}${query.toString() ? `?${query.toString()}` : ''}`, {
     method: 'DELETE',
     headers: {
       Authorization: `Bearer ${token}`
