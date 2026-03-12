@@ -1110,6 +1110,7 @@ const App: React.FC = () => {
     setShopModalMode('switch');
   };
 
+
   const handleCreateShop = async () => {
     setShopNameInput('');
     setShopInitMode('fresh');
