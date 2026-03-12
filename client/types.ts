@@ -173,6 +173,7 @@ export interface ActivityLog {
 
 export interface Notification {
   id: string;
+  shopId?: string | null;
   title?: string;
   message: string;
   body?: string;

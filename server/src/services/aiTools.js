@@ -3,6 +3,7 @@ const OpenAI = require('openai');
 const Transaction = require('../models/Transaction');
 const Product = require('../models/Product');
 const Expenditure = require('../models/Expenditure');
+const ProductShopStock = require('../models/ProductShopStock');
 const { generateVerificationQueue } = require('./stockVerification');
 
 const client = new OpenAI({
@@ -249,7 +250,21 @@ const tools = [
 
 // --- Tool Logic ---
 
-const get_business_report = async ({ startDate, endDate }, { businessId, userRole }) => {
+const resolveShopContext = (context = {}) => {
+    const requestedShopId = context?.shopId ? String(context.shopId) : '';
+    const allShops = Boolean(context?.allShops);
+    return { requestedShopId, allShops };
+};
+
+const applyShopFilter = (criteria, context = {}, field = 'shopId') => {
+    const { requestedShopId, allShops } = resolveShopContext(context);
+    if (!allShops && requestedShopId) {
+        criteria[field] = requestedShopId;
+    }
+    return criteria;
+};
+
+const get_business_report = async ({ startDate, endDate }, { businessId, userRole, shopId, allShops }) => {
     if (!businessId) return { error: "Login required." };
 
     // 1. Determine Date Range
@@ -258,10 +273,10 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
     end.setHours(23, 59, 59, 999);
 
     const businessObjectId = new mongoose.Types.ObjectId(businessId);
-    const transactionMatch = {
+    const transactionMatch = applyShopFilter({
         businessId: businessObjectId,
         transactionDate: { $gte: start, $lte: end }
-    };
+    }, { shopId, allShops });
 
     // 2. Top Products
     const topProductResult = await Transaction.aggregate([
@@ -310,10 +325,10 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
 
     // 5. Expenses & Cash Flow (Split by Type)
     const expenseAggregation = await Expenditure.aggregate([
-        { $match: {
+        { $match: applyShopFilter({
             business: businessObjectId,
             date: { $gte: start, $lte: end }
-        }},
+        }, { shopId, allShops })},
         { $group: {
             _id: {
                 category: { $ifNull: ['$category', 'Uncategorized'] },
@@ -408,13 +423,13 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
     };
 };
 
-const check_debtors = async ({}, { businessId }) => {
+const check_debtors = async ({}, { businessId, shopId, allShops }) => {
     if (!businessId) return { error: "Login required." };
 
-    const criteria = {
+    const criteria = applyShopFilter({
         businessId,
         balance: { $gt: 0 }
-    };
+    }, { shopId, allShops });
 
     const count = await Transaction.countDocuments(criteria);
 
@@ -438,32 +453,37 @@ const check_debtors = async ({}, { businessId }) => {
     }
 };
 
-const check_low_stock = async ({}, { businessId }) => {
+const check_low_stock = async ({}, { businessId, shopId, allShops }) => {
     if (!businessId) return { error: "Login required." };
 
-    const criteria = {
-        businessId,
-        stock: { $lte: 5 }
-    };
+    const stockCriteria = { businessId, isListed: { $ne: false }, onHand: { $lte: 5 } };
+    if (!allShops && shopId) stockCriteria.shopId = String(shopId);
 
-    const count = await Product.countDocuments(criteria);
+    const lowRows = await ProductShopStock.find(stockCriteria).sort({ onHand: 1 }).limit(20).lean();
+    const lowProductIds = Array.from(new Set(lowRows.map((row) => String(row.productId))));
+    const products = lowProductIds.length ? await Product.find({ businessId, id: { $in: lowProductIds } }).lean() : [];
+    const merged = lowRows.map((row) => ({
+        shopId: row.shopId,
+        productId: row.productId,
+        onHand: Number(row.onHand || 0),
+        name: products.find((p) => String(p.id) === String(row.productId))?.name || row.productId
+    }));
 
-    if (count > 5) {
+    if (merged.length > 5) {
         return {
             special_action: "NAVIGATE",
             screen: "inventory",
             params: { filter: "low_stock" },
-            message: `You have ${count} items running low. Opening Inventory...`
+            message: `You have ${merged.length} low stock item(s)${allShops ? ' across shops' : ''}.`
         };
-    } else if (count > 0) {
-        const results = await Product.find(criteria).limit(5);
-        return {
-            message: `Found ${count} low stock items.`,
-            items: sanitizeData(results)
-        };
-    } else {
-        return { message: "Stock levels look good! No items below 5 units." };
     }
+
+    if (!merged.length) return { message: "Stock levels look good! No items below 5 units." };
+
+    return {
+        message: `Found ${merged.length} low stock item(s).`,
+        items: sanitizeData(merged)
+    };
 };
 
 const product_search = async ({ query }, { businessId }) => {
@@ -498,17 +518,17 @@ const product_search = async ({ query }, { businessId }) => {
     }
 };
 
-const search_expenses = async ({ query, startDate, endDate }, { businessId }) => {
+const search_expenses = async ({ query, startDate, endDate }, { businessId, shopId, allShops }) => {
     if (!businessId) return { error: "Login required." };
 
-    const criteria = {
+    const criteria = applyShopFilter({
         business: businessId,
         $or: [
             { description: { $regex: query, $options: 'i' } },
             { title: { $regex: query, $options: 'i' } },
             { category: { $regex: query, $options: 'i' } }
         ]
-    };
+    }, { shopId, allShops });
 
     if (startDate || endDate) {
         criteria.date = {};
@@ -688,7 +708,7 @@ const get_category_performance = async ({ category, startDate, endDate }, { busi
     };
 };
 
-const get_inventory_intelligence = async ({ days = 30, restockHorizonDays = 30, topN = 10 } = {}, { businessId, userRole }) => {
+const get_inventory_intelligence = async ({ days = 30, restockHorizonDays = 30, topN = 10 } = {}, { businessId, userRole, shopId, allShops }) => {
     if (!businessId) return { error: 'Login required.' };
 
     const safeDays = Math.min(Math.max(Number(days) || 30, 7), 120);
@@ -706,6 +726,10 @@ const get_inventory_intelligence = async ({ days = 30, restockHorizonDays = 30, 
     ]);
 
     const soldMap = new Map();
+    const stockMap = new Map();
+    for (const row of stockRows) {
+        stockMap.set(String(row.productId), Number(row.onHand || 0));
+    }
     recentTransactions.forEach((tx) => {
         (tx.items || []).forEach((item) => {
             const productId = item?.productId;
@@ -722,7 +746,7 @@ const get_inventory_intelligence = async ({ days = 30, restockHorizonDays = 30, 
                 name: product.name,
                 category: product.category || 'Uncategorized',
                 sold,
-                currentStock: Number(product.stock || 0)
+                currentStock: Number(stockMap.get(String(product.id)) ?? product.stock ?? 0)
             };
         })
         .filter((item) => item.sold > 0)
@@ -734,7 +758,7 @@ const get_inventory_intelligence = async ({ days = 30, restockHorizonDays = 30, 
             id: product.id,
             name: product.name,
             category: product.category || 'Uncategorized',
-            currentStock: Number(product.stock || 0),
+            currentStock: Number(stockMap.get(String(product.id)) ?? product.stock ?? 0),
             soldInPeriod: Number(soldMap.get(product.id) || 0)
         }))
         .filter((item) => item.currentStock > 0 && item.soldInPeriod <= 0)
@@ -746,7 +770,7 @@ const get_inventory_intelligence = async ({ days = 30, restockHorizonDays = 30, 
             const soldInPeriod = Number(soldMap.get(product.id) || 0);
             const avgDailySales = soldInPeriod / safeDays;
             const forecastNeed = Math.ceil(avgDailySales * safeHorizon);
-            const currentStock = Number(product.stock || 0);
+            const currentStock = Number(stockMap.get(String(product.id)) ?? product.stock ?? 0);
             const recommendedQty = Math.max(0, forecastNeed - currentStock);
             return {
                 id: product.id,
@@ -784,11 +808,11 @@ const get_inventory_intelligence = async ({ days = 30, restockHorizonDays = 30, 
 };
 
 
-const search_sales_records = async ({ startDate, endDate, customerName, paymentStatus, limit = 20 }, { businessId, userRole }) => {
+const search_sales_records = async ({ startDate, endDate, customerName, paymentStatus, limit = 20 }, { businessId, userRole, shopId, allShops }) => {
     if (!businessId) return { error: "Login required." };
 
     const parsedLimit = Math.min(Math.max(Number(limit) || 20, 1), 50);
-    const criteria = { businessId };
+    const criteria = applyShopFilter({ businessId }, { shopId, allShops });
 
     if (startDate || endDate) {
         criteria.transactionDate = {};
@@ -846,10 +870,10 @@ const search_sales_records = async ({ startDate, endDate, customerName, paymentS
     return baseResult;
 };
 
-const get_recent_transaction = async ({}, { businessId }) => {
+const get_recent_transaction = async ({}, { businessId, shopId, allShops }) => {
     if (!businessId) return { error: "Login required." };
 
-    const result = await Transaction.findOne({ businessId })
+    const result = await Transaction.findOne(applyShopFilter({ businessId }, { shopId, allShops }))
         .sort({ transactionDate: -1 });
 
     if (!result) {
@@ -870,9 +894,9 @@ const get_stock_verification_queue = async ({}, { businessId }) => {
 };
 
 // --- Executor ---
-const executeTool = async ({ name, args }, businessId, userRole = 'staff') => {
+const executeTool = async ({ name, args }, businessId, userRole = 'staff', shopContext = {}) => {
     try {
-        const context = { businessId, userRole };
+        const context = { businessId, userRole, shopId: shopContext?.activeShopId || null, allShops: Boolean(shopContext?.allShopsMode) };
         switch (name) {
             case 'get_business_report':
                 return await get_business_report(args, context);
