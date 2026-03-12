@@ -250,12 +250,12 @@ router.get('/summary/overview', auth, async (req, res) => {
 
     const [sales, expenses, stock, inventoryValue, lastSales, lastExpenses] = await Promise.all([
       Transaction.aggregate([
-        { $match: { businessId: req.businessId, shopId: { $in: shopIds } } },
+        { $match: { businessId: req.businessId, shopId: { $in: shopIds }, isPreviousDebt: { $ne: true } } },
         { $group: { _id: '$shopId', sales: { $sum: { $toDouble: '$totalAmount' } } } }
       ]),
       Expenditure.aggregate([
-        { $match: { business: new mongoose.Types.ObjectId(req.businessId), shopId: { $in: shopIds } } },
-        { $group: { _id: '$shopId', expenses: { $sum: { $toDouble: '$amount' } } } }
+        { $match: { business: new mongoose.Types.ObjectId(req.businessId), shopId: { $in: shopIds }, flowType: 'out' } },
+        { $group: { _id: '$shopId', expenses: { $sum: { $abs: { $toDouble: '$amount' } } } } }
       ]),
       ProductShopStock.aggregate([
         { $match: { businessId, shopId: { $in: shopIds } } },

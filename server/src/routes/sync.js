@@ -377,14 +377,8 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
           }
 
           if (!Number.isNaN(existingUpdatedAt.getTime())) {
-              if (typeof stockDelta === 'number' && !Number.isNaN(stockDelta)) {
-                  // Delta Logic: Allow older timestamps (merging), but block exact replays
-                  if (incomingUpdatedAt.getTime() === existingUpdatedAt.getTime()) return null;
-              } else {
-                  // LWW Logic (Standard): Block older or equal
-                  // Now this will correctly accept the edit because client clock moves forward
-                  if (incomingUpdatedAt <= existingUpdatedAt) return null;
-              }
+              // Guard against replay/duplicate stock deltas causing ghost additions.
+              if (incomingUpdatedAt <= existingUpdatedAt) return null;
           }
         }
 
@@ -435,44 +429,8 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
             });
           }
 
-          // 2. Stock Increase Notification
-          const isManualIncrease = !Number.isNaN(stockDelta) ? stockDelta > 0 : (nextStockAbsolute > prevStock);
-          const increaseAmount = !Number.isNaN(stockDelta) ? stockDelta : (nextStockAbsolute - prevStock);
-
-          if (isManualIncrease && increaseAmount > 0) {
-             const productName = p.name || existing.name || productId;
-             // Only log significant increases (avoid noise)
-             productNotifications.push({
-              businessId,
-              type: 'modification',
-              title: `${productName} increased by +${increaseAmount}`,
-              message: `${productName} increased by +${increaseAmount}`,
-              body: `Quantity update: ${productName} increased by +${increaseAmount}`,
-              amount: increaseAmount,
-              performedBy: req.userRole === 'owner' ? 'Owner' : 'Staff',
-              shopId: productShopId,
-              payload: { productId, shopId: productShopId, productName: p.name || '', field: 'stock', delta: increaseAmount }
-            });
-          }
-
-          // 3. Stock Reduction Notification (e.g. wastage/shrinkage)
-          const isManualDecrease = !Number.isNaN(stockDelta) ? stockDelta < 0 : (nextStockAbsolute < prevStock);
-          const decreaseAmount = !Number.isNaN(stockDelta) ? Math.abs(stockDelta) : (prevStock - nextStockAbsolute);
-
-          if (isManualDecrease && decreaseAmount > 0 && !p.isDeleted) {
-             const productName = p.name || existing.name || productId;
-             productNotifications.push({
-              businessId,
-              type: 'modification',
-              title: `${productName} reduced by -${decreaseAmount}`,
-              message: `${productName} reduced by -${decreaseAmount}`,
-              body: `Quantity update: ${productName} reduced by -${decreaseAmount}`,
-              amount: decreaseAmount,
-              performedBy: req.userRole === 'owner' ? 'Owner' : 'Staff',
-              shopId: productShopId,
-              payload: { productId, shopId: productShopId, productName: p.name || '', field: 'stock', delta: -decreaseAmount }
-            });
-          }
+          // Stock delta notifications are intentionally omitted here to reduce duplicate ghost notes
+          // from replayed or batched sync pushes. Verification and sales histories remain available.
         }
 
         // --- UPDATE CONSTRUCTION ---

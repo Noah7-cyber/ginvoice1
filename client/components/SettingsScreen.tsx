@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Store, Save, RefreshCw, CloudCheck, Upload, Trash2, Image as ImageIcon, MessageSquare, HeadphonesIcon, HelpCircle, Lock, AlertTriangle, X, Ticket, ToggleLeft, ToggleRight, Loader2, CreditCard, ShieldCheck, CheckCircle2, Palette, Database, Download, Printer } from 'lucide-react';
-import { BusinessProfile, DiscountCode } from '../types';
+import { BusinessProfile, DiscountCode, Shop } from '../types';
 import { THEME_COLORS, FONTS } from '../constants';
 import { changeBusinessPins, deleteAccount, uploadFile, updateSettings, generateDiscountCode, verifyPayment, getEntitlements, cancelSubscription, pauseSubscription, resumeSubscription, exportBusinessData } from '../services/api';
 import api from '../services/api';
@@ -10,6 +10,10 @@ import { loadState } from '../services/storage';
 
 interface SettingsScreenProps {
   business: BusinessProfile;
+  shops?: Shop[];
+  activeShopId?: string;
+  isShopSwitching?: boolean;
+  onOpenShopManager?: () => void;
   onUpdateBusiness: (profile: BusinessProfile) => void;
   onManualSync?: () => void;
   lastSyncedAt?: string;
@@ -20,7 +24,7 @@ interface SettingsScreenProps {
   onSubscribe?: () => void;
 }
 
-const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusiness, onManualSync, lastSyncedAt, isSyncing, onLogout, onDeleteAccount, isOnline, onSubscribe }) => {
+const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, shops = [], activeShopId, isShopSwitching = false, onOpenShopManager, onUpdateBusiness, onManualSync, lastSyncedAt, isSyncing, onLogout, onDeleteAccount, isOnline, onSubscribe }) => {
   const { addToast } = useToast();
   const [formData, setFormData] = useState<BusinessProfile>(business);
   const [showSaved, setShowSaved] = useState(false);
@@ -467,8 +471,8 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                                 />
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Phone</label>
+                            <div>
+                                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Phone</label>
                                     <input
                                         type="tel"
                                         value={formData.phone}
@@ -499,9 +503,25 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                                     </button>
                                 </div>
                             )}
+                            </div>
+
+                            <div className="rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4 flex items-center justify-between gap-3">
+                              <div>
+                                <p className="text-[11px] font-black uppercase tracking-widest text-indigo-600">Shop Context</p>
+                                <p className="text-sm font-bold text-gray-800 mt-1">{activeShopId === 'all' ? 'All Shops (Read-only)' : (shops.find((s) => s.id === activeShopId)?.name || shops[0]?.name || 'Main Shop')}</p>
+                                <p className="text-xs text-gray-500 mt-1">Manage create/rename/delete/switch from one place.</p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={onOpenShopManager}
+                                disabled={!onOpenShopManager || isShopSwitching || !isOnline}
+                                className="px-3 py-2 text-xs font-black rounded-xl border bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {isShopSwitching ? 'Switching...' : 'Manage Shops'}
+                              </button>
+                            </div>
                         </div>
                     </div>
-                </div>
              </div>
           )}
 

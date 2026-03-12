@@ -50,6 +50,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   const [verifyIndex, setVerifyIndex] = useState(0);
   const [countedQty, setCountedQty] = useState<number | ''>('');
   const [verifyNotes, setVerifyNotes] = useState('');
+  const [isLoadingVerification, setIsLoadingVerification] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
 
   // Category Management
@@ -451,6 +452,8 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
       addToast('Please connect to the internet to verify stock.', 'error');
       return;
     }
+    if (isLoadingVerification || isVerifying) return;
+    setIsLoadingVerification(true);
     try {
       const result = await getStockVerificationQueue();
       const queue = Array.isArray(result?.queue) ? result.queue : [];
@@ -465,6 +468,8 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
       setIsVerifyOpen(true);
     } catch {
       addToast('Failed to load verification queue.', 'error');
+    } finally {
+      setIsLoadingVerification(false);
     }
   };
 
@@ -587,8 +592,8 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
               <ListTodo size={20} /> Edit Many ({selectedIds.size})
             </button>
           )}
-          <button onClick={handleStartVerification} className="bg-blue-50 text-blue-700 px-4 py-3 rounded-xl flex items-center gap-2 font-bold border border-blue-200 hover:bg-blue-100 transition-all">
-            <CheckCircle2 size={18} /> <span className="hidden md:inline">Verify Stock</span>
+          <button onClick={handleStartVerification} disabled={isLoadingVerification || isVerifying || !isOnline} className="bg-blue-50 text-blue-700 px-4 py-3 rounded-xl flex items-center gap-2 font-bold border border-blue-200 hover:bg-blue-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+            {(isLoadingVerification || isVerifying) ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />} <span className="hidden md:inline">Verify Stock</span>
           </button>
           {!safeReadOnly && (
             <button 
