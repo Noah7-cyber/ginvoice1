@@ -12,8 +12,8 @@ router.get('/', auth, async (req, res) => {
   try {
     const businessId = new mongoose.Types.ObjectId(req.businessId);
     const range = req.query.range || '7d'; // '7d', '30d', '1y'
-    const requestedShopId = req.query.shopId ? String(req.query.shopId) : '';
-    const allShopsMode = req.query.allShops === 'true';
+    const requestedShopId = req.assignedShopId || (req.query.shopId ? String(req.query.shopId) : '');
+    const allShopsMode = req.assignedShopId ? false : (req.query.allShops === 'true');
     const txShopFilter = (!allShopsMode && requestedShopId) ? { shopId: requestedShopId } : {};
 
     const now = new Date();

@@ -476,7 +476,7 @@ const App: React.FC = () => {
       });
 
       if (response.status === 200 && response.data) {
-         const { products, transactions, categories, expenditures, business, notifications, shops, activeShopId, allShopsMode } = response.data;
+         const { products, transactions, categories, expenditures, business, notifications, shops, activeShopId, allShopsMode, staffContext } = response.data;
 
          const nextState: InventoryState = {
            ...currentState,
@@ -489,7 +489,7 @@ const App: React.FC = () => {
            shops: shops || currentState.shops || [],
            activeShopId: activeShopId || currentState.activeShopId || business?.defaultShopId,
            allShopsMode: Boolean(allShopsMode),
-           business: business ? { ...currentState.business, ...business } : currentState.business,
+           business: business ? { ...currentState.business, ...business, staffContext: staffContext || currentState.business?.staffContext || null } : currentState.business,
            lastSyncedAt: new Date().toISOString(),
            isLoggedIn: true
          };
@@ -832,7 +832,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleLogin = async (pin: string, selectedRole: UserRole) => {
+  const handleLogin = async (pin: string, selectedRole: UserRole, shopId?: string) => {
     if (!navigator.onLine) {
       addToast('Login requires internet connection.', 'error');
       return false;
@@ -840,15 +840,15 @@ const App: React.FC = () => {
 
     try {
       if (state.business.email) {
-        const response = await login(state.business.email, pin, selectedRole);
+        const response = await login(state.business.email, pin, selectedRole, shopId);
         saveAuthToken(response.token);
 
         const newState = {
           ...state,
           role: response.role,
           isLoggedIn: true,
-          business: { ...state.business, ...response.business },
-          activeShopId: response.business?.defaultShopId || state.activeShopId,
+          business: { ...state.business, ...response.business, staffContext: response.staffContext || null },
+          activeShopId: response.staffContext?.assignedShopId || response.business?.defaultShopId || state.activeShopId,
           allShopsMode: false
         };
 
@@ -1090,6 +1090,9 @@ const App: React.FC = () => {
   }, [state.notifications, state.activeShopId, isAllShopsMode]);
 
   const handleShopSwitch = async (nextShopId: string) => {
+    if (stateRef.current.role === 'staff' && stateRef.current.business?.staffContext?.assignedShopId) {
+      return;
+    }
     if (isSwitchingShop) return;
     if (nextShopId === stateRef.current.activeShopId) {
       closeShopModal();
@@ -1724,7 +1727,7 @@ const App: React.FC = () => {
       <div className={`fixed inset-y-0 right-0 z-[60] transition-all duration-300 ease-in-out md:relative md:inset-auto md:z-auto ${isCartOpen ? 'translate-x-0 w-full max-w-sm md:w-80 lg:w-96 border-l shadow-2xl md:shadow-none' : 'translate-x-full w-0 overflow-hidden'}`}>
         {isCartOpen && window.innerWidth < 768 && <div className="fixed inset-0 bg-black/40 backdrop-blur-sm -z-10" onClick={() => setIsCartOpen(false)} />}
         <div className="h-full bg-white flex flex-col">
-          <CurrentOrderSidebar cart={cart} setCart={setCart} customerName={customerName} setCustomerName={setCustomerName} customerPhone={customerPhone} setCustomerPhone={setCustomerPhone} paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod} amountPaid={amountPaid} setAmountPaid={setAmountPaid} globalDiscount={globalDiscount} setGlobalDiscount={setGlobalDiscount} isGlobalDiscountPercent={isGlobalDiscountPercent} setIsGlobalDiscountPercent={setIsGlobalDiscountPercent} signature={signature} setSignature={setSignature} isLocked={isLocked} setIsLocked={setIsLocked} onCompleteSale={handleCompleteSale} onClose={() => setIsCartOpen(false)} products={state.products} permissions={state.business.staffPermissions} isOwner={state.role === 'owner'} pastCustomers={pastCustomers} />
+          <CurrentOrderSidebar cart={cart} setCart={setCart} customerName={customerName} setCustomerName={setCustomerName} customerPhone={customerPhone} setCustomerPhone={setCustomerPhone} paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod} amountPaid={amountPaid} setAmountPaid={setAmountPaid} globalDiscount={globalDiscount} setGlobalDiscount={setGlobalDiscount} isGlobalDiscountPercent={isGlobalDiscountPercent} setIsGlobalDiscountPercent={setIsGlobalDiscountPercent} signature={signature} setSignature={setSignature} isLocked={isLocked} setIsLocked={setIsLocked} onCompleteSale={handleCompleteSale} onClose={() => setIsCartOpen(false)} products={state.products} permissions={state.business.staffPermissions} isOwner={state.role === 'owner'} pastCustomers={pastCustomers} activeShopName={(state.shops || []).find((s) => s.id === state.activeShopId)?.name || state.business.staffContext?.assignedShopName || 'Shop'} staffDisplayName={state.business.staffContext?.staffName || undefined} />
         </div>
       </div>
 

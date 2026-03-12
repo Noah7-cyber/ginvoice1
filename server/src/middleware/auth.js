@@ -31,8 +31,13 @@ const authMiddleware = async (req, res, next) => {
     req.user = {
       id: payload.userId || payload.id,
       businessId: payload.businessId,
-      role: payload.role
+      role: payload.role,
+      assignedShopId: payload.assignedShopId || null,
+      assignedShopName: payload.assignedShopName || null,
+      staffName: payload.staffName || null
     };
+
+    req.assignedShopId = payload.assignedShopId || null;
 
     // Attach the full business object as requested
     req.business = business;

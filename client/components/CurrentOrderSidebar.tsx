@@ -41,13 +41,15 @@ interface CurrentOrderSidebarProps {
   permissions: any;
   isOwner?: boolean; // Added isOwner prop
   pastCustomers?: string[];
+  activeShopName?: string;
+  staffDisplayName?: string;
 }
 
 const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
   cart, setCart, customerName, setCustomerName, paymentMethod, setPaymentMethod,
   customerPhone, setCustomerPhone, amountPaid, setAmountPaid, globalDiscount, setGlobalDiscount, isGlobalDiscountPercent,
   setIsGlobalDiscountPercent, signature, setSignature, isLocked, setIsLocked,
-  onCompleteSale, onClose, products, permissions, isOwner = false, pastCustomers
+  onCompleteSale, onClose, products, permissions, isOwner = false, pastCustomers, activeShopName = 'Shop', staffDisplayName
 }) => {
   const [activeDiscountEdit, setActiveDiscountEdit] = useState<string | null>(null);
   const [discountCode, setDiscountCode] = useState('');
@@ -121,7 +123,7 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
       balance: balance,
       signature: finalSignature,
       isSignatureLocked: isLocked,
-      staffId: isOwner ? 'owner' : 'Store Staff',
+      staffId: isOwner ? 'owner' : (staffDisplayName || `Sales (${activeShopName})`),
       createdByRole: isOwner ? 'owner' : 'staff',
       discountCode: discountCode || undefined
     };

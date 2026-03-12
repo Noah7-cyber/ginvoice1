@@ -45,11 +45,20 @@ const resolveShopId = async ({ businessId, requestedShopId }) => {
 
 const isAllShopsMode = (value) => value === true || value === 'true' || value === '1';
 
-const ensureWritableShopContext = async ({ businessId, requestedShopId, allShops }) => {
+const ensureWritableShopContext = async ({ businessId, requestedShopId, allShops, enforcedShopId = null }) => {
   if (isAllShopsMode(allShops)) {
     const err = new Error('All Shops mode is read-only. Select a specific shop to continue.');
     err.status = 400;
     throw err;
+  }
+
+  if (enforcedShopId) {
+    if (requestedShopId && String(requestedShopId) !== String(enforcedShopId)) {
+      const err = new Error('Staff account is locked to an assigned shop.');
+      err.status = 403;
+      throw err;
+    }
+    return String(enforcedShopId);
   }
 
   const shopId = await resolveShopId({ businessId, requestedShopId });

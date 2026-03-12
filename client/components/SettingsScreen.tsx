@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Store, Save, RefreshCw, CloudCheck, Upload, Trash2, Image as ImageIcon, MessageSquare, HeadphonesIcon, HelpCircle, Lock, AlertTriangle, X, Ticket, ToggleLeft, ToggleRight, Loader2, CreditCard, ShieldCheck, CheckCircle2, Palette, Database, Download, Printer } from 'lucide-react';
 import { BusinessProfile, DiscountCode, Shop } from '../types';
 import { THEME_COLORS, FONTS } from '../constants';
-import { changeBusinessPins, deleteAccount, uploadFile, updateSettings, generateDiscountCode, verifyPayment, getEntitlements, cancelSubscription, pauseSubscription, resumeSubscription, exportBusinessData } from '../services/api';
+import { deleteAccount, uploadFile, updateSettings, generateDiscountCode, verifyPayment, getEntitlements, cancelSubscription, pauseSubscription, resumeSubscription, exportBusinessData, getShopStaffPins, updateShopStaffPin } from '../services/api';
 import api from '../services/api';
 import SupportBot from './SupportBot';
 import { useToast } from './ToastProvider';
@@ -34,7 +34,10 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, shops = [], a
   // Security State
   const [currentOwnerPin, setCurrentOwnerPin] = useState('');
   const [newStaffPin, setNewStaffPin] = useState('');
-  const [newOwnerPin, setNewOwnerPin] = useState('');
+  const [confirmStaffPin, setConfirmStaffPin] = useState('');
+  const [selectedStaffShopId, setSelectedStaffShopId] = useState('');
+  const [staffNameInput, setStaffNameInput] = useState('');
+  const [shopStaffRows, setShopStaffRows] = useState<Array<{ shopId: string; shopName: string; isMain: boolean; hasStaffPin: boolean; staffName?: string }>>([]);
   const [securityMsg, setSecurityMsg] = useState('');
 
   // Delete Account State
@@ -225,14 +228,21 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, shops = [], a
   const handleUpdatePins = async () => {
     if (!isOnline) return setSecurityMsg('Internet connection required');
     if (!currentOwnerPin) return setSecurityMsg('Current Owner PIN required');
-    if (!newStaffPin && !newOwnerPin) return setSecurityMsg('Enter at least one new PIN');
+    if (!selectedStaffShopId) return setSecurityMsg('Select a shop');
+    if (!newStaffPin) return setSecurityMsg('Enter a new staff PIN');
+    if (newStaffPin !== confirmStaffPin) return setSecurityMsg('Staff PIN confirmation does not match');
 
     try {
-      await changeBusinessPins(currentOwnerPin, newStaffPin || undefined, newOwnerPin || undefined);
+      await updateShopStaffPin(selectedStaffShopId, currentOwnerPin, newStaffPin, staffNameInput || undefined);
       setSecurityMsg('PINs updated successfully');
       setCurrentOwnerPin('');
       setNewStaffPin('');
-      setNewOwnerPin('');
+      setConfirmStaffPin('');
+      const refreshed = await getShopStaffPins();
+      setShopStaffRows(refreshed?.shops || []);
+      if (!selectedStaffShopId) {
+        setSelectedStaffShopId(String(refreshed?.defaultShopId || refreshed?.shops?.[0]?.shopId || ''));
+      }
       setTimeout(() => setSecurityMsg(''), 3000);
     } catch (err: any) {
       setSecurityMsg(err.message || 'Failed to update PINs');
@@ -253,6 +263,26 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, shops = [], a
       setIsDeleting(false);
     }
   };
+
+  useEffect(() => {
+    if (activeTab !== 'security') return;
+    if (!isOnline) return;
+    getShopStaffPins()
+      .then((data) => {
+        const rows = data?.shops || [];
+        setShopStaffRows(rows);
+        setSelectedStaffShopId(String(data?.defaultShopId || rows[0]?.shopId || ''));
+      })
+      .catch(() => {
+        // no-op
+      });
+  }, [activeTab, isOnline]);
+
+  useEffect(() => {
+    if (!selectedStaffShopId) return;
+    const row = shopStaffRows.find((r) => String(r.shopId) === String(selectedStaffShopId));
+    setStaffNameInput(row?.staffName || '');
+  }, [selectedStaffShopId, shopStaffRows]);
 
   const handleVerifyPayment = async () => {
       if (!paystackReference) return;
@@ -819,23 +849,40 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, shops = [], a
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
                   <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
                     <h2 className="text-lg font-bold flex items-center gap-2"><Lock className="text-orange-500" /> Manage PINs</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                        <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Shop *</label>
+                        <select value={selectedStaffShopId} onChange={e => setSelectedStaffShopId(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold">
+                          {(shopStaffRows || []).map((row) => (
+                            <option key={row.shopId} value={row.shopId}>{row.shopName}</option>
+                          ))}
+                        </select>
+                        </div>
                         <div>
                         <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Current Owner PIN *</label>
                         <input type="password" value={currentOwnerPin} onChange={e => setCurrentOwnerPin(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold text-center tracking-widest" placeholder="****" />
                         </div>
                         <div>
-                        <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">New Staff PIN</label>
-                        <input type="text" value={newStaffPin} onChange={e => setNewStaffPin(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold text-center tracking-widest" placeholder="Optional" />
+                        <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Staff Name (Optional)</label>
+                        <input type="text" value={staffNameInput} onChange={e => setStaffNameInput(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold" placeholder="e.g. Sales (A)" />
                         </div>
                         <div>
-                        <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">New Owner PIN</label>
-                        <input type="text" value={newOwnerPin} onChange={e => setNewOwnerPin(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold text-center tracking-widest" placeholder="Optional" />
+                        <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">New Staff PIN</label>
+                        <input type="password" value={newStaffPin} onChange={e => setNewStaffPin(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold text-center tracking-widest" placeholder="****" />
+                        </div>
+                        <div>
+                        <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Confirm Staff PIN</label>
+                        <input type="password" value={confirmStaffPin} onChange={e => setConfirmStaffPin(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold text-center tracking-widest" placeholder="****" />
                         </div>
                     </div>
+                    {!!shopStaffRows.length && (
+                      <p className="text-xs text-gray-500">
+                        {shopStaffRows.find((x) => String(x.shopId) === String(selectedStaffShopId))?.hasStaffPin ? 'This shop already has a staff PIN configured.' : 'This shop will use the global staff PIN until a shop PIN is set.'}
+                      </p>
+                    )}
                     <div className="flex justify-between items-center">
                         <p className={`text-xs font-bold ${securityMsg.includes('success') ? 'text-green-600' : 'text-red-500'}`}>{securityMsg}</p>
-                        <button type="button" onClick={handleUpdatePins} className="text-xs font-black uppercase text-white bg-gray-900 px-6 py-3 rounded-xl hover:bg-black transition-all">Update PINs</button>
+                        <button type="button" onClick={handleUpdatePins} className="text-xs font-black uppercase text-white bg-gray-900 px-6 py-3 rounded-xl hover:bg-black transition-all">Update Staff PIN</button>
                     </div>
                   </div>
 

@@ -10,8 +10,8 @@ router.get('/', auth, async (req, res) => {
   try {
     const businessId = req.user.businessId || req.user.id;
     const defaultShopId = await resolveShopId({ businessId, requestedShopId: null });
-    const requestedShopId = req.query.shopId ? String(req.query.shopId) : defaultShopId;
-    const allShopsMode = req.query.allShops === 'true';
+    const requestedShopId = req.assignedShopId || (req.query.shopId ? String(req.query.shopId) : defaultShopId);
+    const allShopsMode = req.assignedShopId ? false : (req.query.allShops === 'true');
 
     const rawExpenditures = await Expenditure.find({
         business: businessId,
@@ -59,7 +59,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
     else if (flowType === 'in') finalAmount = Math.abs(finalAmount);
 
     const businessId = req.user.businessId || req.user.id;
-    const shopId = await ensureWritableShopContext({ businessId, requestedShopId, allShops });
+    const shopId = await ensureWritableShopContext({ businessId, requestedShopId, allShops, enforcedShopId: req.assignedShopId });
 
     const newExpenditure = new Expenditure({
       id: id || require('crypto').randomUUID(), // Ensure id is present
@@ -96,7 +96,7 @@ router.put('/:id', auth, requireActiveSubscription, async (req, res) => {
     const businessId = req.user.businessId || req.user.id;
     let expenditure = await Expenditure.findOne({ id: req.params.id, business: businessId });
     if (!expenditure) return res.status(404).json({ msg: 'Expenditure not found' });
-    const shopId = await ensureWritableShopContext({ businessId, requestedShopId: requestedShopId || expenditure.shopId, allShops });
+    const shopId = await ensureWritableShopContext({ businessId, requestedShopId: requestedShopId || expenditure.shopId, allShops, enforcedShopId: req.assignedShopId });
 
     // Force sign based on flowType
     let finalAmount = parseFloat(amount);
