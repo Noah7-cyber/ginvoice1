@@ -123,11 +123,8 @@ const App: React.FC = () => {
   const { status: wakeStatus, showWakeupUI } = useServerWakeup();
   const wakeToastShownRef = useRef(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
-<<<<<<< codex/implement-multi-shop-support-4taf4x
   const [shopModalMode, setShopModalMode] = useState<'menu' | 'create' | 'rename' | 'switch' | 'delete' | null>(null);
-=======
   const [shopModalMode, setShopModalMode] = useState<'create' | 'rename' | 'switch' | 'delete' | null>(null);
->>>>>>> main
   const [shopNameInput, setShopNameInput] = useState('');
   const [shopInitMode, setShopInitMode] = useState<'fresh' | 'copy_inventory' | 'share_catalog'>('fresh');
   const [shopSourceId, setShopSourceId] = useState('');
