@@ -5,6 +5,9 @@ const Business = require('../models/Business');
 const Product = require('../models/Product');
 const Transaction = require('../models/Transaction');
 const Expenditure = require('../models/Expenditure');
+const Shop = require('../models/Shop');
+const ProductShopStock = require('../models/ProductShopStock');
+const Notification = require('../models/Notification');
 const adminAuth = require('../middleware/adminAuth');
 const multer = require('multer');
 const { sendSystemEmail } = require('../services/mail');
@@ -224,6 +227,50 @@ router.delete('/purge-deleted-products', async (req, res) => {
   } catch (err) {
     console.error('Purge Error:', err);
     res.status(500).json({ message: 'Failed to purge products' });
+  }
+});
+
+// DELETE /purge-inactive-shops
+router.delete('/purge-inactive-shops', async (req, res) => {
+  try {
+    const inactiveShops = await Shop.find({ status: 'inactive' }).select('_id businessId').lean();
+    const inactiveShopIds = inactiveShops.map((s) => String(s._id));
+
+    if (inactiveShopIds.length === 0) {
+      return res.json({ message: 'No inactive shops to purge', deletedCount: 0 });
+    }
+
+    const businessIds = [...new Set(inactiveShops.map((s) => String(s.businessId)).filter(Boolean))];
+
+    const [shopResult, stockResult, txResult, expResult, noteResult] = await Promise.all([
+      Shop.deleteMany({ _id: { $in: inactiveShopIds } }),
+      ProductShopStock.deleteMany({ shopId: { $in: inactiveShopIds } }),
+      Transaction.deleteMany({ shopId: { $in: inactiveShopIds } }),
+      Expenditure.deleteMany({ shopId: { $in: inactiveShopIds } }),
+      Notification.deleteMany({ shopId: { $in: inactiveShopIds } })
+    ]);
+
+    if (businessIds.length > 0) {
+      await Business.updateMany(
+        { _id: { $in: businessIds } },
+        { $pull: { shopStaffPins: { shopId: { $in: inactiveShopIds } } } }
+      );
+    }
+
+    res.json({
+      message: 'Inactive shops purged successfully',
+      deletedCount: shopResult.deletedCount || 0,
+      details: {
+        shops: shopResult.deletedCount || 0,
+        stockRows: stockResult.deletedCount || 0,
+        transactions: txResult.deletedCount || 0,
+        expenditures: expResult.deletedCount || 0,
+        notifications: noteResult.deletedCount || 0
+      }
+    });
+  } catch (err) {
+    console.error('Purge Inactive Shops Error:', err);
+    res.status(500).json({ message: 'Failed to purge inactive shops' });
   }
 });
 

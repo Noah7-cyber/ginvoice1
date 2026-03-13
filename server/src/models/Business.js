@@ -7,6 +7,17 @@ const BusinessSchema = new mongoose.Schema({
   address: { type: String, default: '' },
   ownerPin: { type: String, required: true },
   staffPin: { type: String, required: true },
+  shopStaffPins: {
+    type: [
+      {
+        shopId: { type: String, required: true },
+        staffPin: { type: String, required: true },
+        staffName: { type: String, default: '' },
+        updatedAt: { type: Date, default: Date.now }
+      }
+    ],
+    default: []
+  },
   logo: { type: String },
   theme: { type: mongoose.Schema.Types.Mixed, default: {} },
   trialEndsAt: { type: Date, required: true },

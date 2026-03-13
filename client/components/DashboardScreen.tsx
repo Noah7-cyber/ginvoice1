@@ -70,6 +70,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
   } | null>(null);
 
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '1y'>('7d');
+  const [salesCountRange, setSalesCountRange] = useState<'daily' | 'monthly' | 'yearly'>('daily');
+  const [cashRange, setCashRange] = useState<'daily' | 'monthly' | 'yearly'>('daily');
+  const [expenseRange, setExpenseRange] = useState<'daily' | 'monthly' | 'yearly'>('daily');
 
   useEffect(() => {
     let active = true;
@@ -234,6 +237,65 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
       .slice(0, 3);
   }, [expenditures]);
 
+  const salesCountStats = useMemo(() => {
+    const salesTransactions = transactions.filter((tx) => !tx.isPreviousDebt);
+    const now = new Date();
+    const today = now.toDateString();
+    const month = now.getMonth();
+    const year = now.getFullYear();
+
+    let daily = 0;
+    let monthly = 0;
+    let yearly = 0;
+
+    salesTransactions.forEach((tx) => {
+      const txDate = new Date(tx.transactionDate);
+      if (Number.isNaN(txDate.getTime())) return;
+      if (txDate.getFullYear() === year) {
+        yearly += 1;
+        if (txDate.getMonth() === month) monthly += 1;
+      }
+      if (txDate.toDateString() === today) daily += 1;
+    });
+
+    return { daily, monthly, yearly };
+  }, [transactions]);
+
+  const normalizedHubRows = useMemo(() => {
+    if (!hubOverview?.rows?.length) return [];
+    return hubOverview.rows.map((raw: any) => {
+      const sales = Number(raw.sales ?? raw.revenue ?? raw.totalRevenue ?? 0);
+      const expenses = Number(raw.expenses ?? raw.totalExpenses ?? raw.outflow ?? 0);
+      const profit = Number(raw.profit ?? (sales - expenses));
+      const inventoryValue = Number(raw.inventoryValue ?? raw.stockValue ?? raw.shopWorth ?? 0);
+      return {
+        shopId: String(raw.shopId || raw.id || ''),
+        name: raw.name || raw.shopName || 'Shop',
+        sales,
+        expenses,
+        profit,
+        inventoryValue,
+        lastActivity: raw.lastActivity || raw.updatedAt || null
+      };
+    });
+  }, [hubOverview]);
+
+  const totalExpensesToday = useMemo(() => expenditures
+    .filter((e) => e.flowType === 'out' && new Date(e.date).toDateString() === new Date().toDateString())
+    .reduce((sum, e) => sum + Math.abs(e.amount || 0), 0), [expenditures]);
+
+  const totalExpensesThisYear = useMemo(() => expenditures
+    .filter((e) => e.flowType === 'out' && new Date(e.date).getFullYear() === new Date().getFullYear())
+    .reduce((sum, e) => sum + Math.abs(e.amount || 0), 0), [expenditures]);
+
+  const rotateRangeLeft = (
+    setter: React.Dispatch<React.SetStateAction<'daily' | 'monthly' | 'yearly'>>
+  ) => setter((prev) => (prev === 'daily' ? 'yearly' : prev === 'monthly' ? 'daily' : 'monthly'));
+
+  const rotateRangeRight = (
+    setter: React.Dispatch<React.SetStateAction<'daily' | 'monthly' | 'yearly'>>
+  ) => setter((prev) => (prev === 'daily' ? 'monthly' : prev === 'monthly' ? 'yearly' : 'daily'));
+
   return (
     <div className="max-w-7xl mx-auto space-y-8">
       <div>
@@ -301,154 +363,75 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Existing Cards */}
-        <StatCard 
+        <StatCard
           title="Total Sales"
-          value={`${CURRENCY}${stats.totalRevenue.toLocaleString()}`} 
-          icon={<DollarSign className="text-blue-600" />} 
+          value={`${CURRENCY}${stats.totalRevenue.toLocaleString()}`}
+          icon={<DollarSign className="text-blue-600" />}
           trend={stats.revenueTrendText || '+12% from last month'}
           color="bg-blue-50"
         />
-        <StatCard 
+        <StatCard
           title="Total Profit"
-          value={`${CURRENCY}${stats.totalProfit.toLocaleString()}`} 
-          icon={<TrendingUp className="text-green-600" />} 
+          value={`${CURRENCY}${stats.totalProfit.toLocaleString()}`}
+          icon={<TrendingUp className="text-green-600" />}
           trend={stats.profitTrendText || '+8.4% from last month'}
           color="bg-green-50"
         />
-        <StatCard 
+        <StatCard
           title="Money Owed To You"
-          value={`${CURRENCY}${stats.totalDebt.toLocaleString()}`} 
-          icon={<AlertCircle className="text-red-600" />} 
+          value={`${CURRENCY}${stats.totalDebt.toLocaleString()}`}
+          icon={<AlertCircle className="text-red-600" />}
           trend="Total money owed to you"
           color="bg-red-50"
         />
-        <StatCard 
+
+        <MetricCarouselCard
           title="Sales Count"
-          value={stats.totalSales.toString()} 
-          icon={<ShoppingBag className="text-purple-600" />} 
-          trend="Lifetime transactions"
-          color="bg-purple-50"
+          icon={<ShoppingBag className="text-purple-600" />}
+          iconBg="bg-purple-50"
+          range={salesCountRange}
+          onPrev={() => rotateRangeLeft(setSalesCountRange)}
+          onNext={() => rotateRangeRight(setSalesCountRange)}
+          dailyLabel="Today"
+          dailyValue={`${salesCountStats.daily.toLocaleString()} sales`}
+          monthlyLabel="This Month"
+          monthlyValue={`${salesCountStats.monthly.toLocaleString()} sales`}
+          yearlyLabel="This Year"
+          yearlyValue={`${salesCountStats.yearly.toLocaleString()} sales`}
+          trend="Independent period control"
         />
 
-        {/* Revenue Carousel */}
-        <div className="bg-white p-5 rounded-2xl shadow-sm border group hover:shadow-md transition-all relative overflow-hidden">
-           {/* Navigation Controls */}
-           <div className="absolute inset-y-0 left-0 flex items-center pl-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-              <button
-                onClick={() => setTimeRange(prev => prev === '7d' ? '1y' : prev === '30d' ? '7d' : '30d')}
-                className="p-1 bg-white/80 rounded-full shadow-md hover:bg-white"
-              >
-                <ChevronLeft size={16} className="text-gray-600" />
-              </button>
-           </div>
-           <div className="absolute inset-y-0 right-0 flex items-center pr-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-              <button
-                onClick={() => setTimeRange(prev => prev === '7d' ? '30d' : prev === '30d' ? '1y' : '7d')}
-                className="p-1 bg-white/80 rounded-full shadow-md hover:bg-white"
-              >
-                <ChevronRight size={16} className="text-gray-600" />
-              </button>
-           </div>
+        <MetricCarouselCard
+          title="Cash & Sales Value"
+          icon={<Wallet className="text-blue-600" />}
+          iconBg="bg-blue-50"
+          range={cashRange}
+          onPrev={() => rotateRangeLeft(setCashRange)}
+          onNext={() => rotateRangeRight(setCashRange)}
+          dailyLabel="Today's Cash"
+          dailyValue={`${CURRENCY}${(stats.cashCollectedToday || 0).toLocaleString()}`}
+          monthlyLabel="Monthly Sales"
+          monthlyValue={`${CURRENCY}${(stats.monthlySales || 0).toLocaleString()}`}
+          yearlyLabel="Yearly Sales"
+          yearlyValue={`${CURRENCY}${(stats.yearlySales || 0).toLocaleString()}`}
+          trend={cashRange === 'daily' ? `New Debt: ${CURRENCY}${(stats.newDebtToday || 0).toLocaleString()}` : 'Independent period control'}
+        />
 
-           <div className="absolute top-2 right-2 flex gap-1">
-              <div className={`w-2 h-2 rounded-full ${timeRange === '7d' ? 'bg-blue-600' : 'bg-gray-200'}`} />
-              <div className={`w-2 h-2 rounded-full ${timeRange === '30d' ? 'bg-blue-600' : 'bg-gray-200'}`} />
-              <div className={`w-2 h-2 rounded-full ${timeRange === '1y' ? 'bg-blue-600' : 'bg-gray-200'}`} />
-           </div>
-
-           <div className="flex justify-between items-start mb-4">
-              <div className="p-3 rounded-xl bg-blue-50 transition-transform group-hover:scale-110">
-                <DollarSign className="text-blue-600" size={24} />
-              </div>
-           </div>
-
-           {/* Slide 1: Daily */}
-           {timeRange === '7d' && (
-             <div className="space-y-1 animate-in fade-in slide-in-from-right duration-300">
-               <p className="text-sm font-medium text-gray-500">Today's Cash</p>
-               <h4 className="text-2xl font-black text-gray-900">{CURRENCY}{(stats.cashCollectedToday || 0).toLocaleString()}</h4>
-               <p className="text-[10px] font-bold text-red-500 uppercase tracking-wider">
-                 New Debt: {CURRENCY}{(stats.newDebtToday || 0).toLocaleString()}
-               </p>
-             </div>
-           )}
-
-           {/* Slide 2: Monthly */}
-           {timeRange === '30d' && (
-             <div className="space-y-1 animate-in fade-in slide-in-from-right duration-300 relative">
-               <p className="text-sm font-medium text-gray-500">Monthly Sales</p>
-               <h4 className="text-2xl font-black text-gray-900">{CURRENCY}{(stats.monthlySales || 0).toLocaleString()}</h4>
-               {/* Date Picker Fix */}
-               <div className="absolute inset-0 z-50 w-full h-full" onPointerDown={(e) => e.stopPropagation()}>
-                   <input
-                     type="month"
-                     className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                     onChange={(e) => {
-                        // Logic to trigger fetch with ?date=YYYY-MM
-                        // Assuming getAnalytics handles params or we update local filters
-                        // For now, this confirms the fix for layout/immediate trigger
-                     }}
-                   />
-               </div>
-               <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider mt-1">Tap to change month</p>
-             </div>
-           )}
-
-           {/* Slide 3: Yearly */}
-           {timeRange === '1y' && (
-             <div className="space-y-1 animate-in fade-in slide-in-from-right duration-300">
-               <p className="text-sm font-medium text-gray-500">Yearly Sales</p>
-               <h4 className="text-2xl font-black text-gray-900">{CURRENCY}{(stats.yearlySales || 0).toLocaleString()}</h4>
-               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Includes Debts</p>
-             </div>
-           )}
-        </div>
-
-        {/* NEW: Expenses Carousel */}
-        <div className="bg-white p-5 rounded-2xl shadow-sm border group hover:shadow-md transition-all relative overflow-hidden">
-           {/* Navigation Controls synced with Sales card for consistency */}
-
-           <div className="flex justify-between items-start mb-4">
-              <div className="p-3 rounded-xl bg-orange-50 transition-transform group-hover:scale-110">
-                <Wallet className="text-orange-600" size={24} />
-              </div>
-           </div>
-
-           {/* Slide 1: Daily Expenses */}
-           {timeRange === '7d' && (
-             <div className="space-y-1 animate-in fade-in slide-in-from-right duration-300">
-               <p className="text-sm font-medium text-gray-500">Today's Expenses</p>
-               {/* Filter today's expenses from prop */}
-               <h4 className="text-2xl font-black text-gray-900">
-                 {CURRENCY}{(expenditures?.filter(e => e.flowType === 'out' && new Date(e.date).toDateString() === new Date().toDateString()).reduce((sum, e) => sum + Math.abs(e.amount || 0), 0) || 0).toLocaleString()}
-               </h4>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Net Outflow</p>
-             </div>
-           )}
-
-           {/* Slide 2: Monthly Expenses */}
-           {timeRange === '30d' && (
-             <div className="space-y-1 animate-in fade-in slide-in-from-right duration-300">
-               <p className="text-sm font-medium text-gray-500">Monthly Expenses</p>
-               <h4 className="text-2xl font-black text-gray-900">
-                  {CURRENCY}{(Math.abs(localStats.expensesTotal) || 0).toLocaleString()}
-               </h4>
-               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Total Outflow</p>
-             </div>
-           )}
-
-           {/* Slide 3: Yearly Expenses */}
-           {timeRange === '1y' && (
-             <div className="space-y-1 animate-in fade-in slide-in-from-right duration-300">
-               <p className="text-sm font-medium text-gray-500">Yearly Expenses</p>
-               <h4 className="text-2xl font-black text-gray-900">
-                  {CURRENCY}{(expenditures?.filter(e => e.flowType === 'out' && new Date(e.date).getFullYear() === new Date().getFullYear()).reduce((sum, e) => sum + Math.abs(e.amount || 0), 0) || 0).toLocaleString()}
-               </h4>
-               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Total Outflow</p>
-             </div>
-           )}
-        </div>
+        <MetricCarouselCard
+          title="Expenses"
+          icon={<Wallet className="text-orange-600" />}
+          iconBg="bg-orange-50"
+          range={expenseRange}
+          onPrev={() => rotateRangeLeft(setExpenseRange)}
+          onNext={() => rotateRangeRight(setExpenseRange)}
+          dailyLabel="Today's Expenses"
+          dailyValue={`${CURRENCY}${totalExpensesToday.toLocaleString()}`}
+          monthlyLabel="Monthly Expenses"
+          monthlyValue={`${CURRENCY}${Math.abs(localStats.expensesTotal || 0).toLocaleString()}`}
+          yearlyLabel="Yearly Expenses"
+          yearlyValue={`${CURRENCY}${totalExpensesThisYear.toLocaleString()}`}
+          trend="Independent period control"
+        />
 
         <StatCard
           title="Cost of Stock"
@@ -466,40 +449,51 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
         />
       </div>
 
-      {allShopsMode && hubOverview?.rows?.length ? (
-        <section className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="px-4 py-3 border-b bg-gray-50 flex items-center justify-between">
+      {allShopsMode ? (
+        <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 md:p-5">
+          <div className="mb-4 flex items-center justify-between">
             <h3 className="text-sm font-black text-gray-800">Per-Shop Summary</h3>
             <span className="text-xs text-gray-500">Read-only hub view</span>
           </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-50 text-gray-600">
-                <tr>
-                  <th className="text-left px-4 py-2 font-bold">Shop</th>
-                  <th className="text-right px-4 py-2 font-bold">Revenue</th>
-                  <th className="text-right px-4 py-2 font-bold">Expenses</th>
-                  <th className="text-right px-4 py-2 font-bold">Profit</th>
-                  <th className="text-right px-4 py-2 font-bold">Inventory Value</th>
-                  <th className="text-right px-4 py-2 font-bold">Last Activity</th>
-                </tr>
-              </thead>
-              <tbody>
-                {hubOverview.rows.map((row) => (
-                  <tr key={row.shopId} className="border-t hover:bg-gray-50">
-                    <td className="px-4 py-2">
-                      <button className="font-bold text-primary hover:underline" onClick={() => onSelectShop?.(row.shopId)}>{row.name}</button>
-                    </td>
-                    <td className="px-4 py-2 text-right">{CURRENCY}{Number(row.sales || 0).toLocaleString()}</td>
-                    <td className="px-4 py-2 text-right">{CURRENCY}{Number(row.expenses || 0).toLocaleString()}</td>
-                    <td className="px-4 py-2 text-right font-semibold">{CURRENCY}{Number(row.profit || 0).toLocaleString()}</td>
-                    <td className="px-4 py-2 text-right">{CURRENCY}{Number(row.inventoryValue || 0).toLocaleString()}</td>
-                    <td className="px-4 py-2 text-right text-xs text-gray-500">{row.lastActivity ? new Date(row.lastActivity).toLocaleDateString('en-NG') : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {normalizedHubRows.length ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              {normalizedHubRows.map((row) => (
+                <button
+                  key={row.shopId}
+                  onClick={() => row.shopId && onSelectShop?.(row.shopId)}
+                  className="text-left rounded-2xl border border-gray-100 p-4 hover:shadow-md hover:border-indigo-100 transition-all bg-gradient-to-br from-white to-gray-50"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-black text-gray-900 truncate">{row.name}</p>
+                    <span className="text-[10px] font-bold uppercase text-indigo-600 bg-indigo-50 px-2 py-1 rounded-full">Open</span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                    <div className="rounded-xl bg-blue-50 p-2">
+                      <p className="text-gray-500 font-semibold">Revenue</p>
+                      <p className="font-black text-blue-700">{CURRENCY}{row.sales.toLocaleString()}</p>
+                    </div>
+                    <div className="rounded-xl bg-red-50 p-2">
+                      <p className="text-gray-500 font-semibold">Expenses</p>
+                      <p className="font-black text-red-700">{CURRENCY}{row.expenses.toLocaleString()}</p>
+                    </div>
+                    <div className="rounded-xl bg-green-50 p-2">
+                      <p className="text-gray-500 font-semibold">Profit</p>
+                      <p className="font-black text-green-700">{CURRENCY}{row.profit.toLocaleString()}</p>
+                    </div>
+                    <div className="rounded-xl bg-purple-50 p-2">
+                      <p className="text-gray-500 font-semibold">Inventory</p>
+                      <p className="font-black text-purple-700">{CURRENCY}{row.inventoryValue.toLocaleString()}</p>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-[11px] text-gray-500 font-semibold">
+                    Last activity: {row.lastActivity ? new Date(row.lastActivity).toLocaleDateString('en-NG') : '—'}
+                  </p>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500">No branch analytics available yet. Make sales in each shop to populate this view.</p>
+          )}
         </section>
       ) : null}
 
@@ -662,6 +656,61 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+};
+
+const MetricCarouselCard: React.FC<{
+  title: string;
+  icon: React.ReactNode;
+  iconBg: string;
+  range: 'daily' | 'monthly' | 'yearly';
+  onPrev: () => void;
+  onNext: () => void;
+  dailyLabel: string;
+  dailyValue: string;
+  monthlyLabel: string;
+  monthlyValue: string;
+  yearlyLabel: string;
+  yearlyValue: string;
+  trend?: string;
+}> = ({ title, icon, iconBg, range, onPrev, onNext, dailyLabel, dailyValue, monthlyLabel, monthlyValue, yearlyLabel, yearlyValue, trend }) => {
+  const active = range === 'daily'
+    ? { label: dailyLabel, value: dailyValue }
+    : range === 'monthly'
+      ? { label: monthlyLabel, value: monthlyValue }
+      : { label: yearlyLabel, value: yearlyValue };
+
+  return (
+    <div className="bg-white p-5 rounded-2xl shadow-sm border group hover:shadow-md transition-all relative overflow-hidden">
+      <div className="absolute inset-y-0 left-0 flex items-center pl-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        <button onClick={onPrev} className="p-1 bg-white/80 rounded-full shadow-md hover:bg-white">
+          <ChevronLeft size={16} className="text-gray-600" />
+        </button>
+      </div>
+      <div className="absolute inset-y-0 right-0 flex items-center pr-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        <button onClick={onNext} className="p-1 bg-white/80 rounded-full shadow-md hover:bg-white">
+          <ChevronRight size={16} className="text-gray-600" />
+        </button>
+      </div>
+
+      <div className="absolute top-2 right-2 flex gap-1">
+        <div className={`w-2 h-2 rounded-full ${range === 'daily' ? 'bg-blue-600' : 'bg-gray-200'}`} />
+        <div className={`w-2 h-2 rounded-full ${range === 'monthly' ? 'bg-blue-600' : 'bg-gray-200'}`} />
+        <div className={`w-2 h-2 rounded-full ${range === 'yearly' ? 'bg-blue-600' : 'bg-gray-200'}`} />
+      </div>
+
+      <div className="flex justify-between items-start mb-4">
+        <div className={`p-3 rounded-xl ${iconBg} transition-transform group-hover:scale-110`}>
+          {React.cloneElement(icon as React.ReactElement<any>, { size: 24 })}
+        </div>
+      </div>
+
+      <div className="space-y-1 animate-in fade-in slide-in-from-right duration-300">
+        <p className="text-sm font-medium text-gray-500">{title} - {active.label}</p>
+        <h4 className="text-2xl font-black text-gray-900">{active.value}</h4>
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{trend || ' '}</p>
       </div>
     </div>
   );

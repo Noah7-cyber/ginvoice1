@@ -12,7 +12,7 @@ const { decrementStock, restoreStock, reconcileSaleEdit } = require('../services
 router.post('/', auth, requireActiveSubscription, async (req, res) => {
   try {
     const { items, customerName, totalAmount, amountPaid, paymentMethod, transactionDate, id, staffId, discountCode, shopId: requestedShopId, allShops } = req.body;
-    const shopId = await ensureWritableShopContext({ businessId: req.businessId, requestedShopId, allShops });
+    const shopId = await ensureWritableShopContext({ businessId: req.businessId, requestedShopId, allShops, enforcedShopId: req.assignedShopId });
 
     // 1. Determine Staff ID (Trust frontend "Store Staff" if provided, otherwise fallback to user)
     // NOTE: This logic ensures Owner can't accidentally attribute to themselves if they selected "Staff" mode on frontend
@@ -69,7 +69,7 @@ router.put('/:id', auth, requireActiveSubscription, async (req, res) => {
     // 1. Fetch Original
     const originalTx = await Transaction.findOne({ id, businessId: req.businessId });
     if (!originalTx) return res.status(404).json({ message: 'Transaction not found' });
-    const shopId = await ensureWritableShopContext({ businessId: req.businessId, requestedShopId: requestedShopId || originalTx.shopId, allShops });
+    const shopId = await ensureWritableShopContext({ businessId: req.businessId, requestedShopId: requestedShopId || originalTx.shopId, allShops, enforcedShopId: req.assignedShopId });
     if (!originalTx.shopId) originalTx.shopId = shopId;
 
     // 2. Rollback Stock (Restock Original Items)
@@ -217,7 +217,8 @@ router.delete('/:id', auth, requireActiveSubscription, async (req, res) => {
     const shopId = await ensureWritableShopContext({
       businessId: req.businessId,
       requestedShopId: req.query.shopId || transaction.shopId,
-      allShops: req.query.allShops
+      allShops: req.query.allShops,
+      enforcedShopId: req.assignedShopId
     });
     if (shouldRestock && transaction.items.length > 0) {
       for (const item of transaction.items) {

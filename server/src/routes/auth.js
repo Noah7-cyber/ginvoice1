@@ -7,14 +7,15 @@ const Business = require('../models/Business');
 const Product = require('../models/Product');
 const Transaction = require('../models/Transaction');
 const Expenditure = require('../models/Expenditure');
+const Shop = require('../models/Shop');
 const { sendSystemEmail } = require('../services/mail');
 const { buildWelcomeEmail, buildRecoveryEmail, buildVerificationEmail } = require('../services/emailTemplates');
 const { sendTikTokEvent } = require('../services/tiktok');
 
 const router = express.Router();
 
-const buildToken = (businessId, role, credentialsVersion) => {
-  return jwt.sign({ businessId, role, credentialsVersion }, process.env.JWT_SECRET, { expiresIn: '7d' });
+const buildToken = (businessId, role, credentialsVersion, extra = {}) => {
+  return jwt.sign({ businessId, role, credentialsVersion, ...extra }, process.env.JWT_SECRET, { expiresIn: '7d' });
 };
 
 const sanitizeBusiness = (business) => ({
@@ -32,6 +33,25 @@ const sanitizeBusiness = (business) => ({
   createdAt: business.createdAt,
   emailVerified: business.emailVerified // Added field
 });
+
+const getActiveShops = async (businessId) => {
+  const shops = await Shop.find({ businessId: String(businessId), status: 'active' }).sort({ isMain: -1, createdAt: 1 }).lean();
+  return shops.map((shop) => ({
+    id: String(shop._id),
+    name: shop.name,
+    isMain: Boolean(shop.isMain)
+  }));
+};
+
+const normalizeShopStaffPins = (business) => {
+  const rows = Array.isArray(business?.shopStaffPins) ? business.shopStaffPins : [];
+  return rows.map((row) => ({
+    shopId: String(row.shopId || ''),
+    staffPin: row.staffPin,
+    staffName: String(row.staffName || '').trim(),
+    updatedAt: row.updatedAt || new Date()
+  })).filter((row) => row.shopId && row.staffPin);
+};
 
 router.post('/register', async (req, res) => {
   try {
@@ -150,7 +170,7 @@ router.post('/register', async (req, res) => {
 
 router.post('/login', async (req, res) => {
   try {
-    const { email, pin, role } = req.body || {};
+    const { email, pin, role, shopId: requestedShopId } = req.body || {};
     if (!email || !pin) return res.status(400).json({ message: 'Email and pin required' });
 
     const business = await Business.findOne({ email });
@@ -158,13 +178,41 @@ router.post('/login', async (req, res) => {
 
     let isOwner = false;
     let isStaff = false;
+    let staffContext = null;
+
+    const activeShops = await getActiveShops(business._id);
+    const defaultShopId = business.defaultShopId || activeShops[0]?.id || null;
 
     if (role) {
       // If role is specified, check strictly against that role
       if (role === 'owner') {
         isOwner = await bcrypt.compare(pin, business.ownerPin);
       } else if (role === 'staff') {
-        isStaff = await bcrypt.compare(pin, business.staffPin);
+        const targetShopId = requestedShopId
+          ? activeShops.find((s) => String(s.id) === String(requestedShopId))?.id
+          : defaultShopId;
+
+        if (!targetShopId) {
+          return res.status(400).json({ message: 'Staff login requires a valid shop.' });
+        }
+
+        const shopPins = normalizeShopStaffPins(business);
+        const shopConfig = shopPins.find((row) => String(row.shopId) === String(targetShopId));
+        if (shopConfig?.staffPin) {
+          isStaff = await bcrypt.compare(pin, shopConfig.staffPin);
+        } else {
+          // Backward compatibility for businesses that only have global staffPin configured.
+          isStaff = await bcrypt.compare(pin, business.staffPin);
+        }
+
+        if (isStaff) {
+          const targetShop = activeShops.find((s) => String(s.id) === String(targetShopId));
+          staffContext = {
+            assignedShopId: targetShopId,
+            assignedShopName: targetShop?.name || 'Shop',
+            staffName: shopConfig?.staffName || `Sales (${targetShop?.name || 'Shop'})`
+          };
+        }
       }
     } else {
       // Legacy behavior: check owner first, then staff
@@ -185,15 +233,45 @@ router.post('/login', async (req, res) => {
     }
 
     const finalRole = isOwner ? 'owner' : 'staff';
-    const token = buildToken(business._id.toString(), finalRole, business.credentialsVersion || 1);
+    const token = buildToken(
+      business._id.toString(),
+      finalRole,
+      business.credentialsVersion || 1,
+      finalRole === 'staff' && staffContext
+        ? {
+            assignedShopId: staffContext.assignedShopId,
+            assignedShopName: staffContext.assignedShopName,
+            staffName: staffContext.staffName
+          }
+        : {}
+    );
 
     return res.json({
       token,
       role: finalRole,
-      business: sanitizeBusiness(business)
+      business: sanitizeBusiness(business),
+      staffContext: finalRole === 'staff' ? staffContext : null
     });
   } catch (err) {
     return res.status(500).json({ message: 'Login failed' });
+  }
+});
+
+router.post('/staff-shop-options', async (req, res) => {
+  try {
+    const email = String(req.body?.email || '').trim();
+    if (!email) return res.status(400).json({ message: 'Email is required' });
+
+    const business = await Business.findOne({ email }).select('_id defaultShopId').lean();
+    if (!business) return res.status(404).json({ message: 'Business not found' });
+
+    const shops = await getActiveShops(business._id);
+    return res.json({
+      shops,
+      defaultShopId: business.defaultShopId || shops[0]?.id || null
+    });
+  } catch (err) {
+    return res.status(500).json({ message: 'Could not load shops for staff login' });
   }
 });
 
@@ -474,6 +552,87 @@ router.put('/change-pins', require('../middleware/auth'), async (req, res) => {
     return res.json({ message: 'PINs updated successfully' });
   } catch (err) {
     return res.status(500).json({ message: 'Failed to update PINs' });
+  }
+});
+
+router.get('/staff-shop-pins', require('../middleware/auth'), async (req, res) => {
+  try {
+    if (req.user.role !== 'owner') return res.status(403).json({ message: 'Only owner can manage staff pins' });
+
+    const business = await Business.findById(req.businessId).select('shopStaffPins defaultShopId').lean();
+    if (!business) return res.status(404).json({ message: 'Business not found' });
+
+    const shops = await getActiveShops(req.businessId);
+    const pins = normalizeShopStaffPins(business);
+    const pinMap = new Map(pins.map((row) => [String(row.shopId), row]));
+
+    return res.json({
+      shops: shops.map((shop) => {
+        const row = pinMap.get(String(shop.id));
+        return {
+          shopId: shop.id,
+          shopName: shop.name,
+          isMain: shop.isMain,
+          hasStaffPin: Boolean(row?.staffPin),
+          staffName: row?.staffName || ''
+        };
+      }),
+      defaultShopId: business.defaultShopId || shops[0]?.id || null
+    });
+  } catch (err) {
+    return res.status(500).json({ message: 'Failed to load shop staff pins' });
+  }
+});
+
+router.put('/staff-shop-pins/:shopId', require('../middleware/auth'), async (req, res) => {
+  try {
+    if (req.user.role !== 'owner') return res.status(403).json({ message: 'Only owner can manage staff pins' });
+
+    const shopId = String(req.params.shopId || '').trim();
+    const currentOwnerPin = String(req.body?.currentOwnerPin || '').trim();
+    const staffPin = String(req.body?.staffPin || '').trim();
+    const staffName = String(req.body?.staffName || '').trim();
+
+    if (!shopId) return res.status(400).json({ message: 'Shop ID required' });
+    if (!currentOwnerPin) return res.status(400).json({ message: 'Current owner PIN required' });
+    if (!staffPin || staffPin.length < 4) return res.status(400).json({ message: 'Staff PIN must be at least 4 digits' });
+
+    const shop = await Shop.findOne({ _id: shopId, businessId: String(req.businessId), status: 'active' }).lean();
+    if (!shop) return res.status(404).json({ message: 'Shop not found' });
+
+    const business = await Business.findById(req.businessId);
+    if (!business) return res.status(404).json({ message: 'Business not found' });
+
+    const isOwner = await bcrypt.compare(currentOwnerPin, business.ownerPin);
+    if (!isOwner) return res.status(401).json({ message: 'Invalid current owner PIN' });
+
+    const hashed = await bcrypt.hash(staffPin, 10);
+    const rows = normalizeShopStaffPins(business);
+    const idx = rows.findIndex((row) => String(row.shopId) === String(shopId));
+
+    const payload = {
+      shopId,
+      staffPin: hashed,
+      staffName: staffName || `Sales (${shop.name})`,
+      updatedAt: new Date()
+    };
+
+    if (idx >= 0) rows[idx] = payload;
+    else rows.push(payload);
+
+    business.shopStaffPins = rows;
+    // Force re-auth for staff users after pin changes.
+    business.credentialsVersion = (business.credentialsVersion || 1) + 1;
+    await business.save();
+
+    return res.json({
+      success: true,
+      shopId,
+      shopName: shop.name,
+      staffName: payload.staffName
+    });
+  } catch (err) {
+    return res.status(500).json({ message: 'Failed to update shop staff PIN' });
   }
 });
 
