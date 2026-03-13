@@ -78,10 +78,17 @@ const request = async (path: string, options: RequestInit = {}) => {
   return data;
 };
 
-export const login = async (email: string, pin: string, role?: string) => {
+export const login = async (email: string, pin: string, role?: string, shopId?: string) => {
   return request('/api/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ email, pin, role })
+    body: JSON.stringify({ email, pin, role, shopId })
+  });
+};
+
+export const getStaffShopOptions = async (email: string): Promise<{ shops: Shop[]; defaultShopId?: string | null }> => {
+  return request('/api/auth/staff-shop-options', {
+    method: 'POST',
+    body: JSON.stringify({ email })
   });
 };
 
@@ -567,6 +574,15 @@ export const purgeDeletedProducts = async () => {
   });
 };
 
+export const purgeInactiveShops = async () => {
+  const token = loadAdminToken();
+  if (!token) throw new Error('Missing admin token');
+  return request('/api/admin/purge-inactive-shops', {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+};
+
 export const cancelSubscription = async (reason: string) => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');
@@ -737,6 +753,31 @@ export const changeBusinessPins = async (currentOwnerPin: string, newStaffPin?: 
       Authorization: `Bearer ${token}`
     },
     body: JSON.stringify({ currentOwnerPin, newStaffPin, newOwnerPin })
+  });
+};
+
+export const getShopStaffPins = async (): Promise<{ shops: Array<{ shopId: string; shopName: string; isMain: boolean; hasStaffPin: boolean; staffName?: string }>; defaultShopId?: string | null }> => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/auth/staff-shop-pins', {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+};
+
+export const updateShopStaffPin = async (shopId: string, currentOwnerPin: string, staffPin: string, staffName?: string) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request(`/api/auth/staff-shop-pins/${shopId}`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ currentOwnerPin, staffPin, staffName })
   });
 };
 

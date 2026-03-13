@@ -62,6 +62,12 @@ export interface BusinessProfile {
     taxID?: string;
     incorporationDate?: string;
   };
+
+  staffContext?: {
+    assignedShopId?: string;
+    assignedShopName?: string;
+    staffName?: string;
+  } | null;
 }
 
 export interface DiscountCode {

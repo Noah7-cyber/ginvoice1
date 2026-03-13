@@ -5,6 +5,7 @@ const auth = require('../middleware/auth');
 const Transaction = require('../models/Transaction');
 const Product = require('../models/Product');
 const ProductShopStock = require('../models/ProductShopStock');
+const Shop = require('../models/Shop');
 
 const router = express.Router();
 
@@ -12,9 +13,15 @@ router.get('/', auth, async (req, res) => {
   try {
     const businessId = new mongoose.Types.ObjectId(req.businessId);
     const range = req.query.range || '7d'; // '7d', '30d', '1y'
-    const requestedShopId = req.query.shopId ? String(req.query.shopId) : '';
-    const allShopsMode = req.query.allShops === 'true';
-    const txShopFilter = (!allShopsMode && requestedShopId) ? { shopId: requestedShopId } : {};
+    const requestedShopId = req.assignedShopId || (req.query.shopId ? String(req.query.shopId) : '');
+    const allShopsMode = req.assignedShopId ? false : (req.query.allShops === 'true');
+    const activeShops = allShopsMode
+      ? await Shop.find({ businessId: String(req.businessId), status: 'active' }).select('_id').lean()
+      : [];
+    const activeShopIds = activeShops.map((s) => String(s._id));
+    const txShopFilter = allShopsMode
+      ? { shopId: { $in: activeShopIds } }
+      : (requestedShopId ? { shopId: requestedShopId } : {});
 
     const now = new Date();
     let startDate = new Date();
@@ -133,7 +140,9 @@ router.get('/', auth, async (req, res) => {
                     $and: [
                       { $eq: ['$businessId', req.businessId] },
                       { $eq: ['$productId', '$$productId'] },
-                      ...((!allShopsMode && requestedShopId) ? [{ $eq: ['$shopId', requestedShopId] }] : [])
+                      ...(allShopsMode
+                        ? [{ $in: ['$shopId', activeShopIds] }]
+                        : ((!requestedShopId) ? [] : [{ $eq: ['$shopId', requestedShopId] }]))
                     ]
                   }
                 }

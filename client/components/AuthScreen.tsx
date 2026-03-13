@@ -2,9 +2,10 @@
 import React, { useState } from 'react';
 import { UserCircle, ShieldCheck, ShoppingBag, Info, Lock, Eye, EyeOff, ArrowLeft, ArrowRight, RefreshCw, Loader2 } from 'lucide-react';
 import { UserRole, BusinessProfile } from '../types';
+import { getStaffShopOptions } from '../services/api';
 
 interface AuthScreenProps {
-  onLogin: (pin: string, role: UserRole) => Promise<boolean>;
+  onLogin: (pin: string, role: UserRole, shopId?: string) => Promise<boolean>;
   onForgotPassword: (email?: string) => void;
   onResetBusiness: () => void;
   business: BusinessProfile;
@@ -17,18 +18,39 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onForgotPassword, onRe
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [staffShops, setStaffShops] = useState<Array<{ id: string; name: string }>>([]);
+  const [selectedShopId, setSelectedShopId] = useState('');
+  const [isLoadingShops, setIsLoadingShops] = useState(false);
 
-  const handleRoleSelect = (role: UserRole) => {
+  const handleRoleSelect = async (role: UserRole) => {
     setSelectedRole(role);
     setError(false);
     setPassword('');
+
+    if (role !== 'staff') return;
+
+    const lookupEmail = email || business.email;
+    if (!lookupEmail) return;
+
+    try {
+      setIsLoadingShops(true);
+      const data = await getStaffShopOptions(lookupEmail);
+      const rows = (data?.shops || []).map((s: any) => ({ id: String(s.id), name: String(s.name) }));
+      setStaffShops(rows);
+      setSelectedShopId(String(data?.defaultShopId || rows[0]?.id || ''));
+    } catch {
+      setStaffShops([]);
+      setSelectedShopId('');
+    } finally {
+      setIsLoadingShops(false);
+    }
   };
 
   const handleLoginAttempt = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedRole) return;
     setIsLoading(true);
-    const ok = await onLogin(password, selectedRole);
+    const ok = await onLogin(password, selectedRole, selectedRole === 'staff' ? selectedShopId : undefined);
     setIsLoading(false);
     if (!ok) {
       // Note: If verification is required, parent component (App.tsx) handles redirection
@@ -120,6 +142,23 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onForgotPassword, onRe
             </div>
 
             <div className="space-y-4">
+              {selectedRole === 'staff' && (
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Sales Shop</label>
+                  <select
+                    value={selectedShopId}
+                    onChange={(e) => setSelectedShopId(e.target.value)}
+                    disabled={isLoadingShops || isLoading}
+                    className="w-full px-4 py-3 bg-gray-50 border-2 border-transparent rounded-2xl focus:border-indigo-600 outline-none font-bold"
+                  >
+                    {isLoadingShops ? <option>Loading shops...</option> : null}
+                    {!isLoadingShops && staffShops.length === 0 ? <option value="">No shops available</option> : null}
+                    {staffShops.map((shop) => (
+                      <option key={shop.id} value={shop.id}>{shop.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className="relative">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                 <input 
@@ -147,7 +186,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onForgotPassword, onRe
 
               <button 
                 type="submit"
-                disabled={!navigator.onLine || isLoading}
+                disabled={!navigator.onLine || isLoading || (selectedRole === 'staff' && !selectedShopId)}
                 className="w-full bg-indigo-600 disabled:bg-gray-400 text-white py-4 rounded-2xl font-black shadow-lg hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-2"
               >
                 {isLoading ? <Loader2 className="animate-spin" size={24} /> : <>Access Store <ArrowRight size={18} /></>}

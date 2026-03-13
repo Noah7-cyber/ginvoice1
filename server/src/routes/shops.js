@@ -246,9 +246,14 @@ router.get('/summary/overview', auth, async (req, res) => {
     const businessId = String(req.businessId);
     const shops = await Shop.find({ businessId, status: 'active' }).lean();
     const shopIds = shops.map((s) => String(s._id));
+    const now = new Date();
+    const dayStart = new Date(now); dayStart.setHours(0, 0, 0, 0);
+    const weekStart = new Date(dayStart); weekStart.setDate(dayStart.getDate() - 6);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const yearStart = new Date(now.getFullYear(), 0, 1);
     const businessObjectId = mongoose.isValidObjectId(req.businessId) ? new mongoose.Types.ObjectId(req.businessId) : null;
 
-    const [sales, expenses, stock, inventoryValue, lastSales, lastExpenses] = await Promise.all([
+    const [sales, expenses, stock, inventoryValue, lastSales, lastExpenses, salesPeriods, expensePeriods] = await Promise.all([
       Transaction.aggregate([
         { $match: { businessId: req.businessId, shopId: { $in: shopIds }, isPreviousDebt: { $ne: true } } },
         { $group: { _id: '$shopId', sales: { $sum: { $toDouble: '$totalAmount' } } } }
@@ -307,6 +312,43 @@ router.get('/summary/overview', auth, async (req, res) => {
       Expenditure.aggregate([
         { $match: { business: new mongoose.Types.ObjectId(req.businessId), shopId: { $in: shopIds } } },
         { $group: { _id: '$shopId', lastExpenseAt: { $max: '$date' } } }
+      ]),
+      Transaction.aggregate([
+        {
+          $match: {
+            businessId: req.businessId,
+            shopId: { $in: shopIds },
+            isPreviousDebt: { $ne: true }
+          }
+        },
+        {
+          $group: {
+            _id: '$shopId',
+            salesDaily: { $sum: { $cond: [{ $gte: ['$transactionDate', dayStart] }, { $toDouble: '$totalAmount' }, 0] } },
+            salesWeekly: { $sum: { $cond: [{ $gte: ['$transactionDate', weekStart] }, { $toDouble: '$totalAmount' }, 0] } },
+            salesMonthly: { $sum: { $cond: [{ $gte: ['$transactionDate', monthStart] }, { $toDouble: '$totalAmount' }, 0] } },
+            salesYearly: { $sum: { $cond: [{ $gte: ['$transactionDate', yearStart] }, { $toDouble: '$totalAmount' }, 0] } },
+            txCount: { $sum: 1 }
+          }
+        }
+      ]),
+      Expenditure.aggregate([
+        {
+          $match: {
+            business: new mongoose.Types.ObjectId(req.businessId),
+            shopId: { $in: shopIds },
+            flowType: 'out'
+          }
+        },
+        {
+          $group: {
+            _id: '$shopId',
+            expDaily: { $sum: { $cond: [{ $gte: ['$date', dayStart] }, { $abs: { $toDouble: '$amount' } }, 0] } },
+            expWeekly: { $sum: { $cond: [{ $gte: ['$date', weekStart] }, { $abs: { $toDouble: '$amount' } }, 0] } },
+            expMonthly: { $sum: { $cond: [{ $gte: ['$date', monthStart] }, { $abs: { $toDouble: '$amount' } }, 0] } },
+            expYearly: { $sum: { $cond: [{ $gte: ['$date', yearStart] }, { $abs: { $toDouble: '$amount' } }, 0] } }
+          }
+        }
       ])
     ]);
 
@@ -316,6 +358,8 @@ router.get('/summary/overview', auth, async (req, res) => {
     const inventoryValueMap = new Map(inventoryValue.map((x) => [x._id, parseDecimal(x.inventoryValue)]));
     const lastSalesMap = new Map(lastSales.map((x) => [x._id, x.lastActivity]));
     const lastExpenseMap = new Map(lastExpenses.map((x) => [x._id, x.lastExpenseAt]));
+    const salesPeriodMap = new Map(salesPeriods.map((x) => [x._id, x]));
+    const expensePeriodMap = new Map(expensePeriods.map((x) => [x._id, x]));
 
     const rows = shops.map((s) => ({
       shopId: String(s._id),
@@ -325,7 +369,20 @@ router.get('/summary/overview', auth, async (req, res) => {
       profit: (salesMap.get(String(s._id)) || 0) - (expMap.get(String(s._id)) || 0),
       inventoryUnits: stockMap.get(String(s._id)) || 0,
       inventoryValue: inventoryValueMap.get(String(s._id)) || 0,
-      lastActivity: [lastSalesMap.get(String(s._id)), lastExpenseMap.get(String(s._id))].filter(Boolean).sort().slice(-1)[0] || null
+      lastActivity: [lastSalesMap.get(String(s._id)), lastExpenseMap.get(String(s._id))].filter(Boolean).sort().slice(-1)[0] || null,
+      salesPeriods: {
+        daily: Number(salesPeriodMap.get(String(s._id))?.salesDaily || 0),
+        weekly: Number(salesPeriodMap.get(String(s._id))?.salesWeekly || 0),
+        monthly: Number(salesPeriodMap.get(String(s._id))?.salesMonthly || 0),
+        yearly: Number(salesPeriodMap.get(String(s._id))?.salesYearly || 0),
+        txCount: Number(salesPeriodMap.get(String(s._id))?.txCount || 0)
+      },
+      expensePeriods: {
+        daily: Number(expensePeriodMap.get(String(s._id))?.expDaily || 0),
+        weekly: Number(expensePeriodMap.get(String(s._id))?.expWeekly || 0),
+        monthly: Number(expensePeriodMap.get(String(s._id))?.expMonthly || 0),
+        yearly: Number(expensePeriodMap.get(String(s._id))?.expYearly || 0)
+      }
     }));
 
     const totals = rows.reduce((acc, row) => ({
