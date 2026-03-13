@@ -1069,13 +1069,13 @@ const App: React.FC = () => {
   const visibleTransactions = useMemo(() => {
     if (isAllShopsMode) return state.transactions;
     if (!state.activeShopId) return state.transactions;
-    return state.transactions.filter((tx) => !tx.shopId || tx.shopId === state.activeShopId);
+    return state.transactions.filter((tx) => String(tx.shopId || '') === String(state.activeShopId));
   }, [state.transactions, state.activeShopId, isAllShopsMode]);
 
   const visibleExpenditures = useMemo(() => {
     if (isAllShopsMode) return state.expenditures;
     if (!state.activeShopId) return state.expenditures;
-    return (state.expenditures || []).filter((exp) => !exp.shopId || exp.shopId === state.activeShopId);
+    return (state.expenditures || []).filter((exp) => String(exp.shopId || '') === String(state.activeShopId));
   }, [state.expenditures, state.activeShopId, isAllShopsMode]);
 
   const visibleNotifications = useMemo(() => {
@@ -1084,8 +1084,7 @@ const App: React.FC = () => {
     if (!state.activeShopId) return notes;
     return notes.filter((n: any) => {
       const noteShopId = n.shopId || n?.payload?.shopId;
-      if (!noteShopId) return true;
-      return String(noteShopId) === String(state.activeShopId);
+      return String(noteShopId || '') === String(state.activeShopId);
     });
   }, [state.notifications, state.activeShopId, isAllShopsMode]);
 
@@ -1098,12 +1097,18 @@ const App: React.FC = () => {
       closeShopModal();
       return;
     }
+    const prevState = stateRef.current;
     setIsSwitchingShop(true);
     const nextState = { ...stateRef.current, activeShopId: nextShopId, allShopsMode: nextShopId === ALL_SHOPS_ID };
     stateRef.current = nextState;
     setState(nextState);
     try {
       await refreshData(nextState);
+      closeShopModal();
+    } catch (err: any) {
+      stateRef.current = prevState;
+      setState(prevState);
+      addToast(err?.message || 'Could not switch shop. Please try again.', 'error');
     } finally {
       setIsSwitchingShop(false);
     }
@@ -1202,6 +1207,62 @@ const App: React.FC = () => {
   };
 
   const hasMultipleShops = (state.shops || []).length > 1;
+
+  const allShopsRollups = useMemo(() => {
+    if (!isAllShopsMode) return [] as Array<any>;
+    const now = new Date();
+    const dayStart = new Date(now); dayStart.setHours(0, 0, 0, 0);
+    const weekStart = new Date(dayStart); weekStart.setDate(dayStart.getDate() - 6);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const yearStart = new Date(now.getFullYear(), 0, 1);
+
+    const base = (state.shops || []).map((s) => ({
+      shopId: String(s.id),
+      name: s.name,
+      sales: { daily: 0, weekly: 0, monthly: 0, yearly: 0, count: 0 },
+      expenses: { daily: 0, weekly: 0, monthly: 0, yearly: 0 },
+      inventoryUnits: 0,
+      inventoryValue: 0
+    }));
+    const map = new Map(base.map((row) => [row.shopId, row]));
+
+    (state.transactions || []).forEach((tx) => {
+      const shopId = String(tx.shopId || '');
+      if (!shopId || !map.has(shopId) || tx.isPreviousDebt) return;
+      const row = map.get(shopId)!;
+      const date = new Date(tx.transactionDate);
+      if (Number.isNaN(date.getTime())) return;
+      const amt = Number(tx.totalAmount || 0);
+      row.sales.count += 1;
+      if (date >= dayStart) row.sales.daily += amt;
+      if (date >= weekStart) row.sales.weekly += amt;
+      if (date >= monthStart) row.sales.monthly += amt;
+      if (date >= yearStart) row.sales.yearly += amt;
+    });
+
+    (state.expenditures || []).forEach((exp: any) => {
+      const shopId = String(exp.shopId || '');
+      if (!shopId || !map.has(shopId)) return;
+      const row = map.get(shopId)!;
+      const date = new Date(exp.date);
+      if (Number.isNaN(date.getTime())) return;
+      const amt = Math.abs(Number(exp.amount || 0));
+      if (date >= dayStart) row.expenses.daily += amt;
+      if (date >= weekStart) row.expenses.weekly += amt;
+      if (date >= monthStart) row.expenses.monthly += amt;
+      if (date >= yearStart) row.expenses.yearly += amt;
+    });
+
+    (hubOverview?.rows || []).forEach((row: any) => {
+      const shopId = String(row.shopId || '');
+      if (!shopId || !map.has(shopId)) return;
+      const target = map.get(shopId)!;
+      target.inventoryUnits = Number(row.inventoryUnits || target.inventoryUnits || 0);
+      target.inventoryValue = Number(row.inventoryValue || target.inventoryValue || 0);
+    });
+
+    return Array.from(map.values());
+  }, [isAllShopsMode, state.shops, state.transactions, state.expenditures, hubOverview]);
 
   useEffect(() => {
     if (!state.isLoggedIn || !isOnline || !isAllShopsMode) return;
@@ -1484,15 +1545,32 @@ const App: React.FC = () => {
                className="absolute inset-0 overflow-y-auto p-4 md:p-8"
                style={{ display: activeTab === 'inventory' ? 'block' : 'none' }}
             >
-               <InventoryScreen
-                products={state.products}
-                onUpdateProducts={handleUpdateProducts}
-                isOwner={state.role === 'owner'}
-                isReadOnly={!canManageStock || subscriptionLocked || isAllShopsMode}
-                isOnline={isOnline}
-                activeShopId={state.activeShopId}
-                initialParams={deepLinkParams}
-              />
+               {isAllShopsMode ? (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-black text-gray-900">Inventory by Shop</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                    {allShopsRollups.map((row) => (
+                      <button key={row.shopId} onClick={() => handleShopSwitch(row.shopId)} className="text-left p-4 rounded-2xl border bg-white hover:shadow-md">
+                        <p className="font-black text-gray-900">{row.name}</p>
+                        <p className="text-xs text-gray-500 mt-1">Inventory Units</p>
+                        <p className="text-2xl font-black text-indigo-700">{Number(row.inventoryUnits || 0).toLocaleString()}</p>
+                        <p className="text-xs text-gray-500 mt-2">Inventory Value</p>
+                        <p className="text-lg font-black text-purple-700">{CURRENCY}{Number(row.inventoryValue || 0).toLocaleString()}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+               ) : (
+                <InventoryScreen
+                  products={state.products}
+                  onUpdateProducts={handleUpdateProducts}
+                  isOwner={state.role === 'owner'}
+                  isReadOnly={!canManageStock || subscriptionLocked || isAllShopsMode}
+                  isOnline={isOnline}
+                  activeShopId={state.activeShopId}
+                  initialParams={deepLinkParams}
+                />
+               )}
             </div>
           )}
 
@@ -1501,6 +1579,22 @@ const App: React.FC = () => {
                className="absolute inset-0 overflow-y-auto p-4 md:p-8"
                style={{ display: activeTab === 'history' ? 'block' : 'none' }}
             >
+               {isAllShopsMode ? (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-black text-gray-900">Past Sales by Shop</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                    {allShopsRollups.map((row) => (
+                      <button key={row.shopId} onClick={() => handleShopSwitch(row.shopId)} className="text-left p-4 rounded-2xl border bg-white hover:shadow-md">
+                        <p className="font-black text-gray-900">{row.name}</p>
+                        <p className="text-xs text-gray-500 mt-2">Sales (Daily / Weekly / Monthly / Yearly)</p>
+                        <p className="text-sm font-bold text-gray-800 mt-1">{CURRENCY}{Number(row.sales.daily || 0).toLocaleString()} / {CURRENCY}{Number(row.sales.weekly || 0).toLocaleString()}</p>
+                        <p className="text-sm font-bold text-gray-800">{CURRENCY}{Number(row.sales.monthly || 0).toLocaleString()} / {CURRENCY}{Number(row.sales.yearly || 0).toLocaleString()}</p>
+                        <p className="text-xs text-gray-500 mt-2">Transactions: {Number(row.sales.count || 0).toLocaleString()}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+               ) : (
                <HistoryScreen
                 transactions={visibleTransactions}
                 products={state.products}
@@ -1533,6 +1627,7 @@ const App: React.FC = () => {
                initialParams={deepLinkParams}
                onSelectedInvoiceChange={setHistorySelectedInvoice}
               />
+               )}
             </div>
           )}
 
@@ -1562,6 +1657,21 @@ const App: React.FC = () => {
                className="absolute inset-0 overflow-y-auto p-4 md:p-8"
                style={{ display: activeTab === 'expenditure' ? 'block' : 'none' }}
             >
+               {isAllShopsMode ? (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-black text-gray-900">Expenses by Shop</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                    {allShopsRollups.map((row) => (
+                      <button key={row.shopId} onClick={() => handleShopSwitch(row.shopId)} className="text-left p-4 rounded-2xl border bg-white hover:shadow-md">
+                        <p className="font-black text-gray-900">{row.name}</p>
+                        <p className="text-xs text-gray-500 mt-2">Expenses (Daily / Weekly / Monthly / Yearly)</p>
+                        <p className="text-sm font-bold text-red-700 mt-1">{CURRENCY}{Number(row.expenses.daily || 0).toLocaleString()} / {CURRENCY}{Number(row.expenses.weekly || 0).toLocaleString()}</p>
+                        <p className="text-sm font-bold text-red-700">{CURRENCY}{Number(row.expenses.monthly || 0).toLocaleString()} / {CURRENCY}{Number(row.expenses.yearly || 0).toLocaleString()}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+               ) : (
                <ExpenditureScreen
                 expenditures={visibleExpenditures}
                 onAddExpenditure={handleAddExpenditure}
@@ -1570,6 +1680,7 @@ const App: React.FC = () => {
                 isOnline={isOnline}
                 isReadOnly={subscriptionLocked || isAllShopsMode}
               />
+               )}
             </div>
           )}
 
@@ -1643,12 +1754,12 @@ const App: React.FC = () => {
               ) : shopModalMode === 'switch' ? (
                 <div className="space-y-2 max-h-80 overflow-auto">
                   {(state.shops || []).map((shop) => (
-                    <button key={shop.id} onClick={async () => { await handleShopSwitch(shop.id); closeShopModal(); }} className="w-full px-3 py-2 rounded-xl border text-left hover:bg-gray-50 font-semibold">
+                    <button key={shop.id} onClick={async () => { await handleShopSwitch(shop.id); }} className="w-full px-3 py-2 rounded-xl border text-left hover:bg-gray-50 font-semibold">
                       {shop.name}
                     </button>
                   ))}
                   {hasMultipleShops && (
-                    <button onClick={async () => { await handleShopSwitch(ALL_SHOPS_ID); closeShopModal(); }} className="w-full px-3 py-2 rounded-xl border text-left hover:bg-gray-50 font-semibold">
+                    <button onClick={async () => { await handleShopSwitch(ALL_SHOPS_ID); }} className="w-full px-3 py-2 rounded-xl border text-left hover:bg-gray-50 font-semibold">
                       All Shops (read-only)
                     </button>
                   )}

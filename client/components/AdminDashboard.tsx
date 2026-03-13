@@ -27,7 +27,8 @@ import {
   grantSubscriptionAdmin,
   sendUserEmailAdmin,
   clearAdminToken,
-  purgeDeletedProducts
+  purgeDeletedProducts,
+  purgeInactiveShops
 } from '../services/api';
 import { useToast } from './ToastProvider';
 
@@ -50,6 +51,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const [isSubModalOpen, setIsSubModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isPurgeModalOpen, setIsPurgeModalOpen] = useState(false);
+  const [isPurgeShopsModalOpen, setIsPurgeShopsModalOpen] = useState(false);
   const [subDays, setSubDays] = useState(30);
 
   // Email Modal State
@@ -188,6 +190,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     }
   };
 
+  const handlePurgeShops = async () => {
+    try {
+      const res: any = await purgeInactiveShops();
+      addToast(`Purged ${res.deletedCount || 0} inactive shops`, 'success');
+      setIsPurgeShopsModalOpen(false);
+    } catch (err) {
+      addToast('Inactive shops purge failed', 'error');
+    }
+  };
+
   const fetchDetails = async (id: string) => {
       try {
           const details = await getAdminUserDetails(id);
@@ -258,13 +270,22 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             <h2 className="text-lg font-bold text-gray-900">System Maintenance</h2>
             <p className="text-sm text-gray-500">Perform system-wide cleanup tasks.</p>
         </div>
-        <button
-           onClick={() => setIsPurgeModalOpen(true)}
-           className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 font-bold rounded-lg border border-red-100 hover:bg-red-100 transition-colors"
-        >
-            <Trash2 size={18} />
-            Purge Soft-Deleted Products
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+             onClick={() => setIsPurgeModalOpen(true)}
+             className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 font-bold rounded-lg border border-red-100 hover:bg-red-100 transition-colors"
+          >
+              <Trash2 size={18} />
+              Purge Soft-Deleted Products
+          </button>
+          <button
+             onClick={() => setIsPurgeShopsModalOpen(true)}
+             className="flex items-center gap-2 px-4 py-2 bg-orange-50 text-orange-700 font-bold rounded-lg border border-orange-100 hover:bg-orange-100 transition-colors"
+          >
+              <Trash2 size={18} />
+              Purge Inactive Shops
+          </button>
+        </div>
       </div>
 
       {/* Users Table */}
@@ -542,6 +563,27 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
               <div className="flex gap-3">
                 <button onClick={() => setIsPurgeModalOpen(false)} className="flex-1 py-3 font-bold text-gray-500 bg-gray-100 rounded-xl hover:bg-gray-200">Cancel</button>
                 <button onClick={handlePurgeProducts} className="flex-1 py-3 font-bold text-white bg-red-600 rounded-xl hover:bg-red-700">Yes, Purge All</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isPurgeShopsModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
+            <div className="p-6">
+              <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center text-orange-600 mb-4">
+                <Trash2 size={24} />
+              </div>
+              <h3 className="font-bold text-xl mb-2 text-orange-700">Purge Inactive Shops?</h3>
+              <p className="text-gray-500 text-sm mb-6">
+                This will permanently remove all <span className="font-bold text-orange-700">inactive (soft-deleted) shops</span> and related stale shop records.
+              </p>
+
+              <div className="flex gap-3">
+                <button onClick={() => setIsPurgeShopsModalOpen(false)} className="flex-1 py-3 font-bold text-gray-500 bg-gray-100 rounded-xl hover:bg-gray-200">Cancel</button>
+                <button onClick={handlePurgeShops} className="flex-1 py-3 font-bold text-white bg-orange-600 rounded-xl hover:bg-orange-700">Yes, Purge Shops</button>
               </div>
             </div>
           </div>
