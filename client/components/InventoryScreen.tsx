@@ -497,12 +497,13 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
       }
     } catch (err: any) {
       if (err?.status === 409) {
-        const confirmApply = window.confirm('Expected quantity changed while counting. Use latest expected quantity and continue?');
+        const latestExpected = Number(err?.data?.expectedQtyNow ?? current.expectedQty ?? 0);
+        const confirmApply = window.confirm(`Expected quantity changed while counting (now ${latestExpected}). Apply your counted value anyway?`);
         if (!confirmApply) return;
         await verifyStockItem({
           productId: current.productId,
           countedQty: Number(countedQty),
-          expectedQtyAtOpen: Number(current.expectedQty || 0),
+          expectedQtyAtOpen: latestExpected,
           reasonCode: 'CYCLE_COUNT',
           notes: verifyNotes,
           confirmChangedExpected: true
