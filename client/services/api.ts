@@ -170,7 +170,10 @@ export const syncState = async (state: InventoryState) => {
 };
 
 // Updated: supports forceFull mode to ignore versions and get full state
-export const fetchRemoteState = async (forceFull = false, options?: { shopId?: string; allShops?: boolean }) => {
+export const fetchRemoteState = async (
+  forceFull = false,
+  options?: { shopId?: string; allShops?: boolean; domains?: Array<'transactions' | 'products' | 'expenditures' | 'categories' | 'notifications' | 'shops'> }
+) => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');
 
@@ -182,6 +185,7 @@ export const fetchRemoteState = async (forceFull = false, options?: { shopId?: s
   }
   if (options?.shopId) params.set('shopId', options.shopId);
   if (options?.allShops) params.set('allShops', 'true');
+  if (options?.domains && options.domains.length > 0) params.set('domains', options.domains.join(','));
   const query = params.toString();
 
   const url = buildUrl(`/api/sync${query ? `?${query}` : ''}`);
@@ -213,20 +217,30 @@ export const fetchRemoteState = async (forceFull = false, options?: { shopId?: s
 };
 
 // NEW: Smart Sync Version Check
-export const checkServerVersion = async (): Promise<number> => {
+export const checkServerVersion = async (): Promise<{
+  version: number;
+  versions: { transactions: number; products: number; expenditures: number; categories: number };
+}> => {
   const token = loadAuthToken();
-  if (!token) return 0; // Silent fail
+  if (!token) return { version: 0, versions: { transactions: 0, products: 0, expenditures: 0, categories: 0 } }; // Silent fail
 
   try {
       const res = await fetch(buildUrl('/api/sync/version'), {
           method: 'GET',
           headers: { Authorization: `Bearer ${token}` }
       });
-      if (!res.ok) return 0;
+      if (!res.ok) return { version: 0, versions: { transactions: 0, products: 0, expenditures: 0, categories: 0 } };
       const data = await res.json();
-      return typeof data.version === 'number' ? data.version : 0;
+      const version = typeof data.version === 'number' ? data.version : 0;
+      const versions = {
+        transactions: typeof data?.versions?.transactions === 'number' ? data.versions.transactions : 0,
+        products: typeof data?.versions?.products === 'number' ? data.versions.products : 0,
+        expenditures: typeof data?.versions?.expenditures === 'number' ? data.versions.expenditures : 0,
+        categories: typeof data?.versions?.categories === 'number' ? data.versions.categories : 0
+      };
+      return { version, versions };
   } catch (err) {
-      return 0; // Network error or offline
+      return { version: 0, versions: { transactions: 0, products: 0, expenditures: 0, categories: 0 } }; // Network error or offline
   }
 };
 

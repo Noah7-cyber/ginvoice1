@@ -41,6 +41,12 @@ const BusinessSchema = new mongoose.Schema({
   isCategoriesSeeded: { type: Boolean, default: false },
   credentialsVersion: { type: Number, default: 1 },
   dataVersion: { type: Number, default: 0 },
+  syncVersions: {
+    transactions: { type: Number, default: 0 },
+    products: { type: Number, default: 0 },
+    expenditures: { type: Number, default: 0 },
+    categories: { type: Number, default: 0 }
+  },
 
   botUsage: {
     date: { type: String, default: '' },
