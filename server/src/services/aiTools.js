@@ -718,11 +718,12 @@ const get_inventory_intelligence = async ({ days = 30, restockHorizonDays = 30, 
     const businessKey = businessId.toString();
     const periodStart = new Date(Date.now() - safeDays * 24 * 60 * 60 * 1000);
 
-    const [products, recentTransactions] = await Promise.all([
+    const [products, recentTransactions, stockRows] = await Promise.all([
         Product.find({ businessId: businessKey }).lean(),
         Transaction.find({ businessId: businessId, transactionDate: { $gte: periodStart } })
             .select('transactionDate items')
-            .lean()
+            .lean(),
+        ProductShopStock.find(applyShopFilter({ businessId: businessKey }, { shopId, allShops })).lean()
     ]);
 
     const soldMap = new Map();
