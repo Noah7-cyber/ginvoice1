@@ -25,7 +25,7 @@ import { useStockVerification } from './hooks/useStockVerification';
 import { useTimeDrift } from './hooks/useTimeDrift';
 import { CURRENCY, INITIAL_PRODUCTS } from './constants';
 import { safeCalculate } from './utils/math';
-import { saveState, loadState, pushToBackend, getDataVersion, saveDataVersion, getLastSync, saveLastSync, clearLocalData, flushPendingSyncQueue } from './services/storage';
+import { saveState, loadState, pushToBackend, getDataVersion, saveDataVersion, getDomainVersions, saveDomainVersions, getLastSync, saveLastSync, clearLocalData, flushPendingSyncQueue, hasPendingSyncJobs } from './services/storage';
 import { login, registerBusiness, saveAuthToken, clearAuthToken, getEntitlements, initializePayment, fetchRemoteState, deleteExpenditure, snoozeStockVerification, dismissNotification, checkServerVersion, createShop, renameShop, getShopsOverview, deleteShop } from './services/api';
 import { useToast } from './components/ToastProvider';
 import SalesScreen from './components/SalesScreen';
@@ -478,17 +478,17 @@ const App: React.FC = () => {
       });
 
       if (response.status === 200 && response.data) {
-         const { products, transactions, categories, expenditures, business, notifications, shops, activeShopId, allShopsMode, staffContext } = response.data;
+         const { products, transactions, categories, expenditures, business, notifications, shops, activeShopId, allShopsMode, staffContext, partial, versions } = response.data;
 
+         const isPartial = Boolean(partial);
          const nextState: InventoryState = {
            ...currentState,
-           // DIRECT STATE REPLACEMENT (No merging)
-           products: products || [],
-           transactions: transactions || [],
-           categories: categories || [],
-           expenditures: expenditures || [],
-           notifications: notifications || [],
-           shops: shops || currentState.shops || [],
+           products: isPartial ? (products ?? currentState.products) : (products || []),
+           transactions: isPartial ? (transactions ?? currentState.transactions) : (transactions || []),
+           categories: isPartial ? (categories ?? currentState.categories) : (categories || []),
+           expenditures: isPartial ? (expenditures ?? currentState.expenditures) : (expenditures || []),
+           notifications: isPartial ? (notifications ?? currentState.notifications) : (notifications || []),
+           shops: isPartial ? (shops ?? (currentState.shops || [])) : (shops || currentState.shops || []),
            activeShopId: activeShopId || currentState.activeShopId || business?.defaultShopId,
            allShopsMode: Boolean(allShopsMode),
            business: business ? { ...currentState.business, ...business, staffContext: staffContext || currentState.business?.staffContext || null } : currentState.business,
@@ -502,7 +502,15 @@ const App: React.FC = () => {
          }
 
          setState(nextState);
-         // Note: We deliberately do NOT save data version here as we always force full fetch
+         if (typeof versions?.global === 'number') saveDataVersion(versions.global);
+         if (versions) {
+          saveDomainVersions({
+            transactions: versions.transactions,
+            products: versions.products,
+            expenditures: versions.expenditures,
+            categories: versions.categories
+          });
+         }
          saveLastSync(new Date());
       }
     } catch (err) {
@@ -523,13 +531,27 @@ const App: React.FC = () => {
     syncInFlightRef.current = true;
 
     try {
+      const shopId = currentState.activeShopId && currentState.activeShopId !== ALL_SHOPS_ID ? currentState.activeShopId : undefined;
+
+      // Heartbeat should be pull-only so offline replay has strict write priority.
+      if (source === 'heartbeat') {
+        await refreshData(currentState);
+        return;
+      }
+
       try {
         await flushPendingSyncQueue();
+        // Phase 1 (Priority): sales first
         await pushToBackend({
           transactions: currentState.transactions,
+          shopId
+        });
+
+        // Phase 2: inventory + expenditures
+        await pushToBackend({
           products: currentState.products,
           expenditures: currentState.expenditures,
-          shopId: currentState.activeShopId && currentState.activeShopId !== ALL_SHOPS_ID ? currentState.activeShopId : undefined
+          shopId
         });
       } catch (err) {
         console.error(`[Safe Sync] Pre-sync push failed (${source})`, err);
@@ -671,18 +693,54 @@ const App: React.FC = () => {
 
       const interval = setInterval(async () => {
          try {
-             const serverVersion = Number(checkServerVersion ? await checkServerVersion() : 0).valueOf();
+             const hasQueueBacklog = await hasPendingSyncJobs();
+             if (hasQueueBacklog) return;
+
+             const serverVersionData = checkServerVersion ? await checkServerVersion() : { version: 0, versions: { transactions: 0, products: 0, expenditures: 0, categories: 0 } };
              const localVersion = getDataVersion();
-             const safeServerVersion = Number.isFinite(serverVersion) ? Number(serverVersion.toFixed(3)) : 0;
+             const localDomainVersions = getDomainVersions();
+             const safeServerVersion = Number.isFinite(serverVersionData.version) ? Number(serverVersionData.version.toFixed(3)) : 0;
              const safeLocalVersion = Number.isFinite(localVersion) ? Number(localVersion.toFixed(3)) : 0;
 
-             if (safeServerVersion > safeLocalVersion) {
-                 console.log(`[Smart Sync] Update found! Server: ${safeServerVersion.toFixed(3)} > Local: ${safeLocalVersion.toFixed(3)}`);
-                 await safeSyncWithServer('heartbeat');
-                 // Update local version match to prevent loops (refreshData should ideally return the new version,
-                 // but simpler to just trust it for now or rely on next refreshData saving it)
-                 // NOTE: refreshData logic below needs to handle version saving if we want this perfect.
-                 // For now, let's manually update the version marker to match server so we don't spam.
+             const changedDomains: Array<'transactions' | 'products' | 'expenditures' | 'categories'> = [];
+             if (Number(serverVersionData.versions.transactions || 0) > Number(localDomainVersions.transactions || 0)) changedDomains.push('transactions');
+             if (Number(serverVersionData.versions.products || 0) > Number(localDomainVersions.products || 0)) changedDomains.push('products');
+             if (Number(serverVersionData.versions.expenditures || 0) > Number(localDomainVersions.expenditures || 0)) changedDomains.push('expenditures');
+             if (Number(serverVersionData.versions.categories || 0) > Number(localDomainVersions.categories || 0)) changedDomains.push('categories');
+
+             if (safeServerVersion > safeLocalVersion || changedDomains.length > 0) {
+                 if (changedDomains.length > 0) {
+                   const response = await fetchRemoteState(true, {
+                     shopId: stateRef.current.activeShopId && stateRef.current.activeShopId !== ALL_SHOPS_ID ? stateRef.current.activeShopId : undefined,
+                     allShops: stateRef.current.activeShopId === ALL_SHOPS_ID,
+                     domains: changedDomains
+                   });
+                   if (response.status === 200 && response.data) {
+                     const merged = {
+                       ...stateRef.current,
+                       products: response.data.products ?? stateRef.current.products,
+                       transactions: response.data.transactions ?? stateRef.current.transactions,
+                       expenditures: response.data.expenditures ?? stateRef.current.expenditures,
+                       categories: response.data.categories ?? stateRef.current.categories,
+                       lastSyncedAt: new Date().toISOString()
+                     };
+                     setState(merged);
+                     if (response.data?.versions) {
+                       saveDomainVersions({
+                         transactions: response.data.versions.transactions,
+                         products: response.data.versions.products,
+                         expenditures: response.data.versions.expenditures,
+                         categories: response.data.versions.categories
+                       });
+                       if (typeof response.data.versions.global === 'number') {
+                         saveDataVersion(response.data.versions.global);
+                       }
+                     }
+                     saveLastSync(new Date());
+                   }
+                 } else {
+                   await safeSyncWithServer('heartbeat');
+                 }
                  saveDataVersion(safeServerVersion);
              }
          } catch (err) {

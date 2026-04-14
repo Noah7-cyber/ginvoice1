@@ -52,6 +52,22 @@ const normalizeVersion = (value) => {
   return Number(n.toFixed(3));
 };
 
+const parseDomainsParam = (value) => {
+  if (!value) return null;
+  const requested = String(value)
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (requested.length === 0) return null;
+  return new Set(requested);
+};
+
+const parseDateOrFallback = (value, fallback = null) => {
+  if (!value) return fallback;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? fallback : parsed;
+};
+
 
 // 0. Time Check (Anti-Cheat)
 router.get('/time', (req, res) => {
@@ -62,14 +78,23 @@ router.get('/time', (req, res) => {
 // 0. Version Check
 router.get('/version', auth, async (req, res) => {
   try {
-    const business = await Business.findById(req.businessId).select('dataVersion');
+    const business = await Business.findById(req.businessId).select('dataVersion syncVersions');
     // Return version as a float, defaulting to 0.000
     // Ensure it's a number for the JSON response
     const version = normalizeVersion(business?.dataVersion);
-    res.json({ version });
+    const versions = {
+      transactions: normalizeVersion(business?.syncVersions?.transactions),
+      products: normalizeVersion(business?.syncVersions?.products),
+      expenditures: normalizeVersion(business?.syncVersions?.expenditures),
+      categories: normalizeVersion(business?.syncVersions?.categories)
+    };
+    res.json({ version, versions });
   } catch (err) {
     console.error('Version check failed:', err);
-    res.status(500).json({ version: 0.000 });
+    res.status(500).json({
+      version: 0.000,
+      versions: { transactions: 0.000, products: 0.000, expenditures: 0.000, categories: 0.000 }
+    });
   }
 });
 
@@ -86,20 +111,44 @@ router.get('/', auth, async (req, res) => {
     const requestedShopId = req.assignedShopId || (req.query.shopId ? String(req.query.shopId) : defaultShopId);
     const allShopsMode = req.assignedShopId ? false : (req.query.allShops === 'true');
 
+    const requestedDomains = parseDomainsParam(req.query.domains);
+    const shouldInclude = (domain) => !requestedDomains || requestedDomains.has(domain);
+
     const transactionFilter = { businessId, ...(allShopsMode ? {} : { shopId: requestedShopId }) };
     const expenditureFilter = { business: businessId, ...(allShopsMode ? {} : { shopId: requestedShopId }) };
 
-    // Fetch All Data (Simple Query)
+    const productsPromise = shouldInclude('products')
+      ? Product.find({
+          businessId: { $in: [businessId, new ObjectId(businessId)] }
+        }).lean()
+      : Promise.resolve([]);
+    const transactionsPromise = shouldInclude('transactions')
+      ? Transaction.find(transactionFilter).sort({ createdAt: -1 }).limit(1000).lean()
+      : Promise.resolve([]);
+    const expendituresPromise = shouldInclude('expenditures')
+      ? Expenditure.find(expenditureFilter).lean()
+      : Promise.resolve([]);
+    const categoriesPromise = shouldInclude('categories')
+      ? Category.find({ businessId }).sort({ usageCount: -1, name: 1 }).lean()
+      : Promise.resolve([]);
+    const notificationsPromise = shouldInclude('notifications')
+      ? Notification.find({ businessId, dismissedAt: null }).sort({ timestamp: -1 }).limit(50).lean()
+      : Promise.resolve([]);
+    const shopsPromise = shouldInclude('shops')
+      ? Shop.find({ businessId }).sort({ isMain: -1, createdAt: 1 }).lean()
+      : Promise.resolve([]);
+    const shopStocksPromise = shouldInclude('products')
+      ? ProductShopStock.find({ businessId, ...(allShopsMode ? {} : { shopId: requestedShopId }) }).lean()
+      : Promise.resolve([]);
+
     const [rawProducts, fetchedTransactions, fetchedExpenditures, rawCategories, rawNotifications, rawShops, fetchedShopStocks] = await Promise.all([
-      Product.find({
-        businessId: { $in: [businessId, new ObjectId(businessId)] }
-      }).lean(),
-      Transaction.find(transactionFilter).sort({ createdAt: -1 }).limit(1000).lean(),
-      Expenditure.find(expenditureFilter).lean(),
-      Category.find({ businessId }).sort({ usageCount: -1, name: 1 }).lean(),
-      Notification.find({ businessId, dismissedAt: null }).sort({ timestamp: -1 }).limit(50).lean(),
-      Shop.find({ businessId }).sort({ isMain: -1, createdAt: 1 }).lean(),
-      ProductShopStock.find({ businessId, ...(allShopsMode ? {} : { shopId: requestedShopId }) }).lean()
+      productsPromise,
+      transactionsPromise,
+      expendituresPromise,
+      categoriesPromise,
+      notificationsPromise,
+      shopsPromise,
+      shopStocksPromise
     ]);
 
     const activeShops = (rawShops || []).filter((shop) => (shop.status || 'active') === 'active');
@@ -255,12 +304,7 @@ router.get('/', auth, async (req, res) => {
     // Keep proactive prompts low-noise (max once/day)
     await maybeCreateStockVerificationNotification(businessId);
 
-    return res.json({
-      categories,
-      products,
-      transactions,
-      expenditures,
-      notifications,
+    const payload = {
       business: businessData ? {
         id: businessData._id,
         name: businessData.name,
@@ -275,20 +319,38 @@ router.get('/', auth, async (req, res) => {
         logo: businessData.logo,
         theme: businessData.theme
       } : undefined,
-      shops: activeShops.map((shop) => ({
-        id: String(shop._id),
-        name: shop.name,
-        isMain: Boolean(shop.isMain),
-        status: shop.status || 'active'
-      })),
       activeShopId: allShopsMode ? 'all' : requestedShopId,
       allShopsMode,
+      versions: {
+        global: normalizeVersion(businessData?.dataVersion),
+        transactions: normalizeVersion(businessData?.syncVersions?.transactions),
+        products: normalizeVersion(businessData?.syncVersions?.products),
+        expenditures: normalizeVersion(businessData?.syncVersions?.expenditures),
+        categories: normalizeVersion(businessData?.syncVersions?.categories)
+      },
+      partial: Boolean(requestedDomains),
       staffContext: req.userRole === 'staff' ? {
         assignedShopId: req.assignedShopId || requestedShopId,
         assignedShopName: req.user?.assignedShopName || selectedShop?.name || '',
         staffName: req.user?.staffName || ''
       } : null
-    });
+    };
+
+    if (shouldInclude('categories')) payload.categories = categories;
+    if (shouldInclude('products')) payload.products = products;
+    if (shouldInclude('transactions')) payload.transactions = transactions;
+    if (shouldInclude('expenditures')) payload.expenditures = expenditures;
+    if (shouldInclude('notifications')) payload.notifications = notifications;
+    if (shouldInclude('shops')) {
+      payload.shops = activeShops.map((shop) => ({
+        id: String(shop._id),
+        name: shop.name,
+        isMain: Boolean(shop.isMain),
+        status: shop.status || 'active'
+      }));
+    }
+
+    return res.json(payload);
 
   } catch (err) {
     console.error('[SYNC DEBUG] ❌ Error:', err);
@@ -314,9 +376,20 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
        await Business.findByIdAndUpdate(businessId, { $set: { ...safeUpdates, lastActiveAt: new Date() } });
     }
 
-    // 3. Increment Version if changes detected
-    if (categories.length > 0 || products.length > 0 || transactions.length > 0 || expenditures.length > 0) {
-        await Business.findByIdAndUpdate(businessId, { $inc: { dataVersion: 0.001 } });
+    const changedDomains = {
+      categories: categories.length > 0,
+      products: products.length > 0,
+      transactions: transactions.length > 0,
+      expenditures: expenditures.length > 0
+    };
+    // 3. Increment Version(s) if changes detected
+    if (Object.values(changedDomains).some(Boolean)) {
+      const inc = { dataVersion: 0.001 };
+      if (changedDomains.categories) inc['syncVersions.categories'] = 0.001;
+      if (changedDomains.products) inc['syncVersions.products'] = 0.001;
+      if (changedDomains.transactions) inc['syncVersions.transactions'] = 0.001;
+      if (changedDomains.expenditures) inc['syncVersions.expenditures'] = 0.001;
+      await Business.findByIdAndUpdate(businessId, { $inc: inc });
     }
 
     if (categories.length > 0) {
@@ -329,6 +402,10 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
       }));
       await Category.bulkWrite(catOps);
     }
+
+    let skippedProducts = 0;
+    let skippedTransactions = 0;
+    let skippedExpenditures = 0;
 
     if (products.length > 0) {
       const incomingProductIds = products
@@ -351,11 +428,17 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
 
       const productOps = products.map((p) => {
         const productId = String(p?.id || '').trim();
-        if (!productId) return null;
+        if (!productId) {
+          skippedProducts += 1;
+          return null;
+        }
 
         const existing = existingProductMap.get(productId);
         const incomingUpdatedAt = p.updatedAt ? new Date(p.updatedAt) : new Date();
-        if (Number.isNaN(incomingUpdatedAt.getTime())) return null;
+        if (Number.isNaN(incomingUpdatedAt.getTime())) {
+          skippedProducts += 1;
+          return null;
+        }
 
         const stockDelta = Number(p.stockDelta); // Optional Delta
         const productShopId = req.assignedShopId || p.shopId || defaultShopId;
@@ -445,7 +528,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
         const updateSet = {
             businessId,
             id: productId,
-            name: p.name,
+            name: p.name || existing?.name || 'Unnamed Product',
             category: p.category,
             // stock: Set below based on delta vs absolute
             sellingPrice: toDecimal(p.sellingPrice),
@@ -522,14 +605,20 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
 
       const txOps = transactions.map((t) => {
         const txId = String(t?.id || '').trim();
-        if (!txId) return null;
+        if (!txId) {
+          skippedTransactions += 1;
+          return null;
+        }
 
         const existing = existingMap.get(txId);
         const hasClientUpdatedAt = Boolean(t.updatedAt);
         const incomingUpdatedAt = hasClientUpdatedAt ? new Date(t.updatedAt) : new Date();
         if (Number.isNaN(incomingUpdatedAt.getTime())) {
+          skippedTransactions += 1;
           return null;
         }
+
+        const safeTransactionDate = parseDateOrFallback(t.transactionDate, new Date());
 
         const deletedAt = deletedTxMap.get(txId);
         if (deletedAt && (!hasClientUpdatedAt || incomingUpdatedAt <= deletedAt)) {
@@ -551,13 +640,13 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
           businessId,
           shopId: req.assignedShopId || t.shopId || defaultShopId,
           id: txId,
-          transactionDate: t.transactionDate ? new Date(t.transactionDate) : null,
+          transactionDate: safeTransactionDate,
           customerName: normalizeCustomerName(t.customerName),
           customerPhone: t.customerPhone || '',
           isPreviousDebt: Boolean(t.isPreviousDebt),
           items: (t.items || []).map((item) => ({
             productId: item.productId,
-            productName: item.productName,
+            productName: item.productName || item.productId || 'Unknown Item',
             quantity: item.quantity,
             unit: item.selectedUnit ? item.selectedUnit.name : item.unit,
             multiplier: item.selectedUnit ? item.selectedUnit.multiplier : (item.multiplier || 1),
@@ -594,7 +683,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
           insertOne: {
             document: {
               ...updateData,
-              createdAt: t.transactionDate ? new Date(t.transactionDate) : new Date()
+              createdAt: safeTransactionDate || new Date()
             }
           }
         };
@@ -608,16 +697,21 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
     if (expenditures.length > 0) {
 
       const expOps = expenditures.map((e) => {
+        const expId = String(e?.id || '').trim();
+        if (!expId) {
+          skippedExpenditures += 1;
+          return null;
+        }
         const val = parseDecimal(e.amount);
         return {
           updateOne: {
-            filter: { business: businessId, id: e.id },
+            filter: { business: businessId, id: expId },
             update: {
               $set: {
                 business: businessId,
                 shopId: req.assignedShopId || e.shopId || defaultShopId,
-                id: e.id,
-                date: e.date ? new Date(e.date) : new Date(),
+                id: expId,
+                date: parseDateOrFallback(e.date, new Date()),
                 amount: toDecimal(e.amount),
                 category: e.category,
                 title: e.title,
@@ -631,11 +725,21 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
             upsert: true
           }
         };
-      });
-      await Expenditure.bulkWrite(expOps);
+      }).filter(Boolean);
+      if (expOps.length > 0) {
+        await Expenditure.bulkWrite(expOps);
+      }
     }
 
-    return res.json({ success: true, syncedAt: new Date() });
+    return res.json({
+      success: true,
+      syncedAt: new Date(),
+      skipped: {
+        products: skippedProducts,
+        transactions: skippedTransactions,
+        expenditures: skippedExpenditures
+      }
+    });
 
   } catch (err) {
     console.error(err);

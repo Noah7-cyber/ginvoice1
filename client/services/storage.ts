@@ -49,6 +49,42 @@ export const saveDataVersion = (version: number) => {
   localStorage.setItem('ginvoice_data_version', safe.toString());
 };
 
+export type SyncDomainVersions = {
+  transactions: number;
+  products: number;
+  expenditures: number;
+  categories: number;
+};
+
+const DOMAIN_VERSION_KEY = 'ginvoice_domain_versions';
+
+export const getDomainVersions = (): SyncDomainVersions => {
+  try {
+    const raw = localStorage.getItem(DOMAIN_VERSION_KEY);
+    if (!raw) return { transactions: 0, products: 0, expenditures: 0, categories: 0 };
+    const parsed = JSON.parse(raw);
+    return {
+      transactions: Number.isFinite(Number(parsed?.transactions)) ? Number(parsed.transactions) : 0,
+      products: Number.isFinite(Number(parsed?.products)) ? Number(parsed.products) : 0,
+      expenditures: Number.isFinite(Number(parsed?.expenditures)) ? Number(parsed.expenditures) : 0,
+      categories: Number.isFinite(Number(parsed?.categories)) ? Number(parsed.categories) : 0
+    };
+  } catch (err) {
+    return { transactions: 0, products: 0, expenditures: 0, categories: 0 };
+  }
+};
+
+export const saveDomainVersions = (versions: Partial<SyncDomainVersions>) => {
+  const current = getDomainVersions();
+  const next: SyncDomainVersions = {
+    transactions: Number.isFinite(Number(versions.transactions)) ? Number(versions.transactions) : current.transactions,
+    products: Number.isFinite(Number(versions.products)) ? Number(versions.products) : current.products,
+    expenditures: Number.isFinite(Number(versions.expenditures)) ? Number(versions.expenditures) : current.expenditures,
+    categories: Number.isFinite(Number(versions.categories)) ? Number(versions.categories) : current.categories
+  };
+  localStorage.setItem(DOMAIN_VERSION_KEY, JSON.stringify(next));
+};
+
 export const getLastSync = (): Date | null => {
   const t = localStorage.getItem('ginvoice_last_sync_time');
   return t ? new Date(t) : null;
@@ -59,6 +95,7 @@ export const clearLocalData = () => {
     localStorage.removeItem('ginvoice_v1_state');
     localStorage.removeItem('ginvoice_last_sync_time');
     localStorage.removeItem('ginvoice_data_version');
+    localStorage.removeItem(DOMAIN_VERSION_KEY);
   } catch (err) {
     console.warn('clearLocalData failed', err);
   }
@@ -88,6 +125,11 @@ export const flushPendingSyncQueue = async () => {
   } finally {
     flushInFlight = null;
   }
+};
+
+export const hasPendingSyncJobs = async (): Promise<boolean> => {
+  const jobs = await getSyncJobs();
+  return jobs.length > 0;
 };
 
 // --- THE CRITICAL EXPORT ---

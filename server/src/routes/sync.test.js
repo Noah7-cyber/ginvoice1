@@ -172,6 +172,44 @@ describe('Sync API Edge Cases', () => {
         const updatedStock = await ProductShopStock.findOne({ productId });
         expect(updatedStock.onHand).toBe(45);
     });
+
+    it('should not fail entire sync when one expenditure payload is malformed', async () => {
+      const response = await request(app).post('/api/sync').set('Authorization', `Bearer ${token}`).send({
+        expenditures: [
+          { id: 'exp-good-1', title: 'Valid', amount: -100, date: new Date().toISOString() },
+          { title: 'Missing ID', amount: -50, date: new Date().toISOString() }
+        ]
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body.skipped.expenditures).toBe(1);
+
+      const saved = await Expenditure.find({ business: businessId });
+      expect(saved).toHaveLength(1);
+      expect(saved[0].id).toBe('exp-good-1');
+    });
+
+    it('should process large offline replay batch and remain idempotent', async () => {
+      const now = Date.now();
+      const products = Array.from({ length: 18 }).map((_, i) => ({
+        id: `offline-p-${i + 1}`,
+        name: `Offline Product ${i + 1}`,
+        sellingPrice: 100 + i,
+        currentStock: 10 + i,
+        updatedAt: new Date(now + i * 1000).toISOString()
+      }));
+
+      const payload = { products };
+
+      const first = await request(app).post('/api/sync').set('Authorization', `Bearer ${token}`).send(payload);
+      const second = await request(app).post('/api/sync').set('Authorization', `Bearer ${token}`).send(payload);
+
+      expect(first.statusCode).toBe(200);
+      expect(second.statusCode).toBe(200);
+
+      const savedProducts = await Product.find({ businessId: businessId.toString() });
+      expect(savedProducts).toHaveLength(18);
+    });
   });
 
   describe('GET /api/sync (Full State)', () => {
@@ -182,7 +220,9 @@ describe('Sync API Edge Cases', () => {
 
         expect(response.statusCode).toBe(200);
         expect(response.body).toHaveProperty('version');
+        expect(response.body).toHaveProperty('versions');
         expect(typeof response.body.version).toBe('number');
+        expect(typeof response.body.versions.transactions).toBe('number');
     });
 
     it('should filter data by shopId', async () => {
@@ -202,6 +242,21 @@ describe('Sync API Edge Cases', () => {
         expect(response.statusCode).toBe(200);
         expect(response.body.transactions.length).toBe(1);
         expect(response.body.transactions[0].id).toBe('tx-s1');
+    });
+
+    it('should support partial domain fetch for transactions only', async () => {
+        await Transaction.create({ businessId, id: 'tx-partial-1', shopId, totalAmount: 15, items: [] });
+        await Product.create({ businessId: businessId.toString(), id: 'p-partial-1', name: 'Partial Product' });
+
+        const response = await request(app)
+            .get('/api/sync')
+            .set('Authorization', `Bearer ${token}`)
+            .query({ domains: 'transactions' });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.body.partial).toBe(true);
+        expect(Array.isArray(response.body.transactions)).toBe(true);
+        expect(response.body.products).toBeUndefined();
     });
   });
 });
