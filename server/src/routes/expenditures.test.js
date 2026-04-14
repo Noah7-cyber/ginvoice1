@@ -40,6 +40,14 @@ describe('Expenditures API', () => {
 
     // Update token to include fields needed by auth middleware population
     token = jwt.sign({ userId, businessId, role: 'owner', id: userId }, process.env.JWT_SECRET);
+
+    // Create a real shop to avoid CastError in resolveShopId
+    await mongoose.model('Shop').create({
+        _id: new mongoose.Types.ObjectId(),
+        businessId: businessId.toString(),
+        name: 'Test Shop',
+        isMain: true
+    });
   });
 
   // Clear the expenditures collection after each test
@@ -99,16 +107,58 @@ describe('Expenditures API', () => {
         .set('Authorization', `Bearer ${token}`)
         .send(invalidExpenditure);
 
-      expect(response.statusCode).toBe(500); // Changed from 400
-      // expect(response.body.message).toBe('Invalid amount'); // 500 doesn't strictly return specific message in provided code
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('should force negative amount for flowType: out', async () => {
+        const payload = {
+            id: 'exp-out',
+            amount: 50, // Positive in payload
+            flowType: 'out',
+            category: 'Force Sign',
+            title: 'Test Out'
+        };
+
+        const response = await request(app)
+            .post('/api/expenditures')
+            .set('Authorization', `Bearer ${token}`)
+            .send(payload);
+
+        expect(response.statusCode).toBe(200);
+        expect(response.body.amount).toBe(-50);
+        expect(response.body.flowType).toBe('out');
+    });
+
+    it('should force positive amount for flowType: in', async () => {
+        const payload = {
+            id: 'exp-in',
+            amount: -100, // Negative in payload
+            flowType: 'in',
+            category: 'Force Sign',
+            title: 'Test In'
+        };
+
+        const response = await request(app)
+            .post('/api/expenditures')
+            .set('Authorization', `Bearer ${token}`)
+            .send(payload);
+
+        expect(response.statusCode).toBe(200);
+        expect(response.body.amount).toBe(100);
+        expect(response.body.flowType).toBe('in');
     });
   });
 
   describe('GET /api/expenditures', () => {
     it('should return a list of expenditures for the business', async () => {
+      // Find a shopId to use
+      const shop = await mongoose.model('Shop').findOne({ businessId });
+      const shopId = shop._id.toString();
+
       await Expenditure.create({
         id: 'test-uuid-3',
         business: businessId, // Changed from businessId
+        shopId,
         amount: 200,
         category: 'Utilities',
         user: userId, // Changed from createdBy
@@ -135,7 +185,7 @@ describe('Expenditures API', () => {
       expect(response.statusCode).toBe(200);
       expect(Array.isArray(response.body)).toBe(true);
       expect(response.body.length).toBe(1);
-      expect(response.body[0].amount).toBe(200);
+      expect(response.body[0].amount).toBe(-200);
       expect(response.body[0].category).toBe('Utilities');
     });
   });

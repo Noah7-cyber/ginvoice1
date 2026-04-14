@@ -55,6 +55,9 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
   try {
     // Force sign based on flowType
     let finalAmount = parseFloat(amount);
+    if (isNaN(finalAmount)) {
+        return res.status(400).json({ message: 'Invalid amount provided.' });
+    }
     if (flowType === 'out') finalAmount = -Math.abs(finalAmount);
     else if (flowType === 'in') finalAmount = Math.abs(finalAmount);
 
@@ -100,6 +103,9 @@ router.put('/:id', auth, requireActiveSubscription, async (req, res) => {
 
     // Force sign based on flowType
     let finalAmount = parseFloat(amount);
+    if (isNaN(finalAmount)) {
+        return res.status(400).json({ message: 'Invalid amount provided.' });
+    }
     if (flowType === 'out') finalAmount = -Math.abs(finalAmount);
     else if (flowType === 'in') finalAmount = Math.abs(finalAmount);
 
