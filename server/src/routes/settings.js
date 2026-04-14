@@ -46,12 +46,16 @@ router.put('/', auth, requireActiveSubscription, async (req, res) => {
 
     if (theme) update.theme = theme;
 
+    const updateDoc = {
+      $set: update
+    };
+    if (staffPermissions) {
+      updateDoc.$inc = { credentialsVersion: 1 }; // Invalidate staff sessions only when permissions change
+    }
+
     const business = await Business.findByIdAndUpdate(
       req.businessId,
-      {
-        $set: update,
-        $inc: { credentialsVersion: 1 } // Invalidate existing staff tokens
-      },
+      updateDoc,
       { new: true, runValidators: true }
     ).select('settings staffPermissions name phone address email logo theme');
 

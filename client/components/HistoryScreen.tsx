@@ -450,16 +450,32 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
           return;
       }
 
-      let text = `*Customer:* ${debtorName}\n`;
-      text += `*Date:* ${new Date().toLocaleDateString()}\n\n`;
-      text += `Here is your outstanding balance statement:\n\n`;
+      const invoiceLines = unpaidInvoices
+        .map((tx) => `📅 ${new Date(tx.transactionDate).toLocaleDateString()} - *${CURRENCY}${toMoneyNumber(tx.balance).toLocaleString()}*`)
+        .join('\n');
+      const defaultStatement = [
+        `*Customer:* ${debtorName}`,
+        `*Date:* ${new Date().toLocaleDateString()}`,
+        '',
+        'Here is your outstanding balance statement:',
+        '',
+        invoiceLines,
+        '',
+        `*TOTAL DUE: ${CURRENCY}${debtorTotalOwed.toLocaleString()}*`,
+        '',
+        'Please kindly arrange payment. Thank you!'
+      ].join('\n');
 
-      unpaidInvoices.forEach(tx => {
-          text += `📅 ${new Date(tx.transactionDate).toLocaleDateString()} - *${CURRENCY}${toMoneyNumber(tx.balance).toLocaleString()}*\n`;
-      });
-
-      text += `\n*TOTAL DUE: ${CURRENCY}${debtorTotalOwed.toLocaleString()}*\n\n`;
-      text += `Please kindly arrange payment. Thank you!`;
+      const customTemplate = (business.settings?.debtorShareTemplate || '').trim();
+      const text = customTemplate
+        ? customTemplate
+            .replace(/\{\{customerName\}\}/g, debtorName)
+            .replace(/\{\{date\}\}/g, new Date().toLocaleDateString())
+            .replace(/\{\{currency\}\}/g, CURRENCY)
+            .replace(/\{\{totalDue\}\}/g, debtorTotalOwed.toLocaleString())
+            .replace(/\{\{invoiceLines\}\}/g, invoiceLines)
+            .replace(/\{\{businessName\}\}/g, business.name || 'Our Business')
+        : defaultStatement;
 
       if (navigator.share) {
           try {

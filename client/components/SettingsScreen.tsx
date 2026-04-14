@@ -174,6 +174,11 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, shops = [], a
      handleUpdateBusiness(formData);
   };
 
+  const updateSettingField = (key: 'footerText' | 'debtorShareTemplate', value: string) => {
+    const currentSettings = formData.settings || ({} as BusinessProfile['settings']);
+    setFormData({ ...formData, settings: { ...currentSettings, [key]: value } });
+  };
+
   const hasChanges = JSON.stringify(formData) !== JSON.stringify(business);
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -606,6 +611,27 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, shops = [], a
                           >
                               {formData.useThermalPrinter ? <ToggleRight size={32} /> : <ToggleLeft size={32} />}
                           </button>
+                      </div>
+                      <div className="space-y-2">
+                          <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest">Invoice Footer Note</label>
+                          <textarea
+                            value={formData.settings?.footerText || ''}
+                            onChange={(e) => updateSettingField('footerText', e.target.value)}
+                            rows={3}
+                            placeholder="Thank you for your patronage!"
+                            className="w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:ring-2 focus:ring-primary/30 focus:outline-none"
+                          />
+                      </div>
+                      <div className="space-y-2">
+                          <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest">Debtor Share Message</label>
+                          <textarea
+                            value={formData.settings?.debtorShareTemplate || ''}
+                            onChange={(e) => updateSettingField('debtorShareTemplate', e.target.value)}
+                            rows={4}
+                            placeholder={`Use placeholders like {{customerName}}, {{totalDue}}, {{invoiceLines}}, {{businessName}}`}
+                            className="w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:ring-2 focus:ring-primary/30 focus:outline-none"
+                          />
+                          <p className="text-[11px] text-gray-500">Leave blank to use the default statement format.</p>
                       </div>
                   </div>
 

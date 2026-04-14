@@ -1,5 +1,6 @@
 import { InventoryState } from '../types';
 import { syncState } from './api';
+import { enqueueSyncJob, getSyncJobs, incrementRetryCount, removeSyncJob } from './syncQueue';
 
 const STORAGE_KEY = 'ginvoice_v1_state';
 
@@ -63,26 +64,46 @@ export const clearLocalData = () => {
   }
 };
 
+let flushInFlight: Promise<void> | null = null;
+
+export const flushPendingSyncQueue = async () => {
+  if (flushInFlight) return flushInFlight;
+
+  flushInFlight = (async () => {
+    const jobs = await getSyncJobs();
+    for (const job of jobs) {
+      if (!job.id) continue;
+      try {
+        await syncState(job.payload);
+        await removeSyncJob(job.id);
+      } catch (err: any) {
+        await incrementRetryCount(job.id, Number(job.retryCount || 0));
+        throw err;
+      }
+    }
+  })();
+
+  try {
+    await flushInFlight;
+  } finally {
+    flushInFlight = null;
+  }
+};
+
 // --- THE CRITICAL EXPORT ---
 // This was missing/renamed in snippets, causing frontend crash.
 export const pushToBackend = async (payload: any) => {
   try {
-    const lastSyncTime = getLastSync();
-    const thresholdTime = lastSyncTime ? lastSyncTime.getTime() - 5 * 60 * 1000 : Date.now() - 24 * 60 * 60 * 1000;
-
-    const shouldKeep = (item: any) => !item.updatedAt || new Date(item.updatedAt).getTime() > thresholdTime;
-
-    const deltaPayload = {
-      ...payload,
-      transactions: payload.transactions?.filter(shouldKeep) || [],
-      products: payload.products?.filter(shouldKeep) || [],
-      expenditures: payload.expenditures?.filter(shouldKeep) || [],
-    };
-
-    const res = await syncState(deltaPayload);
+    await flushPendingSyncQueue();
+    const res = await syncState(payload);
     return res;
   } catch (err) {
-    console.error('Push failed', err);
+    try {
+      await enqueueSyncJob(payload);
+    } catch (queueErr) {
+      console.error('Queue save failed', queueErr);
+    }
+    console.error('Push failed (queued for retry)', err);
     throw err;
   }
 };

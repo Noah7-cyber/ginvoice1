@@ -25,7 +25,7 @@ import { useStockVerification } from './hooks/useStockVerification';
 import { useTimeDrift } from './hooks/useTimeDrift';
 import { CURRENCY, INITIAL_PRODUCTS } from './constants';
 import { safeCalculate } from './utils/math';
-import { saveState, loadState, pushToBackend, getDataVersion, saveDataVersion, getLastSync, saveLastSync, clearLocalData } from './services/storage';
+import { saveState, loadState, pushToBackend, getDataVersion, saveDataVersion, getLastSync, saveLastSync, clearLocalData, flushPendingSyncQueue } from './services/storage';
 import { login, registerBusiness, saveAuthToken, clearAuthToken, getEntitlements, initializePayment, fetchRemoteState, deleteExpenditure, snoozeStockVerification, dismissNotification, checkServerVersion, createShop, renameShop, getShopsOverview, deleteShop } from './services/api';
 import { useToast } from './components/ToastProvider';
 import SalesScreen from './components/SalesScreen';
@@ -69,6 +69,7 @@ const hasActiveAlerts = (products: Product[], business: BusinessProfile, lowStoc
 };
 
 const ALL_SHOPS_ID = 'all';
+const MULTI_SHOP_TEMP_DISABLED = true;
 
 const TAB_LABELS: Record<string, string> = {
   sales: 'Sales',
@@ -129,6 +130,7 @@ const App: React.FC = () => {
   const [shopSourceId, setShopSourceId] = useState('');
   const [isSavingShop, setIsSavingShop] = useState(false);
   const [isSwitchingShop, setIsSwitchingShop] = useState(false);
+  const [isMultiShopComingSoonOpen, setIsMultiShopComingSoonOpen] = useState(false);
   const [hubOverview, setHubOverview] = useState<{ rows: any[]; totals: any } | null>(null);
   const [deleteReplacementShopId, setDeleteReplacementShopId] = useState('');
   const isTimeBlocked = useTimeDrift();
@@ -511,7 +513,7 @@ const App: React.FC = () => {
     }
   }, [addToast]);
 
-  const safeSyncWithServer = useCallback(async (source: 'online-event' | 'initial-load' | 'heartbeat' | 'manual') => {
+  const safeSyncWithServer = useCallback(async (source: 'online-event' | 'initial-load' | 'heartbeat' | 'manual' | 'visibility') => {
     if (!navigator.onLine) return;
 
     const currentState = stateRef.current;
@@ -522,6 +524,7 @@ const App: React.FC = () => {
 
     try {
       try {
+        await flushPendingSyncQueue();
         await pushToBackend({
           transactions: currentState.transactions,
           products: currentState.products,
@@ -627,6 +630,26 @@ const App: React.FC = () => {
   useEffect(() => {
     wasOnlineRef.current = isOnline;
   }, [isOnline]);
+
+  useEffect(() => {
+    const handleVisibilitySync = async () => {
+      if (document.visibilityState !== 'visible') return;
+      if (!navigator.onLine || !stateRef.current.isLoggedIn) return;
+      await safeSyncWithServer('visibility');
+    };
+
+    const handleFocusSync = async () => {
+      if (!navigator.onLine || !stateRef.current.isLoggedIn) return;
+      await safeSyncWithServer('visibility');
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilitySync);
+    window.addEventListener('focus', handleFocusSync);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilitySync);
+      window.removeEventListener('focus', handleFocusSync);
+    };
+  }, [safeSyncWithServer]);
 
   useEffect(() => {
     const onResize = () => setIsMobileView(window.innerWidth < 768);
@@ -1115,10 +1138,18 @@ const App: React.FC = () => {
   };
 
   const openShopSwitcherModal = () => {
+    if (MULTI_SHOP_TEMP_DISABLED) {
+      setIsMultiShopComingSoonOpen(true);
+      return;
+    }
     setShopModalMode('switch');
   };
 
   const openShopManagementMenu = () => {
+    if (MULTI_SHOP_TEMP_DISABLED) {
+      setIsMultiShopComingSoonOpen(true);
+      return;
+    }
     setShopModalMode('menu');
   };
 
@@ -1462,8 +1493,14 @@ const App: React.FC = () => {
                 {hasMultipleShops && (
                   <select
                     value={state.activeShopId || state.business.defaultShopId || ''}
-                    onChange={(e) => handleShopSwitch(e.target.value)}
-                    disabled={isSwitchingShop}
+                    onChange={(e) => {
+                      if (MULTI_SHOP_TEMP_DISABLED) {
+                        setIsMultiShopComingSoonOpen(true);
+                        return;
+                      }
+                      handleShopSwitch(e.target.value);
+                    }}
+                    disabled={isSwitchingShop || MULTI_SHOP_TEMP_DISABLED}
                     className="hidden md:block text-xs font-bold border rounded-lg px-2 py-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {(state.shops || []).map((shop) => (
@@ -1829,6 +1866,17 @@ const App: React.FC = () => {
                   {shopModalMode === 'create' ? 'Create Shop' : shopModalMode === 'rename' ? 'Save Name' : 'Delete Shop'}
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+      {isMultiShopComingSoonOpen && (
+        <div className="fixed inset-0 z-[90] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setIsMultiShopComingSoonOpen(false)}>
+          <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl border border-gray-100 p-6" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-black text-gray-900">Multi-shop access</h3>
+            <p className="text-sm text-gray-600 mt-2">Coming soon. We have temporarily paused multi-shop switching while we harden offline sync.</p>
+            <div className="mt-4 flex justify-end">
+              <button onClick={() => setIsMultiShopComingSoonOpen(false)} className="px-4 py-2 rounded-xl bg-primary text-white font-bold">Okay</button>
             </div>
           </div>
         </div>
