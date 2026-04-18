@@ -143,34 +143,23 @@ describe('Sync API Edge Cases', () => {
         expect(response.body.message).toMatch(/locked to an assigned shop/i);
     });
 
-    it('should correctly handle absolute stock sync (no delta)', async () => {
+    it('should ignore product stock fields during sync payload', async () => {
         const productId = 'p-abs-stock';
         await Product.create({ businessId: businessId.toString(), id: productId, name: 'Abs Stock' });
+        await ProductShopStock.create({ businessId: businessId.toString(), shopId, productId, onHand: 7 });
 
         await request(app).post('/api/sync').set('Authorization', `Bearer ${token}`).send({
             products: [{
                 id: productId,
                 name: 'Abs Stock',
                 currentStock: 50,
+                stockDelta: 100,
                 updatedAt: new Date().toISOString()
             }]
         });
 
         const stock = await ProductShopStock.findOne({ productId });
-        expect(stock.onHand).toBe(50);
-
-        // Sync again with new absolute stock
-        await request(app).post('/api/sync').set('Authorization', `Bearer ${token}`).send({
-            products: [{
-                id: productId,
-                name: 'Abs Stock',
-                currentStock: 45,
-                updatedAt: new Date(Date.now() + 1000).toISOString()
-            }]
-        });
-
-        const updatedStock = await ProductShopStock.findOne({ productId });
-        expect(updatedStock.onHand).toBe(45);
+        expect(stock.onHand).toBe(7);
     });
 
     it('should not fail entire sync when one expenditure payload is malformed', async () => {
@@ -189,17 +178,26 @@ describe('Sync API Edge Cases', () => {
       expect(saved[0].id).toBe('exp-good-1');
     });
 
-    it('should process large offline replay batch and remain idempotent', async () => {
+    it('should process large offline transaction replay batch and remain idempotent', async () => {
       const now = Date.now();
-      const products = Array.from({ length: 18 }).map((_, i) => ({
-        id: `offline-p-${i + 1}`,
-        name: `Offline Product ${i + 1}`,
-        sellingPrice: 100 + i,
-        currentStock: 10 + i,
-        updatedAt: new Date(now + i * 1000).toISOString()
+      const productId = 'offline-stock-prod';
+      await Product.create({ businessId: businessId.toString(), id: productId, name: 'Tracked Product', stock: 100 });
+      await ProductShopStock.create({ businessId: businessId.toString(), shopId, productId, onHand: 100 });
+
+      const transactions = Array.from({ length: 12 }).map((_, i) => ({
+        id: `offline-tx-${i + 1}`,
+        transactionId: `offline-tx-${i + 1}`,
+        idempotencyKey: `offline-tx-${i + 1}`,
+        transactionDate: new Date(now + i * 1000).toISOString(),
+        customerName: `Offline ${i + 1}`,
+        items: [{ productId, productName: 'Tracked Product', quantity: 1, multiplier: 1, total: 10 }],
+        totalAmount: 10,
+        amountPaid: 10,
+        updatedAt: new Date(now + i * 1000).toISOString(),
+        shopId
       }));
 
-      const payload = { products };
+      const payload = { transactions, shopId };
 
       const first = await request(app).post('/api/sync').set('Authorization', `Bearer ${token}`).send(payload);
       const second = await request(app).post('/api/sync').set('Authorization', `Bearer ${token}`).send(payload);
@@ -207,8 +205,65 @@ describe('Sync API Edge Cases', () => {
       expect(first.statusCode).toBe(200);
       expect(second.statusCode).toBe(200);
 
-      const savedProducts = await Product.find({ businessId: businessId.toString() });
-      expect(savedProducts).toHaveLength(18);
+      const savedTransactions = await Transaction.find({ businessId });
+      expect(savedTransactions).toHaveLength(12);
+      const stock = await ProductShopStock.findOne({ businessId: businessId.toString(), shopId, productId });
+      expect(stock.onHand).toBe(88);
+    });
+
+    it('should safely handle partial failures and keep successful tx idempotent', async () => {
+      const productId = 'partial-stock-prod';
+      await Product.create({ businessId: businessId.toString(), id: productId, name: 'Partial Product', stock: 30 });
+      await ProductShopStock.create({ businessId: businessId.toString(), shopId, productId, onHand: 30 });
+
+      const response = await request(app).post('/api/sync').set('Authorization', `Bearer ${token}`).send({
+        shopId,
+        transactions: [
+          {
+            id: 'partial-ok',
+            idempotencyKey: 'partial-ok',
+            transactionDate: new Date().toISOString(),
+            customerName: 'OK',
+            items: [{ productId, productName: 'Partial Product', quantity: 2, multiplier: 1, total: 20 }],
+            totalAmount: 20,
+            amountPaid: 20,
+            updatedAt: new Date().toISOString()
+          },
+          {
+            id: '',
+            idempotencyKey: 'partial-bad',
+            transactionDate: new Date().toISOString(),
+            customerName: 'Bad',
+            items: [{ productId, productName: 'Partial Product', quantity: 5, multiplier: 1, total: 50 }],
+            totalAmount: 50,
+            amountPaid: 50,
+            updatedAt: new Date().toISOString()
+          }
+        ]
+      });
+
+      expect(response.statusCode).toBe(200);
+      const txCount = await Transaction.countDocuments({ businessId });
+      expect(txCount).toBe(1);
+      const stock = await ProductShopStock.findOne({ businessId: businessId.toString(), shopId, productId });
+      expect(stock.onHand).toBe(28);
+
+      const replay = await request(app).post('/api/sync').set('Authorization', `Bearer ${token}`).send({
+        shopId,
+        transactions: [{
+          id: 'partial-ok',
+          idempotencyKey: 'partial-ok',
+          transactionDate: new Date().toISOString(),
+          customerName: 'OK',
+          items: [{ productId, productName: 'Partial Product', quantity: 2, multiplier: 1, total: 20 }],
+          totalAmount: 20,
+          amountPaid: 20,
+          updatedAt: new Date(Date.now() - 1000).toISOString()
+        }]
+      });
+      expect(replay.statusCode).toBe(200);
+      const stockAfterReplay = await ProductShopStock.findOne({ businessId: businessId.toString(), shopId, productId });
+      expect(stockAfterReplay.onHand).toBe(28);
     });
   });
 
@@ -257,6 +312,26 @@ describe('Sync API Edge Cases', () => {
         expect(response.body.partial).toBe(true);
         expect(Array.isArray(response.body.transactions)).toBe(true);
         expect(response.body.products).toBeUndefined();
+    });
+
+    it('should return all transactions (no 1000-record truncation)', async () => {
+        const rows = Array.from({ length: 1005 }).map((_, index) => ({
+            businessId,
+            id: `tx-full-${index}`,
+            shopId,
+            totalAmount: 1,
+            amountPaid: 1,
+            items: []
+        }));
+        await Transaction.insertMany(rows);
+
+        const response = await request(app)
+            .get('/api/sync')
+            .set('Authorization', `Bearer ${token}`)
+            .query({ shopId });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.body.transactions.length).toBeGreaterThanOrEqual(1005);
     });
   });
 });
