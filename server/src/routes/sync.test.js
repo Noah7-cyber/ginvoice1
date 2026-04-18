@@ -313,5 +313,25 @@ describe('Sync API Edge Cases', () => {
         expect(Array.isArray(response.body.transactions)).toBe(true);
         expect(response.body.products).toBeUndefined();
     });
+
+    it('should return all transactions (no 1000-record truncation)', async () => {
+        const rows = Array.from({ length: 1005 }).map((_, index) => ({
+            businessId,
+            id: `tx-full-${index}`,
+            shopId,
+            totalAmount: 1,
+            amountPaid: 1,
+            items: []
+        }));
+        await Transaction.insertMany(rows);
+
+        const response = await request(app)
+            .get('/api/sync')
+            .set('Authorization', `Bearer ${token}`)
+            .query({ shopId });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.body.transactions.length).toBeGreaterThanOrEqual(1005);
+    });
   });
 });

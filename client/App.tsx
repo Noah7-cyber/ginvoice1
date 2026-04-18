@@ -26,7 +26,7 @@ import { useStockVerification } from './hooks/useStockVerification';
 import { useTimeDrift } from './hooks/useTimeDrift';
 import { CURRENCY, INITIAL_PRODUCTS } from './constants';
 import { safeCalculate } from './utils/math';
-import { saveState, loadState, pushToBackend, getDataVersion, saveDataVersion, getDomainVersions, saveDomainVersions, getLastSync, saveLastSync, clearLocalData, flushPendingSyncQueue, hasPendingSyncJobs, listPendingSyncJobs, syncPendingJobsWithProgress } from './services/storage';
+import { saveState, loadState, pushToBackend, getDataVersion, saveDataVersion, getDomainVersions, saveDomainVersions, getLastSync, saveLastSync, clearLocalData, flushPendingSyncQueue, hasPendingSyncJobs, listPendingSyncJobs, syncPendingJobsWithProgress, getPendingTransactionIds } from './services/storage';
 import type { PendingSyncJobView } from './services/storage';
 import { login, registerBusiness, saveAuthToken, clearAuthToken, getEntitlements, initializePayment, fetchRemoteState, deleteExpenditure, snoozeStockVerification, dismissNotification, checkServerVersion, createShop, renameShop, getShopsOverview, deleteShop } from './services/api';
 import { useToast } from './components/ToastProvider';
@@ -80,6 +80,30 @@ const TAB_LABELS: Record<string, string> = {
   dashboard: 'Dashboard',
   expenditure: 'Expenses',
   settings: 'Settings'
+};
+
+const getRecordId = (row: any): string => String(row?.transactionId || row?.id || '').trim();
+
+const mergeByIdPreferServer = <T extends { id?: string; transactionId?: string }>(
+  serverRows: T[] = [],
+  localRows: T[] = [],
+  keepLocal?: (row: T) => boolean
+) => {
+  const map = new Map<string, T>();
+  for (const row of serverRows || []) {
+    const id = getRecordId(row);
+    if (!id) continue;
+    map.set(id, row);
+  }
+  for (const row of localRows || []) {
+    const id = getRecordId(row);
+    if (!id || map.has(id)) continue;
+    if (!keepLocal || keepLocal(row)) map.set(id, row);
+  }
+  return Array.from(map.values()).sort((a: any, b: any) =>
+    new Date(b?.transactionDate || b?.updatedAt || b?.createdAt || 0).getTime() -
+    new Date(a?.transactionDate || a?.updatedAt || a?.createdAt || 0).getTime()
+  );
 };
 
 const App: React.FC = () => {
@@ -485,14 +509,21 @@ const App: React.FC = () => {
 
       if (response.status === 200 && response.data) {
          const { products, transactions, categories, expenditures, business, notifications, shops, activeShopId, allShopsMode, staffContext, partial, versions } = response.data;
+         const pendingTxIds = await getPendingTransactionIds();
 
          const isPartial = Boolean(partial);
+         const mergedTransactions = isPartial
+           ? mergeByIdPreferServer(transactions ?? currentState.transactions, currentState.transactions, (tx: any) => pendingTxIds.has(getRecordId(tx)))
+           : mergeByIdPreferServer(transactions || [], currentState.transactions, (tx: any) => pendingTxIds.has(getRecordId(tx)));
+         const mergedExpenditures = isPartial
+           ? mergeByIdPreferServer(expenditures ?? currentState.expenditures, currentState.expenditures)
+           : mergeByIdPreferServer(expenditures || [], currentState.expenditures);
          const nextState: InventoryState = {
            ...currentState,
            products: isPartial ? (products ?? currentState.products) : (products || []),
-           transactions: isPartial ? (transactions ?? currentState.transactions) : (transactions || []),
+           transactions: mergedTransactions,
            categories: isPartial ? (categories ?? currentState.categories) : (categories || []),
-           expenditures: isPartial ? (expenditures ?? currentState.expenditures) : (expenditures || []),
+           expenditures: mergedExpenditures,
            notifications: isPartial ? (notifications ?? currentState.notifications) : (notifications || []),
            shops: isPartial ? (shops ?? (currentState.shops || [])) : (shops || currentState.shops || []),
            activeShopId: activeShopId || currentState.activeShopId || business?.defaultShopId,
@@ -537,8 +568,6 @@ const App: React.FC = () => {
     syncInFlightRef.current = true;
 
     try {
-      const shopId = currentState.activeShopId && currentState.activeShopId !== ALL_SHOPS_ID ? currentState.activeShopId : undefined;
-
       // Heartbeat should be pull-only so offline replay has strict write priority.
       if (source === 'heartbeat') {
         await refreshData(currentState);
@@ -547,17 +576,6 @@ const App: React.FC = () => {
 
       try {
         await flushPendingSyncQueue();
-        // Phase 1 (Priority): sales first
-        await pushToBackend({
-          transactions: currentState.transactions,
-          shopId
-        });
-
-        // Phase 2: expenditures
-        await pushToBackend({
-          expenditures: currentState.expenditures,
-          shopId
-        });
       } catch (err) {
         console.error(`[Safe Sync] Pre-sync push failed (${source})`, err);
         addToast('Sync failed for now. Local data is safe; retrying shortly.', 'warning');
@@ -753,11 +771,12 @@ const App: React.FC = () => {
                      domains: changedDomains
                    });
                    if (response.status === 200 && response.data) {
+                     const pendingTxIds = await getPendingTransactionIds();
                      const merged = {
                        ...stateRef.current,
                        products: response.data.products ?? stateRef.current.products,
-                       transactions: response.data.transactions ?? stateRef.current.transactions,
-                       expenditures: response.data.expenditures ?? stateRef.current.expenditures,
+                       transactions: mergeByIdPreferServer(response.data.transactions ?? stateRef.current.transactions, stateRef.current.transactions, (tx: any) => pendingTxIds.has(getRecordId(tx))),
+                       expenditures: mergeByIdPreferServer(response.data.expenditures ?? stateRef.current.expenditures, stateRef.current.expenditures),
                        categories: response.data.categories ?? stateRef.current.categories,
                        lastSyncedAt: new Date().toISOString()
                      };
@@ -1158,6 +1177,7 @@ const App: React.FC = () => {
     if (navigator.onLine) {
       const activeShopId = stateRef.current.activeShopId && stateRef.current.activeShopId !== ALL_SHOPS_ID ? stateRef.current.activeShopId : undefined;
       const previousMap = new Map((state.products || []).map((p) => [p.id, Number(p.currentStock || 0)]));
+      const previousProductMap = new Map((state.products || []).map((p) => [p.id, p]));
       const adjustmentTransactions: Transaction[] = stampedProducts
         .map((p, index) => {
           const prev = Number(previousMap.get(p.id) || 0);
@@ -1195,7 +1215,23 @@ const App: React.FC = () => {
         })
         .filter(Boolean) as Transaction[];
 
-      pushToBackend({ products: stampedProducts, transactions: adjustmentTransactions, shopId: activeShopId })
+      const changedProducts = stampedProducts.filter((product) => {
+        const prev = previousProductMap.get(product.id);
+        if (!prev) return true;
+        return (
+          product.name !== prev.name ||
+          product.category !== prev.category ||
+          Number(product.sellingPrice || 0) !== Number(prev.sellingPrice || 0) ||
+          Number(product.costPrice || 0) !== Number(prev.costPrice || 0) ||
+          product.baseUnit !== prev.baseUnit ||
+          Boolean(product.isDeleted) !== Boolean(prev.isDeleted) ||
+          JSON.stringify(product.units || []) !== JSON.stringify(prev.units || [])
+        );
+      });
+
+      if (changedProducts.length === 0 && adjustmentTransactions.length === 0) return;
+
+      pushToBackend({ products: changedProducts, transactions: adjustmentTransactions, shopId: activeShopId })
         .then(() => {
           refreshPendingJobs().catch(() => undefined);
         })

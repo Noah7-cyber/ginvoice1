@@ -153,6 +153,19 @@ export const listPendingSyncJobs = async (): Promise<PendingSyncJobView[]> => {
     }));
 };
 
+export const getPendingTransactionIds = async (): Promise<Set<string>> => {
+  const jobs = await getSyncJobs();
+  const ids = new Set<string>();
+  for (const job of jobs) {
+    const txs = Array.isArray(job?.payload?.transactions) ? job.payload.transactions : [];
+    for (const tx of txs) {
+      const id = String(tx?.transactionId || tx?.id || '').trim();
+      if (id) ids.add(id);
+    }
+  }
+  return ids;
+};
+
 export const syncPendingJobsWithProgress = async (
   onProgress?: (info: { total: number; processed: number; succeeded: number; failed: number; currentJobId?: number }) => void
 ) => {

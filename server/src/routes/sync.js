@@ -138,7 +138,7 @@ router.get('/', auth, async (req, res) => {
         }).lean()
       : Promise.resolve([]);
     const transactionsPromise = shouldInclude('transactions')
-      ? Transaction.find(transactionFilter).sort({ createdAt: -1 }).limit(1000).lean()
+      ? Transaction.find(transactionFilter).sort({ createdAt: -1 }).lean()
       : Promise.resolve([]);
     const expendituresPromise = shouldInclude('expenditures')
       ? Expenditure.find(expenditureFilter).lean()
