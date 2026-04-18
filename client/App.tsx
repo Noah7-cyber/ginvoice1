@@ -508,8 +508,17 @@ const App: React.FC = () => {
       });
 
       if (response.status === 200 && response.data) {
-         const { products, transactions, categories, expenditures, business, notifications, shops, activeShopId, allShopsMode, staffContext, partial, versions } = response.data;
+         let { products, transactions, categories, expenditures, business, notifications, shops, activeShopId, allShopsMode, staffContext, partial, versions } = response.data;
          const pendingTxIds = await getPendingTransactionIds();
+
+         // Legacy fix: Normalize records without shopId
+         const fallbackShopId = activeShopId || currentState.activeShopId || business?.defaultShopId;
+         if (transactions) {
+            transactions = transactions.map((t: any) => ({ ...t, shopId: t.shopId || fallbackShopId }));
+         }
+         if (expenditures) {
+            expenditures = expenditures.map((e: any) => ({ ...e, shopId: e.shopId || fallbackShopId }));
+         }
 
          const isPartial = Boolean(partial);
          const mergedTransactions = isPartial
@@ -771,12 +780,23 @@ const App: React.FC = () => {
                      domains: changedDomains
                    });
                    if (response.status === 200 && response.data) {
+                     let { transactions, expenditures } = response.data;
                      const pendingTxIds = await getPendingTransactionIds();
+
+                     // Legacy fix: Normalize records without shopId
+                     const fallbackShopId = stateRef.current.activeShopId || stateRef.current.business.defaultShopId;
+                     if (transactions) {
+                       transactions = transactions.map((t: any) => ({ ...t, shopId: t.shopId || fallbackShopId }));
+                     }
+                     if (expenditures) {
+                       expenditures = expenditures.map((e: any) => ({ ...e, shopId: e.shopId || fallbackShopId }));
+                     }
+
                      const merged = {
                        ...stateRef.current,
                        products: response.data.products ?? stateRef.current.products,
-                       transactions: mergeByIdPreferServer(response.data.transactions ?? stateRef.current.transactions, stateRef.current.transactions, (tx: any) => pendingTxIds.has(getRecordId(tx))),
-                       expenditures: mergeByIdPreferServer(response.data.expenditures ?? stateRef.current.expenditures, stateRef.current.expenditures),
+                       transactions: mergeByIdPreferServer(transactions ?? stateRef.current.transactions, stateRef.current.transactions, (tx: any) => pendingTxIds.has(getRecordId(tx))),
+                       expenditures: mergeByIdPreferServer(expenditures ?? stateRef.current.expenditures, stateRef.current.expenditures),
                        categories: response.data.categories ?? stateRef.current.categories,
                        lastSyncedAt: new Date().toISOString()
                      };
@@ -1249,13 +1269,15 @@ const App: React.FC = () => {
   const visibleTransactions = useMemo(() => {
     if (isAllShopsMode) return state.transactions;
     if (!state.activeShopId) return state.transactions;
-    return state.transactions.filter((tx) => String(tx.shopId || '') === String(state.activeShopId));
+    // Legacy fix: Include records without shopId in active shop view
+    return state.transactions.filter((tx) => !tx.shopId || String(tx.shopId) === String(state.activeShopId));
   }, [state.transactions, state.activeShopId, isAllShopsMode]);
 
   const visibleExpenditures = useMemo(() => {
     if (isAllShopsMode) return state.expenditures;
     if (!state.activeShopId) return state.expenditures;
-    return (state.expenditures || []).filter((exp) => String(exp.shopId || '') === String(state.activeShopId));
+    // Legacy fix: Include records without shopId in active shop view
+    return (state.expenditures || []).filter((exp) => !exp.shopId || String(exp.shopId) === String(state.activeShopId));
   }, [state.expenditures, state.activeShopId, isAllShopsMode]);
 
   const visibleNotifications = useMemo(() => {
@@ -1264,7 +1286,8 @@ const App: React.FC = () => {
     if (!state.activeShopId) return notes;
     return notes.filter((n: any) => {
       const noteShopId = n.shopId || n?.payload?.shopId;
-      return String(noteShopId || '') === String(state.activeShopId);
+      // Legacy fix: Include records without shopId in active shop view
+      return !noteShopId || String(noteShopId) === String(state.activeShopId);
     });
   }, [state.notifications, state.activeShopId, isAllShopsMode]);
 
