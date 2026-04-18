@@ -501,7 +501,7 @@ const App: React.FC = () => {
     setIsSyncing(true);
     try {
       // TRUE = Force Full Fetch (Ignore versions)
-      const requestedShopId = currentState.activeShopId;
+      const requestedShopId = MULTI_SHOP_TEMP_DISABLED ? ALL_SHOPS_ID : currentState.activeShopId;
       const response = await fetchRemoteState(true, {
         shopId: requestedShopId && requestedShopId !== ALL_SHOPS_ID ? requestedShopId : undefined,
         allShops: requestedShopId === ALL_SHOPS_ID
@@ -774,9 +774,10 @@ const App: React.FC = () => {
 
              if (safeServerVersion > safeLocalVersion || changedDomains.length > 0) {
                  if (changedDomains.length > 0) {
+                   const requestedShopId = MULTI_SHOP_TEMP_DISABLED ? ALL_SHOPS_ID : stateRef.current.activeShopId;
                    const response = await fetchRemoteState(true, {
-                     shopId: stateRef.current.activeShopId && stateRef.current.activeShopId !== ALL_SHOPS_ID ? stateRef.current.activeShopId : undefined,
-                     allShops: stateRef.current.activeShopId === ALL_SHOPS_ID,
+                     shopId: requestedShopId && requestedShopId !== ALL_SHOPS_ID ? requestedShopId : undefined,
+                     allShops: requestedShopId === ALL_SHOPS_ID,
                      domains: changedDomains
                    });
                    if (response.status === 200 && response.data) {
