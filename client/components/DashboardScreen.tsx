@@ -38,12 +38,13 @@ interface DashboardScreenProps {
   business?: BusinessProfile;
   activeShopId?: string;
   allShopsMode?: boolean;
+  analyticsAllDataMode?: boolean;
   hubOverview?: { rows: Array<{ shopId: string; name: string; sales: number; expenses: number; profit: number; inventoryValue?: number; lastActivity?: string | null }>; totals?: { sales?: number; expenses?: number; profit?: number; inventoryValue?: number } } | null;
   onSelectShop?: (shopId: string) => void;
   onUpdateBusiness?: (business: Partial<BusinessProfile>) => void;
 }
 
-const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, products, expenditures = [], business, activeShopId, allShopsMode, hubOverview, onSelectShop, onUpdateBusiness }) => {
+const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, products, expenditures = [], business, activeShopId, allShopsMode, analyticsAllDataMode, hubOverview, onSelectShop, onUpdateBusiness }) => {
   const [showShieldModal, setShowShieldModal] = useState(false);
 
   const [remoteAnalytics, setRemoteAnalytics] = useState<{
@@ -78,7 +79,12 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
     let active = true;
     if (!navigator.onLine) return;
     if (!localStorage.getItem('ginvoice_auth_token_v1')) return;
-    getAnalyticsByShop({ range: timeRange, shopId: allShopsMode ? undefined : activeShopId, allShops: allShopsMode })
+    const shouldUseAllShopsAnalytics = Boolean(allShopsMode || analyticsAllDataMode);
+    getAnalyticsByShop({
+      range: timeRange,
+      shopId: shouldUseAllShopsAnalytics ? undefined : activeShopId,
+      allShops: shouldUseAllShopsAnalytics
+    })
       .then((data) => {
         if (active) setRemoteAnalytics(data);
       })
@@ -93,7 +99,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
     return () => {
       active = false;
     };
-  }, [transactions, timeRange, activeShopId, allShopsMode]);
+  }, [transactions, timeRange, activeShopId, allShopsMode, analyticsAllDataMode]);
 
   const localStats = useMemo(() => {
     const salesTransactions = transactions.filter(tx => !tx.isPreviousDebt);

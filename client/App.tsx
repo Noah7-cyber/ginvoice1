@@ -1882,6 +1882,7 @@ const App: React.FC = () => {
                     business={state.business}
                     activeShopId={state.activeShopId}
                     allShopsMode={isAllShopsMode}
+                    analyticsAllDataMode={MULTI_SHOP_TEMP_DISABLED}
                     hubOverview={hubOverview}
                     onSelectShop={(shopId) => handleShopSwitch(shopId)}
                     onUpdateBusiness={b => setState(prev => ({ ...prev, business: { ...prev.business, ...b } }))}
