@@ -501,7 +501,7 @@ const App: React.FC = () => {
     setIsSyncing(true);
     try {
       // TRUE = Force Full Fetch (Ignore versions)
-      const requestedShopId = currentState.activeShopId;
+      const requestedShopId = MULTI_SHOP_TEMP_DISABLED ? ALL_SHOPS_ID : currentState.activeShopId;
       const response = await fetchRemoteState(true, {
         shopId: requestedShopId && requestedShopId !== ALL_SHOPS_ID ? requestedShopId : undefined,
         allShops: requestedShopId === ALL_SHOPS_ID
@@ -527,6 +527,14 @@ const App: React.FC = () => {
          const mergedExpenditures = isPartial
            ? mergeByIdPreferServer(expenditures ?? currentState.expenditures, currentState.expenditures)
            : mergeByIdPreferServer(expenditures || [], currentState.expenditures);
+         const normalizedActiveShopId = MULTI_SHOP_TEMP_DISABLED
+           ? (
+               (currentState.activeShopId && currentState.activeShopId !== ALL_SHOPS_ID
+                 ? currentState.activeShopId
+                 : (business?.defaultShopId || currentState.business?.defaultShopId || activeShopId || undefined))
+             )
+           : (activeShopId || currentState.activeShopId || business?.defaultShopId);
+
          const nextState: InventoryState = {
            ...currentState,
            products: isPartial ? (products ?? currentState.products) : (products || []),
@@ -535,8 +543,8 @@ const App: React.FC = () => {
            expenditures: mergedExpenditures,
            notifications: isPartial ? (notifications ?? currentState.notifications) : (notifications || []),
            shops: isPartial ? (shops ?? (currentState.shops || [])) : (shops || currentState.shops || []),
-           activeShopId: activeShopId || currentState.activeShopId || business?.defaultShopId,
-           allShopsMode: Boolean(allShopsMode),
+           activeShopId: normalizedActiveShopId,
+           allShopsMode: MULTI_SHOP_TEMP_DISABLED ? false : Boolean(allShopsMode),
            business: business ? { ...currentState.business, ...business, staffContext: staffContext || currentState.business?.staffContext || null } : currentState.business,
            lastSyncedAt: new Date().toISOString(),
            isLoggedIn: true
@@ -774,9 +782,10 @@ const App: React.FC = () => {
 
              if (safeServerVersion > safeLocalVersion || changedDomains.length > 0) {
                  if (changedDomains.length > 0) {
+                   const requestedShopId = MULTI_SHOP_TEMP_DISABLED ? ALL_SHOPS_ID : stateRef.current.activeShopId;
                    const response = await fetchRemoteState(true, {
-                     shopId: stateRef.current.activeShopId && stateRef.current.activeShopId !== ALL_SHOPS_ID ? stateRef.current.activeShopId : undefined,
-                     allShops: stateRef.current.activeShopId === ALL_SHOPS_ID,
+                     shopId: requestedShopId && requestedShopId !== ALL_SHOPS_ID ? requestedShopId : undefined,
+                     allShops: requestedShopId === ALL_SHOPS_ID,
                      domains: changedDomains
                    });
                    if (response.status === 200 && response.data) {
@@ -792,12 +801,22 @@ const App: React.FC = () => {
                        expenditures = expenditures.map((e: any) => ({ ...e, shopId: e.shopId || fallbackShopId }));
                      }
 
+                     const normalizedActiveShopId = MULTI_SHOP_TEMP_DISABLED
+                       ? (
+                           (stateRef.current.activeShopId && stateRef.current.activeShopId !== ALL_SHOPS_ID)
+                             ? stateRef.current.activeShopId
+                             : (stateRef.current.business.defaultShopId || undefined)
+                         )
+                       : stateRef.current.activeShopId;
+
                      const merged = {
                        ...stateRef.current,
                        products: response.data.products ?? stateRef.current.products,
                        transactions: mergeByIdPreferServer(transactions ?? stateRef.current.transactions, stateRef.current.transactions, (tx: any) => pendingTxIds.has(getRecordId(tx))),
                        expenditures: mergeByIdPreferServer(expenditures ?? stateRef.current.expenditures, stateRef.current.expenditures),
                        categories: response.data.categories ?? stateRef.current.categories,
+                       activeShopId: normalizedActiveShopId,
+                       allShopsMode: MULTI_SHOP_TEMP_DISABLED ? false : Boolean(stateRef.current.allShopsMode),
                        lastSyncedAt: new Date().toISOString()
                      };
                      setState(merged);
@@ -1267,14 +1286,14 @@ const App: React.FC = () => {
   const canManageHistory = state.role === 'owner' || perms.canEditHistory;
 
   const visibleTransactions = useMemo(() => {
+    // Multi-shop disabled - use all state directly
+    if (MULTI_SHOP_TEMP_DISABLED) return state.transactions;
     if (isAllShopsMode) return state.transactions;
     if (!state.activeShopId) return state.transactions;
     // Legacy fix: Include records without shopId in active shop view
     return state.transactions.filter((tx) => !tx.shopId || String(tx.shopId) === String(state.activeShopId));
   }, [state.transactions, state.activeShopId, isAllShopsMode]);
 
-   // Multi-shop disabled - use all state directly
-  const visibleTransactions = state.transactions;
   const visibleExpenditures = state.expenditures || [];
   const visibleNotifications = state.notifications || [];
 
@@ -1863,6 +1882,7 @@ const App: React.FC = () => {
                     business={state.business}
                     activeShopId={state.activeShopId}
                     allShopsMode={isAllShopsMode}
+                    analyticsAllDataMode={MULTI_SHOP_TEMP_DISABLED}
                     hubOverview={hubOverview}
                     onSelectShop={(shopId) => handleShopSwitch(shopId)}
                     onUpdateBusiness={b => setState(prev => ({ ...prev, business: { ...prev.business, ...b } }))}
