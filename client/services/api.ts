@@ -390,6 +390,34 @@ export const deleteExpenditure = async (id: string) => {
   });
 };
 
+export const getTransactions = async (options?: { shopId?: string; allShops?: boolean }) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  const params = new URLSearchParams();
+  if (options?.shopId) params.set('shopId', options.shopId);
+  if (options?.allShops) params.set('allShops', 'true');
+
+  return request(`/api/transactions?${params.toString()}`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+};
+
+export const getExpenditures = async (options?: { shopId?: string; allShops?: boolean }) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  const params = new URLSearchParams();
+  if (options?.shopId) params.set('shopId', options.shopId);
+  if (options?.allShops) params.set('allShops', 'true');
+
+  return request(`/api/expenditures?${params.toString()}`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+};
+
 export const sendChat = async (message: string, history: any[], uiContext?: any) => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');

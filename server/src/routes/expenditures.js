@@ -13,10 +13,16 @@ router.get('/', auth, async (req, res) => {
     const requestedShopId = req.assignedShopId || (req.query.shopId ? String(req.query.shopId) : defaultShopId);
     const allShopsMode = req.assignedShopId ? false : (req.query.allShops === 'true');
 
-    const rawExpenditures = await Expenditure.find({
-        business: businessId,
-        ...(allShopsMode ? {} : { shopId: requestedShopId })
-    }).sort({ date: -1 }).lean();
+    const filter = { business: businessId };
+    if (!allShopsMode) {
+        filter.$or = [
+            { shopId: requestedShopId },
+            { shopId: null },
+            { shopId: { $exists: false } }
+        ];
+    }
+
+    const rawExpenditures = await Expenditure.find(filter).sort({ date: -1 }).lean();
 
     const expenditures = rawExpenditures.map(e => {
       const val = parseFloat((e.amount || 0).toString());

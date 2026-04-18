@@ -28,7 +28,7 @@ import { CURRENCY, INITIAL_PRODUCTS } from './constants';
 import { safeCalculate } from './utils/math';
 import { saveState, loadState, pushToBackend, getDataVersion, saveDataVersion, getDomainVersions, saveDomainVersions, getLastSync, saveLastSync, clearLocalData, flushPendingSyncQueue, hasPendingSyncJobs, listPendingSyncJobs, syncPendingJobsWithProgress, getPendingTransactionIds } from './services/storage';
 import type { PendingSyncJobView } from './services/storage';
-import { login, registerBusiness, saveAuthToken, clearAuthToken, getEntitlements, initializePayment, fetchRemoteState, deleteExpenditure, snoozeStockVerification, dismissNotification, checkServerVersion, createShop, renameShop, getShopsOverview, deleteShop } from './services/api';
+import { login, registerBusiness, saveAuthToken, clearAuthToken, getEntitlements, initializePayment, fetchRemoteState, deleteExpenditure, snoozeStockVerification, dismissNotification, checkServerVersion, createShop, renameShop, getShopsOverview, deleteShop, getTransactions, getExpenditures } from './services/api';
 import { useToast } from './components/ToastProvider';
 import SalesScreen from './components/SalesScreen';
 import InventoryScreen from './components/InventoryScreen';
@@ -491,6 +491,48 @@ const App: React.FC = () => {
     return { ...baseShopContext, tab: activeTab };
   }, [activeTab, cart, historySelectedInvoice, customerName, state.products, state.transactions, state.expenditures, state.business, entitlements, topSellingPreview, recentTransactionsPreview, inventorySalesSnapshot, isAllShopsMode]);
 
+  const refreshFullStateFromServer = useCallback(async () => {
+    if (!navigator.onLine) return;
+    const currentState = stateRef.current;
+    if (!currentState.isLoggedIn) return;
+
+    setIsSyncing(true);
+    try {
+      const options = {
+        shopId: currentState.activeShopId && currentState.activeShopId !== ALL_SHOPS_ID ? currentState.activeShopId : undefined,
+        allShops: currentState.activeShopId === ALL_SHOPS_ID
+      };
+
+      const [txRes, expRes] = await Promise.all([
+        getTransactions(options),
+        getExpenditures(options)
+      ]);
+
+      let transactions = Array.isArray(txRes) ? txRes : (txRes?.data || []);
+      let expenditures = Array.isArray(expRes) ? expRes : (expRes?.data || []);
+
+      // Legacy fix: Normalize records without shopId
+      const fallbackShopId = currentState.activeShopId || currentState.business.defaultShopId;
+      transactions = transactions.map((t: any) => ({ ...t, shopId: t.shopId || fallbackShopId }));
+      expenditures = expenditures.map((e: any) => ({ ...e, shopId: e.shopId || fallbackShopId }));
+
+      const nextState: InventoryState = {
+        ...currentState,
+        transactions,
+        expenditures,
+        lastSyncedAt: new Date().toISOString()
+      };
+
+      setState(nextState);
+      addToast("Data restored from server truth", "success");
+    } catch (err) {
+      console.error("Full state restore failed", err);
+      addToast("Could not restore data from server", "error");
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [addToast]);
+
   const refreshData = useCallback(async (overrideState?: InventoryState) => {
     if (!navigator.onLine) return;
 
@@ -511,12 +553,37 @@ const App: React.FC = () => {
          let { products, transactions, categories, expenditures, business, notifications, shops, activeShopId, allShopsMode, staffContext, partial, versions } = response.data;
          const pendingTxIds = await getPendingTransactionIds();
 
+         const options = {
+            shopId: activeShopId || currentState.activeShopId || business?.defaultShopId,
+            allShops: (activeShopId || currentState.activeShopId) === ALL_SHOPS_ID
+         };
+
+         // Direct Source of Truth Integration:
+         // If we are NOT doing a partial sync (domain-scoped), fetch transactions and expenditures directly
+         // to ensure we have the full server state for display, consistent with the admin portal.
+         if (!partial) {
+            try {
+              const [txRes, expRes] = await Promise.all([
+                getTransactions(options),
+                getExpenditures(options)
+              ]);
+              if (txRes) transactions = Array.isArray(txRes) ? txRes : (txRes.data || transactions);
+              if (expRes) expenditures = Array.isArray(expRes) ? expRes : (expRes.data || expenditures);
+            } catch (err) {
+              console.warn("[Sync] Direct fetch failed, falling back to sync payload", err);
+            }
+         }
+
          // Legacy fix: Normalize records without shopId
-         const fallbackShopId = activeShopId || currentState.activeShopId || business?.defaultShopId;
+         const fallbackShopId = (options.shopId && options.shopId !== ALL_SHOPS_ID) ? options.shopId : business?.defaultShopId;
          if (transactions) {
+            const missing = transactions.filter((t: any) => !t.shopId).length;
+            if (missing > 0) console.log(`[Sync] Normalizing ${missing} transactions missing shopId`);
             transactions = transactions.map((t: any) => ({ ...t, shopId: t.shopId || fallbackShopId }));
          }
          if (expenditures) {
+            const missing = expenditures.filter((e: any) => !e.shopId).length;
+            if (missing > 0) console.log(`[Sync] Normalizing ${missing} expenditures missing shopId`);
             expenditures = expenditures.map((e: any) => ({ ...e, shopId: e.shopId || fallbackShopId }));
          }
 
@@ -774,21 +841,41 @@ const App: React.FC = () => {
 
              if (safeServerVersion > safeLocalVersion || changedDomains.length > 0) {
                  if (changedDomains.length > 0) {
-                   const response = await fetchRemoteState(true, {
+                   const options = {
                      shopId: stateRef.current.activeShopId && stateRef.current.activeShopId !== ALL_SHOPS_ID ? stateRef.current.activeShopId : undefined,
                      allShops: stateRef.current.activeShopId === ALL_SHOPS_ID,
                      domains: changedDomains
-                   });
+                   };
+
+                   const response = await fetchRemoteState(true, options);
                    if (response.status === 200 && response.data) {
                      let { transactions, expenditures } = response.data;
                      const pendingTxIds = await getPendingTransactionIds();
 
+                     // Direct Source of Truth Integration for heartbeat:
+                     if (changedDomains.includes('transactions')) {
+                       try {
+                         const txRes = await getTransactions(options);
+                         if (txRes) transactions = Array.isArray(txRes) ? txRes : (txRes.data || transactions);
+                       } catch (err) { console.warn("[Heartbeat] Direct tx fetch failed", err); }
+                     }
+                     if (changedDomains.includes('expenditures')) {
+                       try {
+                         const expRes = await getExpenditures(options);
+                         if (expRes) expenditures = Array.isArray(expRes) ? expRes : (expRes.data || expenditures);
+                       } catch (err) { console.warn("[Heartbeat] Direct exp fetch failed", err); }
+                     }
+
                      // Legacy fix: Normalize records without shopId
-                     const fallbackShopId = stateRef.current.activeShopId || stateRef.current.business.defaultShopId;
+                     const fallbackShopId = (stateRef.current.activeShopId && stateRef.current.activeShopId !== ALL_SHOPS_ID) ? stateRef.current.activeShopId : stateRef.current.business.defaultShopId;
                      if (transactions) {
+                       const missing = transactions.filter((t: any) => !t.shopId).length;
+                       if (missing > 0) console.log(`[Heartbeat] Normalizing ${missing} transactions missing shopId`);
                        transactions = transactions.map((t: any) => ({ ...t, shopId: t.shopId || fallbackShopId }));
                      }
                      if (expenditures) {
+                       const missing = expenditures.filter((e: any) => !e.shopId).length;
+                       if (missing > 0) console.log(`[Heartbeat] Normalizing ${missing} expenditures missing shopId`);
                        expenditures = expenditures.map((e: any) => ({ ...e, shopId: e.shopId || fallbackShopId }));
                      }
 
@@ -1929,6 +2016,7 @@ const App: React.FC = () => {
                 isShopSwitching={isSwitchingShop}
                 onOpenShopManager={openShopManagementMenu}
                 onManualSync={() => safeSyncWithServer('manual')}
+                onForceRestore={refreshFullStateFromServer}
                 lastSyncedAt={state.lastSyncedAt}
                 onLogout={handleLogout}
                 onDeleteAccount={handleDeleteAccount}

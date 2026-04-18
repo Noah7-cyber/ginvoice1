@@ -16,6 +16,7 @@ interface SettingsScreenProps {
   onOpenShopManager?: () => void;
   onUpdateBusiness: (profile: BusinessProfile) => void;
   onManualSync?: () => void;
+  onForceRestore?: () => void;
   lastSyncedAt?: string;
   isSyncing?: boolean;
   onLogout?: () => void;
@@ -24,7 +25,7 @@ interface SettingsScreenProps {
   onSubscribe?: () => void;
 }
 
-const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, shops = [], activeShopId, isShopSwitching = false, onOpenShopManager, onUpdateBusiness, onManualSync, lastSyncedAt, isSyncing, onLogout, onDeleteAccount, isOnline, onSubscribe }) => {
+const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, shops = [], activeShopId, isShopSwitching = false, onOpenShopManager, onUpdateBusiness, onManualSync, onForceRestore, lastSyncedAt, isSyncing, onLogout, onDeleteAccount, isOnline, onSubscribe }) => {
   const { addToast } = useToast();
   const [formData, setFormData] = useState<BusinessProfile>(business);
   const [showSaved, setShowSaved] = useState(false);
@@ -866,6 +867,21 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, shops = [], a
                              {isExportingFull ? <Loader2 className="animate-spin text-blue-500" size={20} /> : <Download className="text-blue-500" size={20} />}
                           </button>
                       </div>
+                  </div>
+
+                  <div className="bg-orange-50 rounded-3xl shadow-sm border border-orange-100 p-6 md:p-8 space-y-4">
+                      <h2 className="text-lg font-bold flex items-center gap-2 text-orange-700"><RefreshCw className="text-orange-600" /> Data Recovery</h2>
+                      <p className="text-sm text-orange-800">
+                          If you are missing older records, use this tool to bypass the cache and restore all data directly from the server.
+                      </p>
+                      <button
+                        onClick={() => { if(confirm("Restore all records from server? This will bypass your local cache.")) onForceRestore?.(); }}
+                        disabled={isSyncing || !isOnline}
+                        className="w-full flex items-center justify-center gap-2 py-3 bg-white border-2 border-orange-200 text-orange-700 font-bold rounded-xl hover:bg-orange-100 transition-all disabled:opacity-50"
+                      >
+                          {isSyncing ? <Loader2 className="animate-spin" size={20} /> : <Database size={20} />}
+                          Restore Server Truth
+                      </button>
                   </div>
               </div>
           )}

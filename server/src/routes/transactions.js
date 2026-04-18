@@ -7,6 +7,7 @@ const auth = require('../middleware/auth');
 const requireActiveSubscription = require('../middleware/subscription');
 const { ensureWritableShopContext } = require('../services/shopContext');
 const { decrementStock, restoreStock } = require('../services/stockAdapter');
+const { resolveShopId } = require('../services/shopContext');
 
 const withAtomic = async (work) => {
   const session = await Transaction.startSession();
@@ -22,6 +23,56 @@ const withAtomic = async (work) => {
     await session.endSession();
   }
 };
+
+// GET Transactions (Direct Fetch)
+router.get('/', auth, async (req, res) => {
+  try {
+    const businessId = req.businessId;
+    const defaultShopId = await resolveShopId({ businessId, requestedShopId: null });
+    const requestedShopId = req.assignedShopId || (req.query.shopId ? String(req.query.shopId) : defaultShopId);
+    const allShopsMode = req.assignedShopId ? false : (req.query.allShops === 'true');
+
+    // If allShopsMode is true, we fetch everything for the business.
+    // If false, we fetch for specific shop OR records with NO shopId (legacy support)
+    const filter = { businessId };
+    if (!allShopsMode) {
+        filter.$or = [
+            { shopId: requestedShopId },
+            { shopId: null },
+            { shopId: { $exists: false } }
+        ];
+    }
+
+    const rawTransactions = await Transaction.find(filter).sort({ transactionDate: -1, createdAt: -1 }).lean();
+
+    const parseDecimal = (val) => {
+      if (!val) return 0;
+      if (val.toString) return parseFloat(val.toString());
+      return Number(val);
+    };
+
+    const transactions = rawTransactions.map(t => ({
+      ...t,
+      id: t.id || t._id.toString(),
+      items: (t.items || []).map(i => ({
+        ...i,
+        unitPrice: parseDecimal(i.unitPrice),
+        discount: parseDecimal(i.discount),
+        total: parseDecimal(i.total)
+      })),
+      subtotal: parseDecimal(t.subtotal),
+      globalDiscount: parseDecimal(t.globalDiscount),
+      totalAmount: parseDecimal(t.totalAmount),
+      amountPaid: parseDecimal(t.amountPaid),
+      balance: parseDecimal(t.balance)
+    }));
+
+    res.json(transactions);
+  } catch (err) {
+    console.error('Fetch Transactions Error:', err);
+    res.status(500).json({ message: 'Server Error' });
+  }
+});
 
 // CREATE Transaction
 router.post('/', auth, requireActiveSubscription, async (req, res) => {
