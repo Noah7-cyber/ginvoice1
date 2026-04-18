@@ -501,7 +501,7 @@ const App: React.FC = () => {
     setIsSyncing(true);
     try {
       // TRUE = Force Full Fetch (Ignore versions)
-      const requestedShopId = currentState.activeShopId;
+      const requestedShopId = MULTI_SHOP_TEMP_DISABLED ? ALL_SHOPS_ID : currentState.activeShopId;
       const response = await fetchRemoteState(true, {
         shopId: requestedShopId && requestedShopId !== ALL_SHOPS_ID ? requestedShopId : undefined,
         allShops: requestedShopId === ALL_SHOPS_ID
@@ -774,9 +774,10 @@ const App: React.FC = () => {
 
              if (safeServerVersion > safeLocalVersion || changedDomains.length > 0) {
                  if (changedDomains.length > 0) {
+                   const requestedShopId = MULTI_SHOP_TEMP_DISABLED ? ALL_SHOPS_ID : stateRef.current.activeShopId;
                    const response = await fetchRemoteState(true, {
-                     shopId: stateRef.current.activeShopId && stateRef.current.activeShopId !== ALL_SHOPS_ID ? stateRef.current.activeShopId : undefined,
-                     allShops: stateRef.current.activeShopId === ALL_SHOPS_ID,
+                     shopId: requestedShopId && requestedShopId !== ALL_SHOPS_ID ? requestedShopId : undefined,
+                     allShops: requestedShopId === ALL_SHOPS_ID,
                      domains: changedDomains
                    });
                    if (response.status === 200 && response.data) {
@@ -1267,14 +1268,14 @@ const App: React.FC = () => {
   const canManageHistory = state.role === 'owner' || perms.canEditHistory;
 
   const visibleTransactions = useMemo(() => {
+    // Multi-shop disabled - use all state directly
+    if (MULTI_SHOP_TEMP_DISABLED) return state.transactions;
     if (isAllShopsMode) return state.transactions;
     if (!state.activeShopId) return state.transactions;
     // Legacy fix: Include records without shopId in active shop view
     return state.transactions.filter((tx) => !tx.shopId || String(tx.shopId) === String(state.activeShopId));
   }, [state.transactions, state.activeShopId, isAllShopsMode]);
 
-   // Multi-shop disabled - use all state directly
-  const visibleTransactions = state.transactions;
   const visibleExpenditures = state.expenditures || [];
   const visibleNotifications = state.notifications || [];
 

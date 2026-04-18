@@ -82,6 +82,16 @@ const buildSettledTransaction = (transaction: Transaction): Transaction => ({
 const debtorKeyForTransactions = (transactions: Transaction[]) =>
   transactions.map(tx => tx.id).sort().join('|');
 
+const isStockAdjustmentTransaction = (transaction: Transaction) => {
+  const normalizedCustomerName = (transaction.customerName || '').trim().toLowerCase();
+  const hasAdjustmentId =
+    transaction.id?.startsWith('adj-') ||
+    transaction.transactionId?.startsWith('adj-') ||
+    transaction.idempotencyKey?.startsWith('adj-');
+
+  return normalizedCustomerName === 'stock adjustment' || Boolean(hasAdjustmentId);
+};
+
 const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, business, onDeleteTransaction, onUpdateTransaction, onCreatePreviousDebt, isSubscriptionExpired, onRenewSubscription, isReadOnly, isOnline, initialParams, onSelectedInvoiceChange }) => {
   const { addToast } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>('invoices');
@@ -109,7 +119,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
     }
 
     if (initialParams?.id) {
-       const tx = transactions.find(t => t.id === initialParams.id);
+       const tx = transactions.find(t => t.id === initialParams.id && !isStockAdjustmentTransaction(t));
        if (tx) {
          setSelectedInvoice(tx);
        }
@@ -162,6 +172,8 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
   });
 
   const filteredInvoices = useMemo(() => transactions.filter(t => {
+    if (isStockAdjustmentTransaction(t)) return false;
+
     const matchesSearch = t.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           t.id.toLowerCase().includes(searchTerm.toLowerCase());
 
@@ -190,6 +202,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
     const map = new Map<string, { name: string, totalOwed: number, invoiceCount: number, lastTxDate: string, transactions: Transaction[], phone?: string }>();
     
     transactions.forEach(t => {
+      if (isStockAdjustmentTransaction(t)) return;
       if (toMoneyNumber(t.balance) > 0.01) {
         const key = normalizeCustomerKey(t.customerName);
         if (!key) return;
