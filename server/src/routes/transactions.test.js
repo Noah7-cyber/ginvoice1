@@ -137,6 +137,61 @@ describe('Transactions API Edge Cases', () => {
         const stock = await ProductShopStock.findOne({ businessId: businessId.toString(), shopId, productId });
         expect(stock.onHand).toBe(100 - (2 * 12));
     });
+
+    it('should be idempotent for repeated create requests with same idempotencyKey', async () => {
+      const productId = 'prod-idem';
+      await Product.create({ businessId: businessId.toString(), id: productId, name: 'Product idem', stock: 20 });
+      await ProductShopStock.create({ businessId: businessId.toString(), shopId, productId, onHand: 20 });
+
+      const payload = {
+        id: 'tx-idem-1',
+        transactionId: 'tx-idem-1',
+        idempotencyKey: 'idem-key-1',
+        items: [{ productId, productName: 'Product idem', quantity: 2, multiplier: 1, total: 20 }],
+        totalAmount: 20,
+        amountPaid: 20,
+        paymentMethod: 'cash',
+        shopId
+      };
+
+      const first = await request(app).post('/api/transactions').set('Authorization', `Bearer ${token}`).send(payload);
+      const second = await request(app).post('/api/transactions').set('Authorization', `Bearer ${token}`).send(payload);
+
+      expect(first.statusCode).toBe(201);
+      expect(second.statusCode).toBe(200);
+      const txCount = await Transaction.countDocuments({ businessId, id: 'tx-idem-1' });
+      expect(txCount).toBe(1);
+      const stock = await ProductShopStock.findOne({ businessId: businessId.toString(), shopId, productId });
+      expect(stock.onHand).toBe(18);
+    });
+
+    it('should handle multiple sync-now style rapid retries without double stock deduction', async () => {
+      const productId = 'prod-multi-click';
+      await Product.create({ businessId: businessId.toString(), id: productId, name: 'Product rapid', stock: 15 });
+      await ProductShopStock.create({ businessId: businessId.toString(), shopId, productId, onHand: 15 });
+
+      const payload = {
+        id: 'tx-multi-click',
+        transactionId: 'tx-multi-click',
+        idempotencyKey: 'tx-multi-click',
+        items: [{ productId, productName: 'Product rapid', quantity: 3, multiplier: 1, total: 30 }],
+        totalAmount: 30,
+        amountPaid: 30,
+        paymentMethod: 'cash',
+        shopId
+      };
+
+      await Promise.all([
+        request(app).post('/api/transactions').set('Authorization', `Bearer ${token}`).send(payload),
+        request(app).post('/api/transactions').set('Authorization', `Bearer ${token}`).send(payload),
+        request(app).post('/api/transactions').set('Authorization', `Bearer ${token}`).send(payload)
+      ]);
+
+      const txCount = await Transaction.countDocuments({ businessId, id: 'tx-multi-click' });
+      expect(txCount).toBe(1);
+      const stock = await ProductShopStock.findOne({ businessId: businessId.toString(), shopId, productId });
+      expect(stock.onHand).toBe(12);
+    });
   });
 
   describe('PUT /api/transactions/:id', () => {

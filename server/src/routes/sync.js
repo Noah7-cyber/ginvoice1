@@ -13,13 +13,28 @@ const Shop = require('../models/Shop');
 const ProductShopStock = require('../models/ProductShopStock');
 const { maybeCreateStockVerificationNotification } = require('../services/stockVerification');
 const { resolveShopId, isAllShopsMode } = require('../services/shopContext');
-const { applyManualAdjustment, restoreStock } = require('../services/stockAdapter');
+const { decrementStock, restoreStock } = require('../services/stockAdapter');
 
 // Middleware
 const auth = require('../middleware/auth');
 const requireActiveSubscription = require('../middleware/subscription');
 
 const router = express.Router();
+
+const withAtomic = async (work) => {
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => work(session));
+  } catch (err) {
+    if (err?.code === 20 || String(err?.message || '').includes('Transaction numbers are only allowed')) {
+      await work(null);
+    } else {
+      throw err;
+    }
+  } finally {
+    await session.endSession();
+  }
+};
 
 // --- HELPER FUNCTIONS ---
 const toDecimal = (value) => {
@@ -417,13 +432,8 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
         : [];
 
       const existingProductMap = new Map(existingProducts.map((p) => [p.id, p]));
-      const stockRows = incomingProductIds.length > 0
-        ? await ProductShopStock.find({ businessId, productId: { $in: incomingProductIds } }).lean()
-        : [];
-      const stockByShopProduct = new Map(stockRows.map((row) => [`${String(row.shopId)}::${String(row.productId)}`, Number(row.onHand || 0)]));
 
       const productNotifications = [];
-      const stockMirrorOps = [];
       const shopPresenceOps = [];
 
       const productOps = products.map((p) => {
@@ -440,7 +450,6 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
           return null;
         }
 
-        const stockDelta = Number(p.stockDelta); // Optional Delta
         const productShopId = req.assignedShopId || p.shopId || defaultShopId;
         shopPresenceOps.push({
           updateOne: {
@@ -450,62 +459,48 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
           }
         });
 
-        // Idempotency / Stale Check
-        // If we have a delta, we want to apply it even if the timestamp is "stale" (out of order),
-        // because deltas merge mathematically. However, we must prevent exact replays.
         if (existing) {
-          // FIX: ONLY compare against the client's last known time, NEVER the server's time.
           const existingUpdatedAt = existing.clientUpdatedAt
             ? new Date(existing.clientUpdatedAt)
-            : new Date(0); // Default to absolute past if no client time exists
+            : new Date(0);
 
-          // Guard against accidental resurrection of tombstoned products.
-          // A deleted item should only be restored by a strictly newer explicit update.
           if (existing.isDeleted && !p.isDeleted) {
             if (Number.isNaN(existingUpdatedAt.getTime()) || incomingUpdatedAt <= existingUpdatedAt) {
               return null;
             }
           }
 
-          if (!Number.isNaN(existingUpdatedAt.getTime())) {
-              // Guard against replay/duplicate stock deltas causing ghost additions.
-              if (incomingUpdatedAt <= existingUpdatedAt) return null;
+          if (!Number.isNaN(existingUpdatedAt.getTime()) && incomingUpdatedAt <= existingUpdatedAt) {
+            return null;
           }
         }
 
-        // --- DELETION HANDLING ---
         if (p.isDeleted) {
-           if (existing && !existing.isDeleted) {
-               productNotifications.push({
-                   businessId,
-                   type: 'deletion',
-                   title: 'Product Deleted',
-                   message: `Product deleted: ${p.name || existing.name || productId}`,
-                   body: 'An item was removed from inventory.',
-                   amount: 0,
-                   performedBy: req.userRole === 'owner' ? 'Owner' : 'Staff',
-                   shopId: productShopId,
-                   payload: { productId, shopId: productShopId }
-               });
-           }
-           return {
-             updateOne: {
-               filter: { businessId, id: productId },
-               update: { $set: { isDeleted: true, deletedAt: new Date(), clientUpdatedAt: incomingUpdatedAt, updatedAt: new Date() } }
-             }
-           };
+          if (existing && !existing.isDeleted) {
+            productNotifications.push({
+              businessId,
+              type: 'deletion',
+              title: 'Product Deleted',
+              message: `Product deleted: ${p.name || existing.name || productId}`,
+              body: 'An item was removed from inventory.',
+              amount: 0,
+              performedBy: req.userRole === 'owner' ? 'Owner' : 'Staff',
+              shopId: productShopId,
+              payload: { productId, shopId: productShopId }
+            });
+          }
+          return {
+            updateOne: {
+              filter: { businessId, id: productId },
+              update: { $set: { isDeleted: true, deletedAt: new Date(), clientUpdatedAt: incomingUpdatedAt, updatedAt: new Date() } }
+            }
+          };
         }
 
-        // --- NOTIFICATION & DELTA LOGIC ---
         const nextSelling = Number(p.sellingPrice || 0);
-        // stockDelta already declared above
-        const nextStockAbsolute = Number(p.currentStock || 0);
 
         if (existing) {
           const prevSelling = parseDecimal(existing.sellingPrice);
-          const prevStock = Number(stockByShopProduct.get(`${productShopId}::${productId}`) ?? existing.stock ?? 0);
-
-          // 1. Price Change Notification
           if (nextSelling !== prevSelling) {
             productNotifications.push({
               businessId,
@@ -519,46 +514,32 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
               payload: { productId, shopId: productShopId, productName: p.name || '', field: 'sellingPrice', previous: prevSelling, next: nextSelling }
             });
           }
-
-          // Stock delta notifications are intentionally omitted here to reduce duplicate ghost notes
-          // from replayed or batched sync pushes. Verification and sales histories remain available.
         }
 
-        // --- UPDATE CONSTRUCTION ---
         const updateSet = {
-            businessId,
-            id: productId,
-            name: p.name || existing?.name || 'Unnamed Product',
-            category: p.category,
-            // stock: Set below based on delta vs absolute
-            sellingPrice: toDecimal(p.sellingPrice),
-            costPrice: toDecimal(p.costPrice),
-            baseUnit: p.baseUnit || 'Piece',
-            units: Array.isArray(p.units) ? p.units.map(u => ({
-              name: u.name,
-              multiplier: u.multiplier,
-              sellingPrice: toDecimal(u.sellingPrice),
-              costPrice: toDecimal(u.costPrice)
-            })) : [],
-            clientUpdatedAt: incomingUpdatedAt,
-            updatedAt: new Date(),
-            isDeleted: false,
-            deletedAt: null // Resurrect if previously deleted
+          businessId,
+          id: productId,
+          name: p.name || existing?.name || 'Unnamed Product',
+          category: p.category,
+          sellingPrice: toDecimal(p.sellingPrice),
+          costPrice: toDecimal(p.costPrice),
+          baseUnit: p.baseUnit || 'Piece',
+          units: Array.isArray(p.units) ? p.units.map(u => ({
+            name: u.name,
+            multiplier: u.multiplier,
+            sellingPrice: toDecimal(u.sellingPrice),
+            costPrice: toDecimal(u.costPrice)
+          })) : [],
+          clientUpdatedAt: incomingUpdatedAt,
+          updatedAt: new Date(),
+          isDeleted: false,
+          deletedAt: null
         };
-
-        const updateOp = { $set: updateSet };
-
-        // Shop-scoped stock mirror (legacy product.stock is read fallback only and is not written).
-        if (typeof stockDelta === 'number' && !Number.isNaN(stockDelta)) {
-            stockMirrorOps.push(applyManualAdjustment({ businessId, shopId: productShopId, productId, delta: stockDelta }));
-        } else {
-            stockMirrorOps.push(applyManualAdjustment({ businessId, shopId: productShopId, productId, currentStock: nextStockAbsolute }));
-        }
 
         return {
           updateOne: {
             filter: { businessId, id: productId },
-            update: updateOp,
+            update: { $set: updateSet },
             upsert: true
           }
         };
@@ -566,7 +547,6 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
 
       if (productOps.length > 0) {
         await Product.bulkWrite(productOps);
-        await Promise.allSettled(stockMirrorOps);
         if (shopPresenceOps.length > 0) {
           await ProductShopStock.bulkWrite(shopPresenceOps);
         }
@@ -578,16 +558,13 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
     }
 
     if (transactions.length > 0) {
-
       const incomingIds = transactions
-        .map((t) => String(t?.id || '').trim())
+        .map((t) => String(t?.transactionId || t?.id || '').trim())
         .filter(Boolean);
 
       const existingTxs = incomingIds.length > 0
         ? await Transaction.find({ businessId, id: { $in: incomingIds } }).lean()
         : [];
-
-      const existingMap = new Map(existingTxs.map(t => [t.id, t]));
 
       const deletedTxNotifications = incomingIds.length > 0
         ? await Notification.find({
@@ -599,98 +576,126 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
 
       const deletedTxMap = new Map(
         deletedTxNotifications
-          .map(n => [String(n?.payload?.transactionId || '').trim(), n?.timestamp ? new Date(n.timestamp) : null])
+          .map((n) => [String(n?.payload?.transactionId || '').trim(), n?.timestamp ? new Date(n.timestamp) : null])
           .filter(([id, ts]) => id && ts && !Number.isNaN(ts.getTime()))
       );
 
-      const txOps = transactions.map((t) => {
-        const txId = String(t?.id || '').trim();
+      const existingByIdMap = new Map(existingTxs.map((tx) => [tx.id, tx]));
+
+      for (const t of transactions) {
+        const txId = String(t?.transactionId || t?.id || '').trim();
         if (!txId) {
           skippedTransactions += 1;
-          return null;
+          continue;
         }
 
-        const existing = existingMap.get(txId);
-        const hasClientUpdatedAt = Boolean(t.updatedAt);
-        const incomingUpdatedAt = hasClientUpdatedAt ? new Date(t.updatedAt) : new Date();
+        const incomingUpdatedAt = t.updatedAt ? new Date(t.updatedAt) : new Date();
         if (Number.isNaN(incomingUpdatedAt.getTime())) {
           skippedTransactions += 1;
-          return null;
+          continue;
+        }
+
+        const deletedAt = deletedTxMap.get(txId);
+        if (deletedAt && incomingUpdatedAt <= deletedAt) {
+          continue;
         }
 
         const safeTransactionDate = parseDateOrFallback(t.transactionDate, new Date());
-
-        const deletedAt = deletedTxMap.get(txId);
-        if (deletedAt && (!hasClientUpdatedAt || incomingUpdatedAt <= deletedAt)) {
-          return null;
-        }
+        const idempotencyKey = String(t.idempotencyKey || txId).trim();
+        const existingById = existingByIdMap.get(txId) || null;
+        const existingByKey = idempotencyKey
+          ? await Transaction.findOne({ businessId, idempotencyKey }).lean()
+          : null;
+        const existing = existingById || existingByKey;
 
         if (existing) {
-          // FIX: ONLY compare against the client's last known time, NEVER the server's time.
-          const existingUpdatedAt = existing.clientUpdatedAt
-            ? new Date(existing.clientUpdatedAt)
-            : new Date(0); // Default to absolute past if no client time exists
-
+          const existingUpdatedAt = existing.clientUpdatedAt ? new Date(existing.clientUpdatedAt) : new Date(0);
           if (!Number.isNaN(existingUpdatedAt.getTime()) && incomingUpdatedAt <= existingUpdatedAt) {
-            return null;
+            continue;
           }
         }
 
-        const updateData = {
-          businessId,
-          shopId: req.assignedShopId || t.shopId || defaultShopId,
-          id: txId,
-          transactionDate: safeTransactionDate,
-          customerName: normalizeCustomerName(t.customerName),
-          customerPhone: t.customerPhone || '',
-          isPreviousDebt: Boolean(t.isPreviousDebt),
-          items: (t.items || []).map((item) => ({
-            productId: item.productId,
-            productName: item.productName || item.productId || 'Unknown Item',
-            quantity: item.quantity,
-            unit: item.selectedUnit ? item.selectedUnit.name : item.unit,
-            multiplier: item.selectedUnit ? item.selectedUnit.multiplier : (item.multiplier || 1),
-            unitPrice: toDecimal(item.unitPrice),
-            discount: toDecimal(item.discount),
-            total: toDecimal(item.total)
-          })),
-          subtotal: toDecimal(t.subtotal),
-          globalDiscount: toDecimal(t.globalDiscount),
-          totalAmount: toDecimal(t.totalAmount),
-          paymentMethod: t.paymentMethod || 'cash',
-          amountPaid: toDecimal(t.amountPaid),
-          balance: toDecimal(t.balance),
-          paymentStatus: t.paymentStatus === 'credit' ? 'credit' : 'paid',
-          signature: t.signature,
-          isSignatureLocked: Boolean(t.isSignatureLocked),
-          staffId: t.staffId || (t.createdByRole === 'staff' ? 'Store Staff' : 'owner'),
-          createdByRole: t.createdByRole === 'staff' ? 'staff' : 'owner',
-          createdByUserId: t.createdByUserId ? String(t.createdByUserId) : '',
-          clientUpdatedAt: incomingUpdatedAt,
-          updatedAt: new Date()
-        };
+        const normalizedItems = (t.items || []).map((item) => ({
+          productId: item.productId,
+          productName: item.productName || item.productId || 'Unknown Item',
+          quantity: Number(item.quantity || 0),
+          unit: item.selectedUnit ? item.selectedUnit.name : item.unit,
+          multiplier: item.selectedUnit ? item.selectedUnit.multiplier : (item.multiplier || 1),
+          unitPrice: toDecimal(item.unitPrice),
+          discount: toDecimal(item.discount),
+          total: toDecimal(item.total)
+        }));
 
-        if (existing) {
-          return {
-            updateOne: {
-              filter: { businessId, id: txId },
-              update: { $set: updateData }
+        const nextShopId = req.assignedShopId || t.shopId || existing?.shopId || defaultShopId;
+        const inventoryEffect = t.inventoryEffect === 'restock' ? 'restock' : 'sale';
+
+        try {
+          await withAtomic(async (session) => {
+            if (existing) {
+              const existingEffect = existing.inventoryEffect === 'restock' ? 'restock' : 'sale';
+              for (const item of existing.items || []) {
+                const qty = Number(item.quantity || 0) * Number(item.multiplier || 1);
+                if (!item.productId || qty <= 0) continue;
+                if (existingEffect === 'sale') {
+                  await restoreStock({ businessId, shopId: existing.shopId || defaultShopId, productId: item.productId, qty, session });
+                } else {
+                  await decrementStock({ businessId, shopId: existing.shopId || defaultShopId, productId: item.productId, qty, session });
+                }
+              }
             }
-          };
+
+            for (const item of normalizedItems) {
+              const qty = Number(item.quantity || 0) * Number(item.multiplier || 1);
+              if (!item.productId || qty <= 0) continue;
+              if (inventoryEffect === 'sale') {
+                await decrementStock({ businessId, shopId: nextShopId, productId: item.productId, qty, session });
+              } else {
+                await restoreStock({ businessId, shopId: nextShopId, productId: item.productId, qty, session });
+              }
+            }
+
+            await Transaction.updateOne(
+              { businessId, id: existing?.id || txId },
+              {
+                $set: {
+                  businessId,
+                  shopId: nextShopId,
+                  id: txId,
+                  idempotencyKey,
+                  inventoryEffect,
+                  transactionDate: safeTransactionDate,
+                  customerName: normalizeCustomerName(t.customerName),
+                  customerPhone: t.customerPhone || '',
+                  isPreviousDebt: Boolean(t.isPreviousDebt),
+                  items: normalizedItems,
+                  subtotal: toDecimal(t.subtotal),
+                  globalDiscount: toDecimal(t.globalDiscount),
+                  totalAmount: toDecimal(t.totalAmount),
+                  paymentMethod: t.paymentMethod || 'cash',
+                  amountPaid: toDecimal(t.amountPaid),
+                  balance: toDecimal(t.balance),
+                  paymentStatus: t.paymentStatus === 'credit' ? 'credit' : 'paid',
+                  signature: t.signature,
+                  isSignatureLocked: Boolean(t.isSignatureLocked),
+                  staffId: t.staffId || (t.createdByRole === 'staff' ? 'Store Staff' : 'owner'),
+                  createdByRole: t.createdByRole === 'staff' ? 'staff' : 'owner',
+                  createdByUserId: t.createdByUserId ? String(t.createdByUserId) : '',
+                  clientUpdatedAt: incomingUpdatedAt,
+                  updatedAt: new Date()
+                },
+                $setOnInsert: {
+                  createdAt: safeTransactionDate || new Date()
+                }
+              },
+              { upsert: true, ...(session ? { session } : {}) }
+            );
+          });
+
+          const finalDoc = await Transaction.findOne({ businessId, id: txId }).lean();
+          if (finalDoc) existingByIdMap.set(txId, finalDoc);
+        } catch (err) {
+          skippedTransactions += 1;
         }
-
-        return {
-          insertOne: {
-            document: {
-              ...updateData,
-              createdAt: safeTransactionDate || new Date()
-            }
-          }
-        };
-      }).filter(Boolean);
-
-      if (txOps.length > 0) {
-        await Transaction.bulkWrite(txOps);
       }
     }
 

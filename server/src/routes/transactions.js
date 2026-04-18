@@ -5,14 +5,32 @@ const Notification = require('../models/Notification');
 const Business = require('../models/Business');
 const auth = require('../middleware/auth');
 const requireActiveSubscription = require('../middleware/subscription');
-const { resolveShopId, ensureWritableShopContext } = require('../services/shopContext');
-const { decrementStock, restoreStock, reconcileSaleEdit } = require('../services/stockAdapter');
+const { ensureWritableShopContext } = require('../services/shopContext');
+const { decrementStock, restoreStock } = require('../services/stockAdapter');
+
+const withAtomic = async (work) => {
+  const session = await Transaction.startSession();
+  try {
+    await session.withTransaction(async () => work(session));
+  } catch (err) {
+    if (err?.code === 20 || String(err?.message || '').includes('Transaction numbers are only allowed')) {
+      await work(null);
+    } else {
+      throw err;
+    }
+  } finally {
+    await session.endSession();
+  }
+};
 
 // CREATE Transaction
 router.post('/', auth, requireActiveSubscription, async (req, res) => {
   try {
-    const { items, customerName, totalAmount, amountPaid, paymentMethod, transactionDate, id, staffId, discountCode, shopId: requestedShopId, allShops } = req.body;
+    const { items, customerName, totalAmount, amountPaid, paymentMethod, transactionDate, id, transactionId, idempotencyKey, staffId, discountCode, shopId: requestedShopId, allShops, inventoryEffect } = req.body;
     const shopId = await ensureWritableShopContext({ businessId: req.businessId, requestedShopId, allShops, enforcedShopId: req.assignedShopId });
+    const txId = String(transactionId || id || '').trim();
+    if (!txId) return res.status(400).json({ message: 'Transaction id required' });
+    const idemKey = String(idempotencyKey || txId).trim();
 
     // 1. Determine Staff ID (Trust frontend "Store Staff" if provided, otherwise fallback to user)
     // NOTE: This logic ensures Owner can't accidentally attribute to themselves if they selected "Staff" mode on frontend
@@ -20,40 +38,64 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
     const createdByUserId = req.user?.id ? String(req.user.id) : '';
     const finalStaffId = staffId || (createdByRole === 'staff' ? (createdByUserId || 'Store Staff') : 'owner');
 
-    const newTransaction = new Transaction({
-      businessId: req.businessId,
-      shopId,
-      id,
-      transactionDate: transactionDate || new Date(),
-      customerName,
-      items,
-      totalAmount,
-      amountPaid,
-      paymentMethod,
-      staffId: finalStaffId,
-      createdByRole,
-      createdByUserId,
-      discountCode, // Save discount code if used
-      // Auto-calculate balance
-      balance: Math.max(0, totalAmount - amountPaid),
-      paymentStatus: (totalAmount - amountPaid) <= 0 ? 'paid' : 'credit'
-    });
+    const existingById = await Transaction.findOne({ businessId: req.businessId, id: txId });
+    const existingByKey = idemKey ? await Transaction.findOne({ businessId: req.businessId, idempotencyKey: idemKey }) : null;
+    const existing = existingById || existingByKey;
+    if (existing) return res.status(200).json(existing);
 
-    await newTransaction.save();
+    const normalizedItems = (items || []).map((item) => ({
+      ...item,
+      quantity: Number(item.quantity || 0),
+      multiplier: item.selectedUnit ? item.selectedUnit.multiplier : (item.multiplier || 1)
+    }));
+    const effect = inventoryEffect === 'restock' ? 'restock' : 'sale';
 
-    // 2. Decrement Stock
-    if (items && items.length > 0) {
-      for (const item of items) {
-        const multiplier = item.multiplier || (item.selectedUnit ? item.selectedUnit.multiplier : 1);
-        await decrementStock({ businessId: req.businessId, shopId, productId: item.productId, qty: item.quantity * multiplier });
+    let newTransaction;
+    await withAtomic(async (session) => {
+      newTransaction = new Transaction({
+        businessId: req.businessId,
+        shopId,
+        id: txId,
+        idempotencyKey: idemKey,
+        inventoryEffect: effect,
+        transactionDate: transactionDate || new Date(),
+        customerName,
+        items: normalizedItems,
+        totalAmount,
+        amountPaid,
+        paymentMethod,
+        staffId: finalStaffId,
+        createdByRole,
+        createdByUserId,
+        discountCode,
+        balance: Math.max(0, totalAmount - amountPaid),
+        paymentStatus: (totalAmount - amountPaid) <= 0 ? 'paid' : 'credit'
+      });
+      await newTransaction.save(session ? { session } : undefined);
+
+      if (normalizedItems.length > 0) {
+        for (const item of normalizedItems) {
+          const multiplier = item.multiplier || 1;
+          const qty = Number(item.quantity || 0) * Number(multiplier || 1);
+          if (!item.productId || qty <= 0) continue;
+          if (effect === 'restock') {
+            await restoreStock({ businessId: req.businessId, shopId, productId: item.productId, qty, session });
+          } else {
+            await decrementStock({ businessId: req.businessId, shopId, productId: item.productId, qty, session });
+          }
+        }
       }
-    }
+    });
 
     // 3. Increment Data Version (Smart Sync)
     await Business.findByIdAndUpdate(req.businessId, { $inc: { dataVersion: 0.001 } });
 
     res.status(201).json(newTransaction);
   } catch (err) {
+    if (err?.code === 11000) {
+      const existing = await Transaction.findOne({ businessId: req.businessId, id: String(req.body?.transactionId || req.body?.id || '').trim() });
+      if (existing) return res.status(200).json(existing);
+    }
     if (err?.status) return res.status(err.status).json({ message: err.message });
     console.error('Create Transaction Error:', err);
     res.status(500).json({ message: 'Server Error' });
@@ -64,7 +106,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
 router.put('/:id', auth, requireActiveSubscription, async (req, res) => {
   try {
     const { id } = req.params;
-    const { items: newItems, totalAmount, amountPaid, paymentMethod, customerName, date, shopId: requestedShopId, allShops } = req.body;
+    const { items: newItems, totalAmount, amountPaid, paymentMethod, customerName, date, shopId: requestedShopId, allShops, idempotencyKey, inventoryEffect } = req.body;
 
     // 1. Fetch Original
     const originalTx = await Transaction.findOne({ id, businessId: req.businessId });
@@ -72,13 +114,39 @@ router.put('/:id', auth, requireActiveSubscription, async (req, res) => {
     const shopId = await ensureWritableShopContext({ businessId: req.businessId, requestedShopId: requestedShopId || originalTx.shopId, allShops, enforcedShopId: req.assignedShopId });
     if (!originalTx.shopId) originalTx.shopId = shopId;
 
-    // 2. Rollback Stock (Restock Original Items)
-    await reconcileSaleEdit({ businessId: req.businessId, shopId, originalItems: originalTx.items, newItems });
+    const normalizedNewItems = (newItems || []).map((item) => ({
+      ...item,
+      quantity: Number(item.quantity || 0),
+      multiplier: item.selectedUnit ? item.selectedUnit.multiplier : (item.multiplier || 1)
+    }));
+    const nextEffect = inventoryEffect === 'restock' ? 'restock' : 'sale';
+
+    await withAtomic(async (session) => {
+      const prevEffect = originalTx.inventoryEffect === 'restock' ? 'restock' : 'sale';
+      for (const item of originalTx.items || []) {
+        const multiplier = item.multiplier || (item.selectedUnit ? item.selectedUnit.multiplier : 1);
+        const qty = Number(item.quantity || 0) * Number(multiplier || 1);
+        if (!item.productId || qty <= 0) continue;
+        if (prevEffect === 'sale') {
+          await restoreStock({ businessId: req.businessId, shopId, productId: item.productId, qty, session });
+        } else {
+          await decrementStock({ businessId: req.businessId, shopId, productId: item.productId, qty, session });
+        }
+      }
+      for (const item of normalizedNewItems) {
+        const qty = Number(item.quantity || 0) * Number(item.multiplier || 1);
+        if (!item.productId || qty <= 0) continue;
+        if (nextEffect === 'sale') {
+          await decrementStock({ businessId: req.businessId, shopId, productId: item.productId, qty, session });
+        } else {
+          await restoreStock({ businessId: req.businessId, shopId, productId: item.productId, qty, session });
+        }
+      }
 
     // 4. Update Transaction Fields
     // RECALCULATE LOGIC: Ensure data integrity by recalculating totals
     // Calculate subtotal from items
-    const subtotal = newItems.reduce((sum, item) => sum + (Number(item.total) || 0), 0);
+    const subtotal = normalizedNewItems.reduce((sum, item) => sum + (Number(item.total) || 0), 0);
 
     // Use provided global discount (or keep existing if not provided, though ideally it should be provided)
     // If not provided in body, we might want to check if the frontend sends it.
@@ -106,17 +174,20 @@ router.put('/:id', auth, requireActiveSubscription, async (req, res) => {
         originalTx.paymentStatus = 'credit';
     }
 
-    originalTx.items = newItems;
-    originalTx.shopId = shopId;
-    originalTx.subtotal = subtotal;
-    originalTx.globalDiscount = finalGlobalDiscount;
-    originalTx.totalAmount = calculatedTotal;
-    originalTx.amountPaid = amountPaid;
-    originalTx.paymentMethod = paymentMethod;
-    originalTx.customerName = customerName;
-    if (date) originalTx.transactionDate = date; // Allow date update if provided
+      originalTx.items = normalizedNewItems;
+      originalTx.shopId = shopId;
+      originalTx.idempotencyKey = String(idempotencyKey || originalTx.idempotencyKey || originalTx.id).trim();
+      originalTx.inventoryEffect = nextEffect;
+      originalTx.subtotal = subtotal;
+      originalTx.globalDiscount = finalGlobalDiscount;
+      originalTx.totalAmount = calculatedTotal;
+      originalTx.amountPaid = amountPaid;
+      originalTx.paymentMethod = paymentMethod;
+      originalTx.customerName = customerName;
+      if (date) originalTx.transactionDate = date;
 
-    await originalTx.save();
+      await originalTx.save(session ? { session } : undefined);
+    });
 
     // 4b. Increment Data Version
     await Business.findByIdAndUpdate(req.businessId, { $inc: { dataVersion: 0.001 } });

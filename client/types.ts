@@ -126,6 +126,9 @@ export interface SaleItem {
 
 export interface Transaction {
   id: string;
+  transactionId?: string;
+  idempotencyKey?: string;
+  inventoryEffect?: 'sale' | 'restock';
   shopId?: string;
   transactionDate: string;
   customerName: string;
