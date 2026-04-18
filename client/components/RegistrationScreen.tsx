@@ -119,6 +119,9 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onM
               status: 'success',
             });
           }
+	if ((window as any).fbq) {
+  (window as any).fbq('track', 'CompleteRegistration');
+}
         } else {
           addToast('Please fill in all required fields', 'error');
         }
