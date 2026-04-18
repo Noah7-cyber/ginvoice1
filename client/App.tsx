@@ -1273,23 +1273,10 @@ const App: React.FC = () => {
     return state.transactions.filter((tx) => !tx.shopId || String(tx.shopId) === String(state.activeShopId));
   }, [state.transactions, state.activeShopId, isAllShopsMode]);
 
-  const visibleExpenditures = useMemo(() => {
-    if (isAllShopsMode) return state.expenditures;
-    if (!state.activeShopId) return state.expenditures;
-    // Legacy fix: Include records without shopId in active shop view
-    return (state.expenditures || []).filter((exp) => !exp.shopId || String(exp.shopId) === String(state.activeShopId));
-  }, [state.expenditures, state.activeShopId, isAllShopsMode]);
-
-  const visibleNotifications = useMemo(() => {
-    const notes = state.notifications || [];
-    if (isAllShopsMode) return notes;
-    if (!state.activeShopId) return notes;
-    return notes.filter((n: any) => {
-      const noteShopId = n.shopId || n?.payload?.shopId;
-      // Legacy fix: Include records without shopId in active shop view
-      return !noteShopId || String(noteShopId) === String(state.activeShopId);
-    });
-  }, [state.notifications, state.activeShopId, isAllShopsMode]);
+   // Multi-shop disabled - use all state directly
+  const visibleTransactions = state.transactions;
+  const visibleExpenditures = state.expenditures || [];
+  const visibleNotifications = state.notifications || [];
 
   const handleShopSwitch = async (nextShopId: string) => {
     if (stateRef.current.role === 'staff' && stateRef.current.business?.staffContext?.assignedShopId) {
