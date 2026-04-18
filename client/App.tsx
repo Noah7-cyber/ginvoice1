@@ -1267,14 +1267,14 @@ const App: React.FC = () => {
   const canManageHistory = state.role === 'owner' || perms.canEditHistory;
 
   const visibleTransactions = useMemo(() => {
+    // Multi-shop disabled - use all state directly
+    if (MULTI_SHOP_TEMP_DISABLED) return state.transactions;
     if (isAllShopsMode) return state.transactions;
     if (!state.activeShopId) return state.transactions;
     // Legacy fix: Include records without shopId in active shop view
     return state.transactions.filter((tx) => !tx.shopId || String(tx.shopId) === String(state.activeShopId));
   }, [state.transactions, state.activeShopId, isAllShopsMode]);
 
-   // Multi-shop disabled - use all state directly
-  const visibleTransactions = state.transactions;
   const visibleExpenditures = state.expenditures || [];
   const visibleNotifications = state.notifications || [];
 
