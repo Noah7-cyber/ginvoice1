@@ -527,6 +527,14 @@ const App: React.FC = () => {
          const mergedExpenditures = isPartial
            ? mergeByIdPreferServer(expenditures ?? currentState.expenditures, currentState.expenditures)
            : mergeByIdPreferServer(expenditures || [], currentState.expenditures);
+         const normalizedActiveShopId = MULTI_SHOP_TEMP_DISABLED
+           ? (
+               (currentState.activeShopId && currentState.activeShopId !== ALL_SHOPS_ID
+                 ? currentState.activeShopId
+                 : (business?.defaultShopId || currentState.business?.defaultShopId || activeShopId || undefined))
+             )
+           : (activeShopId || currentState.activeShopId || business?.defaultShopId);
+
          const nextState: InventoryState = {
            ...currentState,
            products: isPartial ? (products ?? currentState.products) : (products || []),
@@ -535,8 +543,8 @@ const App: React.FC = () => {
            expenditures: mergedExpenditures,
            notifications: isPartial ? (notifications ?? currentState.notifications) : (notifications || []),
            shops: isPartial ? (shops ?? (currentState.shops || [])) : (shops || currentState.shops || []),
-           activeShopId: activeShopId || currentState.activeShopId || business?.defaultShopId,
-           allShopsMode: Boolean(allShopsMode),
+           activeShopId: normalizedActiveShopId,
+           allShopsMode: MULTI_SHOP_TEMP_DISABLED ? false : Boolean(allShopsMode),
            business: business ? { ...currentState.business, ...business, staffContext: staffContext || currentState.business?.staffContext || null } : currentState.business,
            lastSyncedAt: new Date().toISOString(),
            isLoggedIn: true
@@ -793,12 +801,22 @@ const App: React.FC = () => {
                        expenditures = expenditures.map((e: any) => ({ ...e, shopId: e.shopId || fallbackShopId }));
                      }
 
+                     const normalizedActiveShopId = MULTI_SHOP_TEMP_DISABLED
+                       ? (
+                           (stateRef.current.activeShopId && stateRef.current.activeShopId !== ALL_SHOPS_ID)
+                             ? stateRef.current.activeShopId
+                             : (stateRef.current.business.defaultShopId || undefined)
+                         )
+                       : stateRef.current.activeShopId;
+
                      const merged = {
                        ...stateRef.current,
                        products: response.data.products ?? stateRef.current.products,
                        transactions: mergeByIdPreferServer(transactions ?? stateRef.current.transactions, stateRef.current.transactions, (tx: any) => pendingTxIds.has(getRecordId(tx))),
                        expenditures: mergeByIdPreferServer(expenditures ?? stateRef.current.expenditures, stateRef.current.expenditures),
                        categories: response.data.categories ?? stateRef.current.categories,
+                       activeShopId: normalizedActiveShopId,
+                       allShopsMode: MULTI_SHOP_TEMP_DISABLED ? false : Boolean(stateRef.current.allShopsMode),
                        lastSyncedAt: new Date().toISOString()
                      };
                      setState(merged);
