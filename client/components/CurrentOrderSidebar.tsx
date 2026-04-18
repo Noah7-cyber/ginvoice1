@@ -111,6 +111,7 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
 
     const transaction: Transaction = {
       id: crypto.randomUUID(),
+      idempotencyKey: crypto.randomUUID(),
       transactionDate: new Date().toISOString(),
       customerName: normalizeCustomerName(customerName),
       customerPhone: customerPhone || undefined,

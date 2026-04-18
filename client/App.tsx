@@ -17,7 +17,8 @@ import {
   Loader2,
   Bell,
   AlertCircle,
-  X
+  X,
+  CloudUpload
 } from 'lucide-react';
 import { InventoryState, UserRole, Product, ProductUnit, Transaction, BusinessProfile, TabId, SaleItem, PaymentMethod, Expenditure, ActivityLog, Shop } from './types';
 import useTabRouting from './hooks/useTabRouting';
@@ -25,7 +26,8 @@ import { useStockVerification } from './hooks/useStockVerification';
 import { useTimeDrift } from './hooks/useTimeDrift';
 import { CURRENCY, INITIAL_PRODUCTS } from './constants';
 import { safeCalculate } from './utils/math';
-import { saveState, loadState, pushToBackend, getDataVersion, saveDataVersion, getDomainVersions, saveDomainVersions, getLastSync, saveLastSync, clearLocalData, flushPendingSyncQueue, hasPendingSyncJobs } from './services/storage';
+import { saveState, loadState, pushToBackend, getDataVersion, saveDataVersion, getDomainVersions, saveDomainVersions, getLastSync, saveLastSync, clearLocalData, flushPendingSyncQueue, hasPendingSyncJobs, listPendingSyncJobs, syncPendingJobsWithProgress } from './services/storage';
+import type { PendingSyncJobView } from './services/storage';
 import { login, registerBusiness, saveAuthToken, clearAuthToken, getEntitlements, initializePayment, fetchRemoteState, deleteExpenditure, snoozeStockVerification, dismissNotification, checkServerVersion, createShop, renameShop, getShopsOverview, deleteShop } from './services/api';
 import { useToast } from './components/ToastProvider';
 import SalesScreen from './components/SalesScreen';
@@ -124,6 +126,10 @@ const App: React.FC = () => {
   const { status: wakeStatus, showWakeupUI } = useServerWakeup();
   const wakeToastShownRef = useRef(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [isOfflinePanelOpen, setIsOfflinePanelOpen] = useState(false);
+  const [pendingSyncJobs, setPendingSyncJobs] = useState<PendingSyncJobView[]>([]);
+  const [syncProgress, setSyncProgress] = useState<{ total: number; processed: number; succeeded: number; failed: number } | null>(null);
+  const [syncFailedJobIds, setSyncFailedJobIds] = useState<number[]>([]);
   const [shopModalMode, setShopModalMode] = useState<'menu' | 'create' | 'rename' | 'switch' | 'delete' | null>(null);
   const [shopNameInput, setShopNameInput] = useState('');
   const [shopInitMode, setShopInitMode] = useState<'fresh' | 'copy_inventory' | 'share_catalog'>('fresh');
@@ -547,9 +553,8 @@ const App: React.FC = () => {
           shopId
         });
 
-        // Phase 2: inventory + expenditures
+        // Phase 2: expenditures
         await pushToBackend({
-          products: currentState.products,
           expenditures: currentState.expenditures,
           shopId
         });
@@ -564,6 +569,33 @@ const App: React.FC = () => {
       syncInFlightRef.current = false;
     }
   }, [addToast, refreshData]);
+
+  const refreshPendingJobs = useCallback(async () => {
+    const jobs = await listPendingSyncJobs();
+    setPendingSyncJobs(jobs);
+    return jobs;
+  }, []);
+
+  const handleManualQueueSync = useCallback(async () => {
+    if (!navigator.onLine) {
+      addToast('Internet connection is required to sync pending records.', 'error');
+      return;
+    }
+
+    setSyncFailedJobIds([]);
+    setSyncProgress({ total: pendingSyncJobs.length, processed: 0, succeeded: 0, failed: 0 });
+    const result = await syncPendingJobsWithProgress(({ total, processed, succeeded, failed }) => {
+      setSyncProgress({ total, processed, succeeded, failed });
+    });
+    await refreshPendingJobs();
+    if (result.failed > 0) {
+      setSyncFailedJobIds(result.failedJobIds);
+      addToast(`Synced ${result.succeeded}/${result.total}. ${result.failed} failed and can be retried.`, 'warning');
+    } else {
+      addToast(`All ${result.total} pending record(s) synced successfully.`, 'success');
+    }
+    setTimeout(() => setSyncProgress(null), 1200);
+  }, [addToast, pendingSyncJobs.length, refreshPendingJobs]);
 
   const handleLogout = useCallback(() => {
     clearAuthToken();
@@ -686,6 +718,11 @@ const App: React.FC = () => {
        fetchEntitlements();
     }
   }, [state.isLoggedIn, safeSyncWithServer, fetchEntitlements]);
+
+  useEffect(() => {
+    if (!state.isLoggedIn) return;
+    refreshPendingJobs().catch(() => undefined);
+  }, [state.isLoggedIn, refreshPendingJobs]);
 
   // SMART SYNC HEARTBEAT (Every 10s)
   useEffect(() => {
@@ -1048,6 +1085,9 @@ const App: React.FC = () => {
 
     const txWithShop: Transaction = {
       ...transaction,
+      transactionId: transaction.id,
+      idempotencyKey: transaction.idempotencyKey || transaction.id,
+      inventoryEffect: 'sale',
       shopId: state.activeShopId || state.business.defaultShopId
     };
 
@@ -1094,23 +1134,14 @@ const App: React.FC = () => {
     // 3. PUSH to Server immediately
     if (navigator.onLine) {
       // Use the stable timestamp from state, don't generate new one on retry
-      pushToBackend({ transactions: [txWithShop], products: updatedProducts, shopId: txWithShop.shopId })
+      pushToBackend({ transactions: [txWithShop], shopId: txWithShop.shopId })
         .then(() => {
-             // CRITICAL: On success, subtract the sent delta to prevent double-counting but keep new offline changes
-             setState(prev => ({
-                 ...prev,
-                 products: prev.products.map(p => {
-                    const sent = updatedProducts.find(s => s.id === p.id);
-                    if (sent && typeof sent.stockDelta === 'number') {
-                        return { ...p, stockDelta: (p.stockDelta || 0) - sent.stockDelta };
-                    }
-                    return p;
-                 })
-             }));
+          refreshPendingJobs().catch(() => undefined);
         })
         .catch(err => {
             console.error("Instant sync failed:", err);
             addToast("Sale saved locally. Connect to internet to back up.", "warning");
+            refreshPendingJobs().catch(() => undefined);
         });
     }
   };
@@ -1125,21 +1156,53 @@ const App: React.FC = () => {
     stateRef.current = nextState;
     setState(nextState);
     if (navigator.onLine) {
-      pushToBackend({ products: stampedProducts, shopId: stateRef.current.activeShopId && stateRef.current.activeShopId !== ALL_SHOPS_ID ? stateRef.current.activeShopId : undefined })
-        .then(() => {
-            // Clear accumulated deltas on success (Subtract sent delta)
-            setState(prev => ({
-                ...prev,
-                products: prev.products.map(p => {
-                    const sent = stampedProducts.find(s => s.id === p.id);
-                    if (sent && typeof sent.stockDelta === 'number') {
-                        return { ...p, stockDelta: (p.stockDelta || 0) - sent.stockDelta };
-                    }
-                    return p;
-                })
-            }));
+      const activeShopId = stateRef.current.activeShopId && stateRef.current.activeShopId !== ALL_SHOPS_ID ? stateRef.current.activeShopId : undefined;
+      const previousMap = new Map((state.products || []).map((p) => [p.id, Number(p.currentStock || 0)]));
+      const adjustmentTransactions: Transaction[] = stampedProducts
+        .map((p, index) => {
+          const prev = Number(previousMap.get(p.id) || 0);
+          const next = Number(p.currentStock || 0);
+          const delta = next - prev;
+          if (delta === 0) return null;
+          return {
+            id: `adj-${p.id}-${Date.now()}-${index}`,
+            transactionId: `adj-${p.id}-${Date.now()}-${index}`,
+            idempotencyKey: `adj-${p.id}-${Date.now()}-${index}`,
+            transactionDate: new Date().toISOString(),
+            customerName: 'Stock Adjustment',
+            customerPhone: '',
+            items: [{
+              cartId: crypto.randomUUID(),
+              productId: p.id,
+              productName: p.name,
+              quantity: Math.abs(delta),
+              unitPrice: 0,
+              discount: 0,
+              total: 0
+            }],
+            subtotal: 0,
+            globalDiscount: 0,
+            totalAmount: 0,
+            paymentMethod: 'cash',
+            amountPaid: 0,
+            balance: 0,
+            paymentStatus: 'paid',
+            staffId: stateRef.current.role,
+            createdByRole: stateRef.current.role,
+            inventoryEffect: delta > 0 ? 'restock' : 'sale',
+            shopId: activeShopId
+          } as Transaction;
         })
-        .catch(err => console.error("Instant sync failed:", err));
+        .filter(Boolean) as Transaction[];
+
+      pushToBackend({ products: stampedProducts, transactions: adjustmentTransactions, shopId: activeShopId })
+        .then(() => {
+          refreshPendingJobs().catch(() => undefined);
+        })
+        .catch(err => {
+          console.error("Instant sync failed:", err);
+          refreshPendingJobs().catch(() => undefined);
+        });
     }
   };
 
@@ -1575,6 +1638,21 @@ const App: React.FC = () => {
               <LogOut size={24} />
             </button>
             <button
+              onClick={async () => {
+                setIsOfflinePanelOpen(true);
+                await refreshPendingJobs();
+              }}
+              className="relative p-2 rounded-xl text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition-all"
+              title="Pending Sync"
+            >
+              <CloudUpload size={22} />
+              {pendingSyncJobs.length > 0 && (
+                <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-[10px] font-black min-w-5 h-5 px-1 rounded-full flex items-center justify-center">
+                  {pendingSyncJobs.length}
+                </span>
+              )}
+            </button>
+            <button
               onClick={() => setIsNotificationOpen(true)}
               className="relative p-2 rounded-xl text-primary bg-indigo-50 hover:bg-indigo-100 transition-all"
             >
@@ -1814,6 +1892,58 @@ const App: React.FC = () => {
           ))}
         </nav>
       </main>
+
+      {isOfflinePanelOpen && (
+        <div className="fixed inset-0 z-[85] bg-black/55 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setIsOfflinePanelOpen(false)}>
+          <div className="w-full max-w-xl bg-white rounded-2xl shadow-2xl border border-gray-100" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-black text-gray-900">Pending Sync / Offline Records</h3>
+                <p className="text-xs text-gray-500">Unsynced sales queued on this device: {pendingSyncJobs.length}</p>
+              </div>
+              <button onClick={() => setIsOfflinePanelOpen(false)} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm text-gray-600">
+                  Total value: <span className="font-bold text-gray-900">{CURRENCY}{pendingSyncJobs.reduce((sum, job) => sum + Number(job.totalAmount || 0), 0).toLocaleString()}</span>
+                </div>
+                <button
+                  onClick={handleManualQueueSync}
+                  disabled={!isOnline || pendingSyncJobs.length === 0 || Boolean(syncProgress)}
+                  className="px-4 py-2 rounded-xl bg-primary text-white font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {syncProgress ? 'Syncing…' : 'Sync Now'}
+                </button>
+              </div>
+
+              {syncProgress && (
+                <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-3 text-sm">
+                  <p className="font-bold text-indigo-800">Syncing {syncProgress.processed} of {syncProgress.total}...</p>
+                  <p className="text-indigo-700">Success: {syncProgress.succeeded} • Failed: {syncProgress.failed}</p>
+                </div>
+              )}
+
+              <div className="max-h-72 overflow-auto border rounded-xl">
+                {pendingSyncJobs.length === 0 ? (
+                  <div className="p-4 text-sm text-gray-500">No pending offline records.</div>
+                ) : (
+                  pendingSyncJobs.map((job) => (
+                    <div key={job.id} className="px-4 py-3 border-b last:border-b-0 text-sm">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="font-semibold text-gray-900">Sale #{job.transactionId || job.id}</p>
+                        {syncFailedJobIds.includes(job.id) && <span className="text-xs font-bold text-red-600">Failed</span>}
+                      </div>
+                      <p className="text-xs text-gray-500">Queued: {new Date(job.createdAt).toLocaleString()} • Retries: {job.retryCount}</p>
+                      <p className="text-xs text-gray-500">Value: {CURRENCY}{Number(job.totalAmount || 0).toLocaleString()}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <NotificationCenter
         isOpen={isNotificationOpen}

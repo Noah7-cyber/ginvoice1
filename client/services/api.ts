@@ -160,12 +160,29 @@ export const syncState = async (state: InventoryState) => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');
 
+  const sanitizedPayload: any = {
+    ...state,
+    products: Array.isArray((state as any)?.products)
+      ? (state as any).products.map((product: any) => {
+          const { currentStock, stockDelta, stock, ...rest } = product || {};
+          return rest;
+        })
+      : (state as any)?.products,
+    transactions: Array.isArray((state as any)?.transactions)
+      ? (state as any).transactions.map((tx: any) => ({
+          ...tx,
+          transactionId: tx?.transactionId || tx?.id,
+          idempotencyKey: tx?.idempotencyKey || tx?.id || tx?.transactionId
+        }))
+      : (state as any)?.transactions
+  };
+
   return request('/api/sync', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`
     },
-    body: JSON.stringify(state)
+    body: JSON.stringify(sanitizedPayload)
   });
 };
 

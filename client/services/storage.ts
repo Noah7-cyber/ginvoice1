@@ -132,6 +132,58 @@ export const hasPendingSyncJobs = async (): Promise<boolean> => {
   return jobs.length > 0;
 };
 
+export type PendingSyncJobView = {
+  id: number;
+  createdAt: string;
+  retryCount: number;
+  transactionId?: string;
+  totalAmount?: number;
+};
+
+export const listPendingSyncJobs = async (): Promise<PendingSyncJobView[]> => {
+  const jobs = await getSyncJobs();
+  return jobs
+    .filter((job) => Boolean(job.id))
+    .map((job) => ({
+      id: Number(job.id),
+      createdAt: job.createdAt,
+      retryCount: Number(job.retryCount || 0),
+      transactionId: job.payload?.transactions?.[0]?.id || job.payload?.transactions?.[0]?.transactionId,
+      totalAmount: Number(job.payload?.transactions?.[0]?.totalAmount || 0)
+    }));
+};
+
+export const syncPendingJobsWithProgress = async (
+  onProgress?: (info: { total: number; processed: number; succeeded: number; failed: number; currentJobId?: number }) => void
+) => {
+  const jobs = await getSyncJobs();
+  const total = jobs.length;
+  let processed = 0;
+  let succeeded = 0;
+  let failed = 0;
+  const failedJobIds: number[] = [];
+
+  for (const job of jobs) {
+    const jobId = Number(job.id || 0);
+    try {
+      await syncState(job.payload);
+      if (jobId) await removeSyncJob(jobId);
+      succeeded += 1;
+    } catch (err) {
+      failed += 1;
+      if (jobId) {
+        await incrementRetryCount(jobId, Number(job.retryCount || 0));
+        failedJobIds.push(jobId);
+      }
+    } finally {
+      processed += 1;
+      onProgress?.({ total, processed, succeeded, failed, currentJobId: jobId || undefined });
+    }
+  }
+
+  return { total, processed, succeeded, failed, failedJobIds };
+};
+
 // --- THE CRITICAL EXPORT ---
 // This was missing/renamed in snippets, causing frontend crash.
 export const pushToBackend = async (payload: any) => {

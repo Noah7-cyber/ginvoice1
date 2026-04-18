@@ -32,9 +32,15 @@ const TransactionSchema = new mongoose.Schema({
   staffId: { type: String },
   createdByRole: { type: String, enum: ['owner', 'staff'], default: 'owner' },
   createdByUserId: { type: String, default: '' },
+  idempotencyKey: { type: String, default: '' },
+  inventoryEffect: { type: String, enum: ['sale', 'restock'], default: 'sale' },
   clientUpdatedAt: { type: Date }
 }, { timestamps: true });
 
 TransactionSchema.index({ businessId: 1, id: 1 }, { unique: true });
+TransactionSchema.index(
+  { businessId: 1, idempotencyKey: 1 },
+  { unique: true, partialFilterExpression: { idempotencyKey: { $type: 'string', $ne: '' } } }
+);
 
 module.exports = mongoose.model('Transaction', TransactionSchema);
