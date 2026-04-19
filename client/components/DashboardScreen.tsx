@@ -156,9 +156,12 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
     const shopWorth = activeProducts.reduce((sum, p) => sum + safeCalculate(p.sellingPrice, p.currentStock), 0);
 
     // Calculate Daily Revenue locally
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date().toLocaleDateString('en-CA');
     const dailyRevenue = safeSum(
-        salesTransactions.filter(t => t.transactionDate.startsWith(today)),
+        salesTransactions.filter(t => {
+            const tDate = new Date(t.transactionDate).toLocaleDateString('en-CA');
+            return tDate === today;
+        }),
         'totalAmount'
     );
 
@@ -166,7 +169,19 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
     const incomeTotal = expenditures.reduce((sum, e) => e.flowType === 'in' ? sum + Math.abs(e.amount || 0) : sum, 0);
     const expensesBalance = incomeTotal - expensesTotal;
 
-    return { totalRevenue, totalProfit, totalSales: salesTransactions.length, cashSales, transferSales, posSales, totalDebt, shopCost, shopWorth, dailyRevenue, expensesTotal, incomeTotal, expensesBalance };
+    const now = new Date();
+    const monthlySales = salesTransactions
+      .filter(t => {
+        const tDate = new Date(t.transactionDate);
+        return tDate.getMonth() === now.getMonth() && tDate.getFullYear() === now.getFullYear();
+      })
+      .reduce((sum, t) => sum + t.totalAmount, 0);
+
+    const yearlySales = salesTransactions
+      .filter(t => new Date(t.transactionDate).getFullYear() === now.getFullYear())
+      .reduce((sum, t) => sum + t.totalAmount, 0);
+
+    return { totalRevenue, totalProfit, totalSales: salesTransactions.length, cashSales, transferSales, posSales, totalDebt, shopCost, shopWorth, dailyRevenue, expensesTotal, incomeTotal, expensesBalance, monthlySales, yearlySales };
   }, [transactions, products, expenditures]);
 
   // Hybrid Stats Logic: Merge remote and local
@@ -179,7 +194,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
       // Fallback to local if remote returns 0 (likely due to glitch or sync delay)
       shopCost: remote.shopCost || localStats.shopCost,
       shopWorth: remote.shopWorth || localStats.shopWorth,
-      dailyRevenue: remote.dailyRevenue || localStats.dailyRevenue
+      dailyRevenue: remote.dailyRevenue || localStats.dailyRevenue,
+      monthlySales: remote.monthlySales || localStats.monthlySales,
+      yearlySales: remote.yearlySales || localStats.yearlySales
     };
   }, [remoteAnalytics, localStats]);
 
@@ -189,12 +206,16 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
     const last7Days = Array.from({ length: 7 }, (_, i) => {
       const date = new Date();
       date.setDate(date.getDate() - i);
-      return date.toISOString().split('T')[0];
+      return date.toLocaleDateString('en-CA');
     }).reverse();
 
     return last7Days.map(date => {
       const daySales = transactions
-        .filter(t => !t.isPreviousDebt && t.transactionDate.split('T')[0] === date)
+        .filter(t => {
+          if (t.isPreviousDebt) return false;
+          const tDate = new Date(t.transactionDate).toLocaleDateString('en-CA');
+          return tDate === date;
+        })
         .reduce((sum, t) => sum + t.totalAmount, 0);
       
       const displayDate = new Date(date).toLocaleDateString('en-NG', { weekday: 'short' });
@@ -288,6 +309,14 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
 
   const totalExpensesToday = useMemo(() => expenditures
     .filter((e) => e.flowType === 'out' && new Date(e.date).toDateString() === new Date().toDateString())
+    .reduce((sum, e) => sum + Math.abs(e.amount || 0), 0), [expenditures]);
+
+  const totalExpensesThisMonth = useMemo(() => expenditures
+    .filter((e) => {
+      const d = new Date(e.date);
+      const now = new Date();
+      return e.flowType === 'out' && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    })
     .reduce((sum, e) => sum + Math.abs(e.amount || 0), 0), [expenditures]);
 
   const totalExpensesThisYear = useMemo(() => expenditures
@@ -433,7 +462,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
           dailyLabel="Today's Expenses"
           dailyValue={`${CURRENCY}${totalExpensesToday.toLocaleString()}`}
           monthlyLabel="Monthly Expenses"
-          monthlyValue={`${CURRENCY}${Math.abs(localStats.expensesTotal || 0).toLocaleString()}`}
+          monthlyValue={`${CURRENCY}${totalExpensesThisMonth.toLocaleString()}`}
           yearlyLabel="Yearly Expenses"
           yearlyValue={`${CURRENCY}${totalExpensesThisYear.toLocaleString()}`}
           trend="Independent period control"

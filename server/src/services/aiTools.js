@@ -259,7 +259,9 @@ const resolveShopContext = (context = {}) => {
 const applyShopFilter = (criteria, context = {}, field = 'shopId') => {
     const { requestedShopId, allShops } = resolveShopContext(context);
     if (!allShops && requestedShopId) {
-        criteria[field] = requestedShopId;
+        criteria.$or = [{ [field]: requestedShopId }, { [field]: { $exists: false } }, { [field]: null }];
+    } else if (allShops) {
+        criteria.$or = [{ [field]: { $exists: true } }, { [field]: { $exists: false } }, { [field]: null }];
     }
     return criteria;
 };
@@ -319,7 +321,7 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
     // 4. Revenue (Transaction Sales)
     const revenueResult = await Transaction.aggregate([
         { $match: transactionMatch },
-        { $group: { _id: null, total: { $sum: '$totalAmount' } } }
+        { $group: { _id: null, total: { $sum: { $cond: [{ $ne: ['$isPreviousDebt', true] }, { $toDouble: '$totalAmount' }, 0] } } } }
     ]);
     const totalRevenue = revenueResult[0]?.total || 0;
 
@@ -843,7 +845,7 @@ const search_sales_records = async ({ startDate, endDate, customerName, paymentS
                 $group: {
                     _id: null,
                     count: { $sum: 1 },
-                    totalRevenue: { $sum: '$totalAmount' },
+                    totalRevenue: { $sum: { $cond: [{ $ne: ['$isPreviousDebt', true] }, { $toDouble: '$totalAmount' }, 0] } },
                     totalOutstanding: { $sum: '$balance' }
                 }
             }
