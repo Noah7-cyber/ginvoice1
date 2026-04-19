@@ -259,7 +259,26 @@ const resolveShopContext = (context = {}) => {
 const applyShopFilter = (criteria, context = {}, field = 'shopId') => {
     const { requestedShopId, allShops } = resolveShopContext(context);
     if (!allShops && requestedShopId) {
-        criteria[field] = requestedShopId;
+        if (criteria.$or) {
+            const existingOr = criteria.$or;
+            delete criteria.$or;
+
+            criteria.$and = criteria.$and || [];
+            criteria.$and.push({ $or: existingOr });
+            criteria.$and.push({
+                $or: [
+                    { [field]: requestedShopId },
+                    { [field]: { $exists: false } },
+                    { [field]: null }
+                ]
+            });
+        } else {
+            criteria.$or = [
+                { [field]: requestedShopId },
+                { [field]: { $exists: false } },
+                { [field]: null }
+            ];
+        }
     }
     return criteria;
 };
