@@ -20,8 +20,8 @@ router.get('/', auth, async (req, res) => {
       : [];
     const activeShopIds = activeShops.map((s) => String(s._id));
     const txShopFilter = allShopsMode
-      ? { shopId: { $in: activeShopIds } }
-      : (requestedShopId ? { shopId: requestedShopId } : {});
+      ? { $or: [{ shopId: { $in: activeShopIds } }, { shopId: { $exists: false } }, { shopId: null }] }
+      : (requestedShopId ? { $or: [{ shopId: requestedShopId }, { shopId: { $exists: false } }, { shopId: null }] } : {});
 
     const now = new Date();
     let startDate = new Date();
@@ -70,17 +70,24 @@ router.get('/', auth, async (req, res) => {
         {
           $group: {
             _id: null,
-            totalRevenue: { $sum: { $toDouble: '$totalAmount' } },
+            totalRevenue: {
+              $sum: { $cond: [{ $ne: ['$isPreviousDebt', true] }, { $toDouble: '$totalAmount' }, 0] }
+            },
+            totalDiscount: {
+              $sum: { $cond: [{ $ne: ['$isPreviousDebt', true] }, { $toDouble: '$globalDiscount' }, 0] }
+            },
             totalDebt: { $sum: { $toDouble: '$balance' } },
-            totalSales: { $sum: 1 },
+            totalSales: {
+              $sum: { $cond: [{ $ne: ['$isPreviousDebt', true] }, 1, 0] }
+            },
             cashSales: {
-              $sum: { $cond: [{ $eq: ['$paymentMethod', 'cash'] }, 1, 0] }
+              $sum: { $cond: [{ $and: [{ $ne: ['$isPreviousDebt', true] }, { $eq: ['$paymentMethod', 'cash'] }] }, 1, 0] }
             },
             transferSales: {
-              $sum: { $cond: [{ $in: ['$paymentMethod', ['transfer', 'bank']] }, 1, 0] }
+              $sum: { $cond: [{ $and: [{ $ne: ['$isPreviousDebt', true] }, { $in: ['$paymentMethod', ['transfer', 'bank']] }] }, 1, 0] }
             },
             posSales: {
-              $sum: { $cond: [{ $eq: ['$paymentMethod', 'pos'] }, 1, 0] }
+              $sum: { $cond: [{ $and: [{ $ne: ['$isPreviousDebt', true] }, { $eq: ['$paymentMethod', 'pos'] }] }, 1, 0] }
             }
           }
         },
@@ -90,13 +97,13 @@ router.get('/', auth, async (req, res) => {
       // 2. Current Month Revenue (For Trend)
       Transaction.aggregate([
         { $match: { businessId, ...txShopFilter, transactionDate: { $gte: currentMonthStart } } },
-        { $group: { _id: null, revenue: { $sum: { $toDouble: '$totalAmount' } } } }
+        { $group: { _id: null, revenue: { $sum: { $cond: [{ $ne: ['$isPreviousDebt', true] }, { $toDouble: '$totalAmount' }, 0] } } } }
       ]),
 
       // 3. Previous Month Revenue (For Trend)
       Transaction.aggregate([
         { $match: { businessId, ...txShopFilter, transactionDate: { $gte: previousMonthStart, $lte: previousMonthEnd } } },
-        { $group: { _id: null, revenue: { $sum: { $toDouble: '$totalAmount' } } } }
+        { $group: { _id: null, revenue: { $sum: { $cond: [{ $ne: ['$isPreviousDebt', true] }, { $toDouble: '$totalAmount' }, 0] } } } }
       ]),
 
       // 4. Dynamic Chart Aggregation
@@ -105,7 +112,7 @@ router.get('/', auth, async (req, res) => {
         {
           $group: {
             _id: { $dateToString: { format: dateFormat, date: '$transactionDate' } },
-            amount: { $sum: { $toDouble: '$totalAmount' } }
+            amount: { $sum: { $cond: [{ $ne: ['$isPreviousDebt', true] }, { $toDouble: '$totalAmount' }, 0] } }
           }
         },
         { $sort: { _id: 1 } }
@@ -194,13 +201,13 @@ router.get('/', auth, async (req, res) => {
       // 8. Monthly Revenue (Filtered)
       Transaction.aggregate([
         { $match: { businessId, ...txShopFilter, transactionDate: { $gte: filterMonthStart, $lte: filterMonthEnd } } },
-        { $group: { _id: null, totalSales: { $sum: { $toDouble: '$totalAmount' } } } }
+        { $group: { _id: null, totalSales: { $sum: { $cond: [{ $ne: ['$isPreviousDebt', true] }, { $toDouble: '$totalAmount' }, 0] } } } }
       ]),
 
       // 9. Yearly Revenue (Filtered)
       Transaction.aggregate([
         { $match: { businessId, ...txShopFilter, transactionDate: { $gte: filterYearStart, $lte: filterYearEnd } } },
-        { $group: { _id: null, totalSales: { $sum: { $toDouble: '$totalAmount' } } } }
+        { $group: { _id: null, totalSales: { $sum: { $cond: [{ $ne: ['$isPreviousDebt', true] }, { $toDouble: '$totalAmount' }, 0] } } } }
       ])
     ]);
 
@@ -332,9 +339,12 @@ router.get('/', auth, async (req, res) => {
       return profit;
     };
 
-    const totalProfit = calculateProfit(productSalesAgg);
+    let totalProfit = calculateProfit(productSalesAgg);
     const currentMonthProfit = calculateProfit(productSalesCurrentMonth);
     const previousMonthProfit = calculateProfit(productSalesPrevMonth);
+
+    // Subtract global discounts from totalProfit
+    totalProfit -= (stats.totalDiscount || 0);
 
     // Format Chart Data
     // We'll fill gaps based on range
