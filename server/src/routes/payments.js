@@ -311,32 +311,33 @@ const manageSubscription = async (business, action, reason = '') => {
     const subCode = business.paystackSubscriptionCode;
     const subToken = business.paystackEmailToken;
 
-    let apiSuccess = false;
-
-    // Call Paystack API if applicable
-    if (subCode && subToken && secretKey) {
-        try {
-            const endpoint = action === 'enable' ? 'enable' : 'disable'; // pause and cancel both disable
-            const response = await fetch(`https://api.paystack.co/subscription/${endpoint}`, {
-                method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${secretKey}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ code: subCode, token: subToken })
-            });
-            const data = await response.json();
-            if (data.status) {
-                apiSuccess = true;
-            } else {
-                 console.warn(`Paystack ${action} failed:`, data.message);
-            }
-        } catch (e) {
-            console.error(`Paystack ${action} error:`, e.message);
-        }
+    if (!subCode || !subToken || !secretKey) {
+        return { success: false, message: 'No active payment gateway subscription found to manage.' };
     }
 
-    // Update Local DB regardless of API success (Single Source of Truth is our DB for access)
+    // Call Paystack API
+    try {
+        const endpoint = action === 'resume' ? 'enable' : 'disable'; // pause and cancel both disable
+        const response = await fetch(`https://api.paystack.co/subscription/${endpoint}`, {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${secretKey}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ code: subCode, token: subToken })
+        });
+        const data = await response.json();
+
+        if (!data.status) {
+             console.warn(`Paystack ${action} failed:`, data.message);
+             return { success: false, message: data.message || 'Failed to sync with payment gateway' };
+        }
+    } catch (e) {
+        console.error(`Paystack ${action} error:`, e.message);
+        return { success: false, message: 'Failed to sync with payment gateway' };
+    }
+
+    // Update Local DB only if API success
     if (action === 'cancel') {
         business.autoRenew = false;
         business.subscriptionStatus = 'cancelled';
@@ -355,7 +356,7 @@ const manageSubscription = async (business, action, reason = '') => {
     }
 
     await business.save();
-    return { success: true, apiSuccess };
+    return { success: true, apiSuccess: true };
 };
 
 
@@ -368,7 +369,10 @@ router.post('/subscription/cancel', auth, async (req, res) => {
       const business = await Business.findById(req.user.businessId);
       if (!business) return res.status(404).json({ message: 'Business not found' });
 
-      await manageSubscription(business, 'cancel', reason);
+      const result = await manageSubscription(business, 'cancel', reason);
+      if (!result.success) {
+          return res.status(400).json({ message: result.message });
+      }
       res.json({ success: true, message: 'Subscription cancelled.' });
   } catch (error) {
       console.error('Cancel Error:', error);
@@ -382,7 +386,10 @@ router.post('/subscription/pause', auth, async (req, res) => {
       const business = await Business.findById(req.user.businessId);
       if (!business) return res.status(404).json({ message: 'Business not found' });
 
-      await manageSubscription(business, 'pause');
+      const result = await manageSubscription(business, 'pause');
+      if (!result.success) {
+          return res.status(400).json({ message: result.message });
+      }
       res.json({ success: true, message: 'Auto-renewal paused.' });
   } catch (error) {
       res.status(500).json({ message: 'Server error' });
@@ -395,7 +402,10 @@ router.post('/subscription/resume', auth, async (req, res) => {
       const business = await Business.findById(req.user.businessId);
       if (!business) return res.status(404).json({ message: 'Business not found' });
 
-      await manageSubscription(business, 'resume');
+      const result = await manageSubscription(business, 'resume');
+      if (!result.success) {
+          return res.status(400).json({ message: result.message });
+      }
       res.json({ success: true, message: 'Auto-renewal resumed.' });
   } catch (error) {
       res.status(500).json({ message: 'Server error' });
