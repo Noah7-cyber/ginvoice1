@@ -174,18 +174,28 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
   const filteredInvoices = useMemo(() => transactions.filter(t => {
     if (isStockAdjustmentTransaction(t)) return false;
 
-    const matchesSearch = t.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          t.id.toLowerCase().includes(searchTerm.toLowerCase());
+    const safeCustomerName = t.customerName || '';
+    const safeId = t.id || '';
+
+    const matchesSearch = safeCustomerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          safeId.toLowerCase().includes(searchTerm.toLowerCase());
 
     let matchesDate = true;
+    const txDateStr = t.transactionDate || new Date().toISOString();
+    const txDate = new Date(txDateStr);
+
+    // Fallback if parsing fails
+    const isValidDate = !isNaN(txDate.getTime());
+    const finalDate = isValidDate ? txDate : new Date();
+
     if (startDate) {
-        matchesDate = matchesDate && new Date(t.transactionDate) >= new Date(startDate);
+        matchesDate = matchesDate && finalDate >= new Date(startDate);
     }
     if (endDate) {
         // End of day
         const end = new Date(endDate);
         end.setHours(23, 59, 59, 999);
-        matchesDate = matchesDate && new Date(t.transactionDate) <= end;
+        matchesDate = matchesDate && finalDate <= end;
     }
 
     return matchesSearch && matchesDate;
@@ -204,23 +214,31 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
     transactions.forEach(t => {
       if (isStockAdjustmentTransaction(t)) return;
       if (toMoneyNumber(t.balance) > 0.01) {
-        const key = normalizeCustomerKey(t.customerName);
+        const safeCustomerName = t.customerName || '';
+        const key = normalizeCustomerKey(safeCustomerName);
         if (!key) return;
 
+        const txDateStr = t.transactionDate || new Date().toISOString();
+        const txDate = new Date(txDateStr);
+        const isValidDate = !isNaN(txDate.getTime());
+        const finalTxDateStr = isValidDate ? txDate.toISOString() : new Date().toISOString();
+
         const existing = map.get(key) || {
-          name: formatCustomerName(t.customerName),
+          name: formatCustomerName(safeCustomerName),
           totalOwed: 0,
           invoiceCount: 0,
-          lastTxDate: t.transactionDate,
+          lastTxDate: finalTxDateStr,
           transactions: [],
           phone: t.customerPhone
         };
 
         existing.totalOwed += toMoneyNumber(t.balance);
         existing.invoiceCount += 1;
-        if (new Date(t.transactionDate) > new Date(existing.lastTxDate)) {
-          existing.lastTxDate = t.transactionDate;
-          existing.name = formatCustomerName(t.customerName);
+
+        const existingDate = new Date(existing.lastTxDate);
+        if (new Date(finalTxDateStr) > existingDate) {
+          existing.lastTxDate = finalTxDateStr;
+          existing.name = formatCustomerName(safeCustomerName);
         }
         existing.transactions.push(t);
         if (!existing.phone && t.customerPhone) existing.phone = t.customerPhone;
@@ -456,7 +474,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
   const handleShareStatement = async (debtorName: string, debtorTotalOwed: number, transactions: Transaction[]) => {
       const unpaidInvoices = transactions
           .filter(t => toMoneyNumber(t.balance) > 0.01)
-          .sort((a, b) => new Date(a.transactionDate).getTime() - new Date(b.transactionDate).getTime());
+          .sort((a, b) => new Date(a.transactionDate || new Date()).getTime() - new Date(b.transactionDate || new Date()).getTime());
 
       if (unpaidInvoices.length === 0) {
           addToast('No unpaid invoices to share.', 'info');
@@ -464,7 +482,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
       }
 
       const invoiceLines = unpaidInvoices
-        .map((tx) => `📅 ${new Date(tx.transactionDate).toLocaleDateString()} - *${CURRENCY}${toMoneyNumber(tx.balance).toLocaleString()}*`)
+        .map((tx) => `📅 ${new Date(tx.transactionDate || new Date()).toLocaleDateString()} - *${CURRENCY}${toMoneyNumber(tx.balance).toLocaleString()}*`)
         .join('\n');
       const defaultStatement = [
         `*Customer:* ${debtorName}`,
@@ -519,7 +537,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
         // We only want unpaid invoices for this customer
         const unpaidInvoices = customerTransactions
           .filter(t => toMoneyNumber(t.balance) > 0.01)
-          .sort((a, b) => new Date(a.transactionDate).getTime() - new Date(b.transactionDate).getTime());
+          .sort((a, b) => new Date(a.transactionDate || new Date()).getTime() - new Date(b.transactionDate || new Date()).getTime());
 
         let remainingMoney = toMoneyNumber(amountPaid);
         let settledCount = 0;
@@ -683,12 +701,12 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold">
-                          {t.customerName[0].toUpperCase()}
+                          {(t.customerName && t.customerName.length > 0) ? t.customerName[0].toUpperCase() : '?'}
                         </div>
                         <div>
-                          <h3 className="font-bold text-gray-900">{t.customerName}</h3>
+                          <h3 className="font-bold text-gray-900">{t.customerName || 'Unknown Customer'}</h3>
                           <p className="text-xs text-gray-400">
-                            ID: {t.id} • {new Date(t.transactionDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })} • {new Date(t.transactionDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                            ID: {t.id} • {new Date(t.transactionDate || new Date()).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })} • {new Date(t.transactionDate || new Date()).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
                           </p>
                         </div>
                       </div>
@@ -794,7 +812,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
                 >
                   <div className="flex items-center gap-4 flex-1 w-full">
                     <div className="w-14 h-14 rounded-2xl bg-red-50 flex items-center justify-center text-red-600 font-black text-xl">
-                      {debtor.name[0].toUpperCase()}
+                      {(debtor.name && debtor.name.length > 0) ? debtor.name[0].toUpperCase() : '?'}
                     </div>
                     <div className="flex-1">
                       <h3 className="text-xl font-black text-gray-900 flex items-center gap-2">
@@ -868,7 +886,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
                                    </div>
                                    <div>
                                        <p className="text-sm font-bold text-gray-900">
-                                            {new Date(tx.transactionDate).toLocaleDateString()}
+                                            {new Date(tx.transactionDate || new Date()).toLocaleDateString()}
                                        </p>
                                        <p className="text-xs text-gray-500">
                                            {tx.items.length} items • Total: {CURRENCY}{tx.totalAmount.toLocaleString()}

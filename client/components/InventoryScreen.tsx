@@ -191,45 +191,71 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     }
   };
 
-  const applyBulkUpdates = () => {
+  const applyBulkUpdates = async () => {
     if (safeReadOnly) return;
     if (!isOnline) {
         addToast('Please connect to the internet to perform this action.', 'error');
         return;
     }
-    const updatedProducts = products.map(p => {
-      if (selectedIds.has(p.id)) {
-        let updated = { ...p, isManualUpdate: true, updatedAt: new Date().toISOString() };
 
-        // Partial Updates: Only update if value is provided
-        if (bulkCategory) updated.category = bulkCategory;
+    // Create a loading state (using isSaving, even though it's bulk)
+    setIsSaving(true);
 
-        if (typeof bulkPriceChange === 'number' && bulkPriceChange !== 0) {
-          updated.sellingPrice = Math.max(0, updated.sellingPrice + (updated.sellingPrice * (bulkPriceChange / 100)));
+    let hasError = false;
+    let anySuccess = false;
+    // We will build the updated list as we go, so we can save partial successes
+    let updatedProductsList = [...products];
+
+    for (const [index, p] of updatedProductsList.entries()) {
+        if (selectedIds.has(p.id)) {
+            let updated = { ...p, isManualUpdate: true, updatedAt: new Date().toISOString() };
+
+            // Partial Updates: Only update if value is provided
+            if (bulkCategory) updated.category = bulkCategory;
+
+            if (typeof bulkPriceChange === 'number' && bulkPriceChange !== 0) {
+              updated.sellingPrice = Math.max(0, updated.sellingPrice + (updated.sellingPrice * (bulkPriceChange / 100)));
+            }
+
+            if (typeof bulkStockAdd === 'number') {
+              updated.currentStock = Math.max(0, updated.currentStock + bulkStockAdd);
+              updated.stockDelta = (updated.stockDelta || 0) + bulkStockAdd;
+            }
+
+            if (typeof bulkStockReduce === 'number') {
+              updated.currentStock = Math.max(0, updated.currentStock - bulkStockReduce);
+              updated.stockDelta = (updated.stockDelta || 0) - bulkStockReduce;
+            }
+
+            if (typeof bulkCostPrice === 'number') {
+              updated.costPrice = bulkCostPrice;
+            }
+
+            try {
+                const updatedFromApi = await updateProduct(updated);
+                updatedProductsList[index] = updatedFromApi || updated;
+                anySuccess = true;
+            } catch (err) {
+                console.error(`Failed to update product ${p.id}`, err);
+                hasError = true;
+                break; // Stop updating further on error
+            }
         }
+    }
 
-        if (typeof bulkStockAdd === 'number') {
-          updated.currentStock = Math.max(0, updated.currentStock + bulkStockAdd);
-          updated.stockDelta = (updated.stockDelta || 0) + bulkStockAdd;
-        }
+    // Always update local state with whatever succeeded so far
+    onUpdateProducts(updatedProductsList);
 
-        if (typeof bulkStockReduce === 'number') {
-          updated.currentStock = Math.max(0, updated.currentStock - bulkStockReduce);
-          updated.stockDelta = (updated.stockDelta || 0) - bulkStockReduce;
-        }
+    if (hasError) {
+        addToast(anySuccess ? 'Some items failed to update due to network error.' : 'Failed to apply bulk update. Network failed, please try again.', 'error');
+    } else {
+        setSelectedIds(new Set());
+        setIsBulkEditOpen(false);
+        resetBulkFields();
+        addToast('Bulk update applied.', 'success');
+    }
 
-        if (typeof bulkCostPrice === 'number') {
-          updated.costPrice = bulkCostPrice;
-        }
-
-        return updated;
-      }
-      return p;
-    });
-    onUpdateProducts(updatedProducts);
-    setSelectedIds(new Set());
-    setIsBulkEditOpen(false);
-    resetBulkFields();
+    setIsSaving(false);
   };
 
   const resetBulkFields = () => {
@@ -296,9 +322,12 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                  stockDelta: (oldProduct?.stockDelta || 0) + delta
              };
 
-             // Optimistic Update
-             const updatedProducts = products.map(p => p.id === editingProductId ? updatedItem : p);
-             onUpdateProducts(updatedProducts); // This triggers Sync
+             const updatedFromApi = await updateProduct(updatedItem);
+
+             // Update state AFTER backend confirmation
+             const updatedProducts = products.map(p => p.id === editingProductId ? (updatedFromApi || updatedItem) : p);
+             onUpdateProducts(updatedProducts);
+             addToast('Product updated successfully.', 'success');
         } else {
              // Fix: Sanitize numeric fields to prevent crashes if empty
              const sanitizedProduct = {
@@ -316,8 +345,12 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                  updatedAt: new Date().toISOString(),
                  stockDelta: sanitizedProduct.currentStock
              };
-             await createProduct(newItem);
-             onUpdateProducts([...products, newItem]);
+
+             const createdFromApi = await createProduct(newItem);
+
+             // Update state AFTER backend confirmation
+             onUpdateProducts([...products, (createdFromApi || newItem)]);
+             addToast('Product created successfully.', 'success');
         }
         setIsModalOpen(false);
         setNewProduct(initialProductState);
@@ -328,12 +361,16 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
         if (err.message?.includes('409') || err.response?.status === 409 || err.message?.toLowerCase().includes('duplicate')) {
             addToast('Product with this name already exists in this category.', 'error');
         } else {
-            addToast('Failed to save product. Please try again.', 'error');
+            addToast('Failed to save product. Network failed, please try again.', 'error');
         }
     } finally {
         setIsSaving(false);
     }
   };
+
+  // Ref to hold temporary inline edits before saving
+  const [inlineEditData, setInlineEditData] = useState<{ [id: string]: Partial<Product> }>({});
+  const [isInlineSaving, setIsInlineSaving] = useState<string | null>(null);
 
   const handleInlineSave = async (id: string) => {
     if (!isOnline) {
@@ -343,12 +380,30 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     const product = products.find(p => p.id === id);
     if (!product) return;
 
-    const updated = { ...product, isManualUpdate: true };
-    try {
-        await updateProduct(updated);
+    const edits = inlineEditData[id] || {};
+    // If no edits were made, just close
+    if (Object.keys(edits).length === 0) {
         setInlineEditingId(null);
+        return;
+    }
+
+    const updatedItem = { ...product, ...edits, isManualUpdate: true, updatedAt: new Date().toISOString() };
+
+    setIsInlineSaving(id);
+    try {
+        const updatedFromApi = await updateProduct(updatedItem);
+
+        // Update local state AFTER backend confirms
+        const updatedProducts = products.map(p => p.id === id ? (updatedFromApi || updatedItem) : p);
+        onUpdateProducts(updatedProducts);
+
+        setInlineEditingId(null);
+        setInlineEditData(prev => { const next = {...prev}; delete next[id]; return next; });
+        addToast('Changes saved.', 'success');
     } catch(err) {
-        addToast('Failed to save changes', 'error');
+        addToast('Failed to save changes. Network failed, please try again.', 'error');
+    } finally {
+        setIsInlineSaving(null);
     }
   };
 
@@ -357,18 +412,21 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     const numValue = parseFloat(value);
     if (isNaN(numValue)) return;
 
-    const updatedProducts = products.map(p => {
-      if (p.id === id) {
+    setInlineEditData(prev => {
+        const currentEdits = prev[id] || {};
+        const product = products.find(p => p.id === id);
+        if (!product) return prev;
+
+        const nextEdits = { ...currentEdits, [field]: numValue };
+
         if (field === 'currentStock') {
-             const oldStock = p.currentStock || 0;
+             const oldStock = product.currentStock || 0;
              const delta = numValue - oldStock;
-             return { ...p, [field]: numValue, stockDelta: (p.stockDelta || 0) + delta, updatedAt: new Date().toISOString() };
+             nextEdits.stockDelta = (product.stockDelta || 0) + delta;
         }
-        return { ...p, [field]: numValue, updatedAt: new Date().toISOString() };
-      }
-      return p;
+
+        return { ...prev, [id]: nextEdits };
     });
-    onUpdateProducts(updatedProducts);
   };
 
   const handleAddUnit = () => {
@@ -428,19 +486,18 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
     const targetId = itemToDelete;
     const nowIso = new Date().toISOString();
-    const previousProducts = products;
-    const updatedProducts = products.filter((p) => p.id !== targetId).map((p) => ({ ...p, updatedAt: nowIso }));
-
-    // Reflect deletion immediately in UI, then confirm with server.
-    onUpdateProducts(updatedProducts);
 
     try {
       await deleteProduct(targetId, false, activeShopId);
+
+      // Update local state AFTER backend confirmation
+      const updatedProducts = products.filter((p) => p.id !== targetId).map((p) => ({ ...p, updatedAt: nowIso }));
+      onUpdateProducts(updatedProducts);
+
       setItemToDelete(null);
       addToast('Product deleted.', 'success');
     } catch (err) {
-      onUpdateProducts(previousProducts);
-      addToast('Delete failed. Please try again.', 'error');
+      addToast('Delete failed. Network failed, please try again.', 'error');
     } finally {
       setIsDeleting(false);
     }
@@ -774,7 +831,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                           <input
                             type="number"
                             className="w-20 px-2 py-1 border rounded font-bold text-gray-800"
-                            value={product.currentStock}
+                            value={inlineEditData[product.id]?.currentStock ?? product.currentStock}
                             onChange={(e) => handleInlineUpdateLocal(product.id, 'currentStock', e.target.value)}
                           />
                           <span className="text-xs text-gray-500">{product.baseUnit}</span>
@@ -791,7 +848,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                         <input
                           type="number"
                           className="w-24 px-2 py-1 border rounded font-black text-gray-900"
-                          value={product.sellingPrice}
+                          value={inlineEditData[product.id]?.sellingPrice ?? product.sellingPrice}
                           onChange={(e) => handleInlineUpdateLocal(product.id, 'sellingPrice', e.target.value)}
                         />
                       </div>
@@ -806,14 +863,19 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                             <>
                                 <button
                                     onClick={() => handleInlineSave(product.id)}
-                                    className="p-2 text-green-500 hover:text-green-700"
+                                    disabled={isInlineSaving === product.id}
+                                    className="p-2 text-green-500 hover:text-green-700 disabled:opacity-50"
                                     title="Save"
                                 >
-                                    <CheckCircle2 size={18} />
+                                    {isInlineSaving === product.id ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
                                 </button>
                                 <button
-                                    onClick={() => setInlineEditingId(null)}
-                                    className="p-2 text-red-500 hover:text-red-700"
+                                    onClick={() => {
+                                        setInlineEditingId(null);
+                                        setInlineEditData(prev => { const next = {...prev}; delete next[product.id]; return next; });
+                                    }}
+                                    disabled={isInlineSaving === product.id}
+                                    className="p-2 text-red-500 hover:text-red-700 disabled:opacity-50"
                                     title="Cancel"
                                 >
                                     <X size={18} />
@@ -1015,9 +1077,10 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                 </button>
                 <button 
                   onClick={applyBulkUpdates}
-                  className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-lg shadow-indigo-100 flex items-center justify-center gap-2"
+                  disabled={isSaving}
+                  className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-lg shadow-indigo-100 flex items-center justify-center gap-2 disabled:opacity-50"
                 >
-                  <CheckCircle2 size={20} /> Apply Changes
+                  {isSaving ? <Loader2 size={20} className="animate-spin" /> : <CheckCircle2 size={20} />} Apply Changes
                 </button>
               </div>
             </div>
