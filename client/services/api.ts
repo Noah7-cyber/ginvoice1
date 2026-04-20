@@ -698,7 +698,7 @@ export const updateExpenditure = async (expenditure: any) => {
 };
 
 // NEW: Helper for creating a single product via Sync
-export const createProduct = async (product: Product) => {
+export const createProduct = async (product: Product, additionalTransactions: any[] = []) => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');
 
@@ -707,12 +707,12 @@ export const createProduct = async (product: Product) => {
     headers: {
       Authorization: `Bearer ${token}`
     },
-    body: JSON.stringify({ products: [product] })
+    body: JSON.stringify({ products: [product], transactions: additionalTransactions })
   });
 };
 
 // NEW: Helper for updating a single product via Sync
-export const updateProduct = async (product: Product) => {
+export const updateProduct = async (product: Product, additionalTransactions: any[] = []) => {
   const token = loadAuthToken();
   if (!token) throw new Error('Missing auth token');
 
@@ -721,7 +721,7 @@ export const updateProduct = async (product: Product) => {
     headers: {
       Authorization: `Bearer ${token}`
     },
-    body: JSON.stringify({ products: [product] })
+    body: JSON.stringify({ products: [product], transactions: additionalTransactions })
   });
 };
 

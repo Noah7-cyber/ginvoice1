@@ -234,17 +234,17 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
               stockChanged = true;
             }
 
-            if (stockChanged) {
-               // @ts-ignore
-               updated.expectedAbsoluteStock = updated.currentStock;
-            }
-
             if (typeof bulkCostPrice === 'number') {
               updated.costPrice = bulkCostPrice;
             }
 
+            const txs = [];
+            if (stockChanged && stockDelta !== 0) {
+                txs.push(generateStockAdjustmentTransaction(updated.id, updated.name, stockDelta, updated.shopId));
+            }
+
             try {
-                const updatedFromApi = await updateProduct(updated);
+                const updatedFromApi = await updateProduct(updated, txs);
                 const finalItem = updatedFromApi?.id ? updatedFromApi : updated;
                 updatedProductsList[index] = finalItem;
                 anySuccess = true;
@@ -334,13 +334,11 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                  updatedAt: new Date().toISOString()
              };
 
-             // Check if stock was modified manually
-             if (oldStock !== newStock) {
-                 // @ts-ignore
-                 updatedItem.expectedAbsoluteStock = newStock;
+             const txs = [];
+             if (oldStock !== newStock && delta !== 0) {
+                 txs.push(generateStockAdjustmentTransaction(updatedItem.id, updatedItem.name, delta, updatedItem.shopId));
              }
-
-             const updatedFromApi = await updateProduct(updatedItem);
+             const updatedFromApi = await updateProduct(updatedItem, txs);
 
              // Update state AFTER backend confirmation
              const updatedProducts = products.map(p => p.id === editingProductId ? (updatedFromApi?.id ? updatedFromApi : updatedItem) : p);
@@ -361,11 +359,11 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                  id: `PRD-${Date.now()}`,
                  updatedAt: new Date().toISOString()
              };
-             // For brand new products, expectedAbsoluteStock should be set to set initial stock
-             // @ts-ignore
-             newItem.expectedAbsoluteStock = sanitizedProduct.currentStock;
-
-             const createdFromApi = await createProduct(newItem);
+             const txs = [];
+             if (newItem.currentStock > 0) {
+                 txs.push(generateStockAdjustmentTransaction(newItem.id, newItem.name, newItem.currentStock, newItem.shopId));
+             }
+             const createdFromApi = await createProduct(newItem, txs);
 
              // Update state AFTER backend confirmation
              onUpdateProducts([...products, (createdFromApi?.id ? createdFromApi : newItem)]);
@@ -408,14 +406,17 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
     const updatedItem = { ...product, ...edits, updatedAt: new Date().toISOString() };
 
+    const txs = [];
     if (edits.currentStock !== undefined && edits.currentStock !== product.currentStock) {
-         // @ts-ignore
-         updatedItem.expectedAbsoluteStock = edits.currentStock;
+        const delta = edits.currentStock - product.currentStock;
+        if (delta !== 0) {
+            txs.push(generateStockAdjustmentTransaction(updatedItem.id, updatedItem.name, delta, updatedItem.shopId));
+        }
     }
 
     setIsInlineSaving(id);
     try {
-        const updatedFromApi = await updateProduct(updatedItem);
+        const updatedFromApi = await updateProduct(updatedItem, txs);
 
         // Update local state AFTER backend confirms
         const updatedProducts = products.map(p => p.id === id ? (updatedFromApi?.id ? updatedFromApi : updatedItem) : p);

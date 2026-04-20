@@ -27,6 +27,7 @@ describe('Transactions API Edge Cases', () => {
 
     await Business.create({
       _id: businessId,
+      defaultShopId: shopId,
       name: 'Test Business',
       isSubscribed: true,
       trialEndsAt: new Date(Date.now() + 86400000),
