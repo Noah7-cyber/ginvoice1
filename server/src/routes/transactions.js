@@ -5,7 +5,6 @@ const Notification = require('../models/Notification');
 const Business = require('../models/Business');
 const auth = require('../middleware/auth');
 const requireActiveSubscription = require('../middleware/subscription');
-const { ensureWritableShopContext } = require('../services/shopContext');
 const { decrementStock, restoreStock } = require('../services/stockAdapter');
 
 const withAtomic = async (work) => {
@@ -26,9 +25,8 @@ const withAtomic = async (work) => {
 // CREATE Transaction
 router.post('/', auth, requireActiveSubscription, async (req, res) => {
   try {
-    const { items, customerName, totalAmount, amountPaid, paymentMethod, transactionDate, id, transactionId, idempotencyKey, staffId, discountCode, shopId: requestedShopId, allShops, inventoryEffect } = req.body;
-    const shopId = await ensureWritableShopContext({ businessId: req.businessId, requestedShopId, allShops, enforcedShopId: req.assignedShopId });
-    const txId = String(transactionId || id || '').trim();
+    const { items, customerName, totalAmount, amountPaid, paymentMethod, transactionDate, id, transactionId, idempotencyKey, staffId, discountCode, inventoryEffect } = req.body;
+        const txId = String(transactionId || id || '').trim();
     if (!txId) return res.status(400).json({ message: 'Transaction id required' });
     const idemKey = String(idempotencyKey || txId).trim();
 
@@ -54,8 +52,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
     await withAtomic(async (session) => {
       newTransaction = new Transaction({
         businessId: req.businessId,
-        shopId,
-        id: txId,
+                id: txId,
         idempotencyKey: idemKey,
         inventoryEffect: effect,
         transactionDate: transactionDate || new Date(),
@@ -79,9 +76,9 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
           const qty = Number(item.quantity || 0) * Number(multiplier || 1);
           if (!item.productId || qty <= 0) continue;
           if (effect === 'restock') {
-            await restoreStock({ businessId: req.businessId, shopId, productId: item.productId, qty, session });
+            await restoreStock({ businessId: req.businessId,  productId: item.productId, qty, session });
           } else {
-            await decrementStock({ businessId: req.businessId, shopId, productId: item.productId, qty, session });
+            await decrementStock({ businessId: req.businessId,  productId: item.productId, qty, session });
           }
         }
       }
@@ -106,13 +103,11 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
 router.put('/:id', auth, requireActiveSubscription, async (req, res) => {
   try {
     const { id } = req.params;
-    const { items: newItems, totalAmount, amountPaid, paymentMethod, customerName, date, shopId: requestedShopId, allShops, idempotencyKey, inventoryEffect } = req.body;
+    const { items: newItems, totalAmount, amountPaid, paymentMethod, customerName, date, idempotencyKey, inventoryEffect } = req.body;
 
     // 1. Fetch Original
     const originalTx = await Transaction.findOne({ id, businessId: req.businessId });
     if (!originalTx) return res.status(404).json({ message: 'Transaction not found' });
-    const shopId = await ensureWritableShopContext({ businessId: req.businessId, requestedShopId: requestedShopId || originalTx.shopId, allShops, enforcedShopId: req.assignedShopId });
-    if (!originalTx.shopId) originalTx.shopId = shopId;
 
     const normalizedNewItems = (newItems || []).map((item) => ({
       ...item,
@@ -128,18 +123,18 @@ router.put('/:id', auth, requireActiveSubscription, async (req, res) => {
         const qty = Number(item.quantity || 0) * Number(multiplier || 1);
         if (!item.productId || qty <= 0) continue;
         if (prevEffect === 'sale') {
-          await restoreStock({ businessId: req.businessId, shopId, productId: item.productId, qty, session });
+          await restoreStock({ businessId: req.businessId,  productId: item.productId, qty, session });
         } else {
-          await decrementStock({ businessId: req.businessId, shopId, productId: item.productId, qty, session });
+          await decrementStock({ businessId: req.businessId,  productId: item.productId, qty, session });
         }
       }
       for (const item of normalizedNewItems) {
         const qty = Number(item.quantity || 0) * Number(item.multiplier || 1);
         if (!item.productId || qty <= 0) continue;
         if (nextEffect === 'sale') {
-          await decrementStock({ businessId: req.businessId, shopId, productId: item.productId, qty, session });
+          await decrementStock({ businessId: req.businessId,  productId: item.productId, qty, session });
         } else {
-          await restoreStock({ businessId: req.businessId, shopId, productId: item.productId, qty, session });
+          await restoreStock({ businessId: req.businessId,  productId: item.productId, qty, session });
         }
       }
 
@@ -175,8 +170,7 @@ router.put('/:id', auth, requireActiveSubscription, async (req, res) => {
     }
 
       originalTx.items = normalizedNewItems;
-      originalTx.shopId = shopId;
-      originalTx.idempotencyKey = String(idempotencyKey || originalTx.idempotencyKey || originalTx.id).trim();
+            originalTx.idempotencyKey = String(idempotencyKey || originalTx.idempotencyKey || originalTx.id).trim();
       originalTx.inventoryEffect = nextEffect;
       originalTx.subtotal = subtotal;
       originalTx.globalDiscount = finalGlobalDiscount;
@@ -200,8 +194,7 @@ router.put('/:id', auth, requireActiveSubscription, async (req, res) => {
       amount: originalTx.totalAmount,
       performedBy: performerName,
       type: 'modification',
-      shopId
-    });
+          });
 
     // Helper to format Decimal128
     const parseDecimal = (val) => {
@@ -285,16 +278,10 @@ router.delete('/:id', auth, requireActiveSubscription, async (req, res) => {
     // Default to true if not specified, or handle logic here
     const shouldRestock = req.query.restock !== 'false';
 
-    const shopId = await ensureWritableShopContext({
-      businessId: req.businessId,
-      requestedShopId: req.query.shopId || transaction.shopId,
-      allShops: req.query.allShops,
-      enforcedShopId: req.assignedShopId
-    });
     if (shouldRestock && transaction.items.length > 0) {
       for (const item of transaction.items) {
         const multiplier = item.multiplier || (item.selectedUnit ? item.selectedUnit.multiplier : 1);
-        await restoreStock({ businessId: req.businessId, shopId, productId: item.productId, qty: item.quantity * multiplier });
+        await restoreStock({ businessId: req.businessId,  productId: item.productId, qty: item.quantity * multiplier });
       }
     }
 
@@ -306,8 +293,7 @@ router.delete('/:id', auth, requireActiveSubscription, async (req, res) => {
       amount: transaction.totalAmount || 0,
       performedBy: performerName,
       type: 'deletion',
-      shopId,
-      payload: { transactionId: transaction.id, shopId }
+            payload: { transactionId: transaction.id, }
     });
     await notification.save();
 

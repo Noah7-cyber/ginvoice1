@@ -10,8 +10,7 @@ const BusinessSchema = new mongoose.Schema({
   shopStaffPins: {
     type: [
       {
-        shopId: { type: String, required: true },
-        staffPin: { type: String, required: true },
+                staffPin: { type: String, required: true },
         staffName: { type: String, default: '' },
         updatedAt: { type: Date, default: Date.now }
       }

@@ -5,8 +5,7 @@ const ExpenditureSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
 
   business: { type: mongoose.Schema.Types.ObjectId, ref: 'Business', required: true },
-  shopId: { type: String, default: null, index: true },
-  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 
   title: { type: String, required: false },
   amount: { type: mongoose.Schema.Types.Decimal128, required: true }, // Using Decimal128 as per previous fixes

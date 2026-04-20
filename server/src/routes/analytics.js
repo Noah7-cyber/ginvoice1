@@ -4,8 +4,6 @@ const mongoose = require('mongoose');
 const auth = require('../middleware/auth');
 const Transaction = require('../models/Transaction');
 const Product = require('../models/Product');
-const ProductShopStock = require('../models/ProductShopStock');
-const Shop = require('../models/Shop');
 
 const router = express.Router();
 
@@ -13,15 +11,6 @@ router.get('/', auth, async (req, res) => {
   try {
     const businessId = new mongoose.Types.ObjectId(req.businessId);
     const range = req.query.range || '7d'; // '7d', '30d', '1y'
-    const requestedShopId = req.assignedShopId || (req.query.shopId ? String(req.query.shopId) : '');
-    const allShopsMode = req.assignedShopId ? false : (req.query.allShops === 'true');
-    const activeShops = allShopsMode
-      ? await Shop.find({ businessId: String(req.businessId), status: 'active' }).select('_id').lean()
-      : [];
-    const activeShopIds = activeShops.map((s) => String(s._id));
-    const txShopFilter = allShopsMode
-      ? { $or: [{ shopId: { $in: activeShopIds } }, { shopId: { $exists: false } }, { shopId: null }] }
-      : (requestedShopId ? { $or: [{ shopId: requestedShopId }, { shopId: { $exists: false } }, { shopId: null }] } : {});
 
     const now = new Date();
     let startDate = new Date();
@@ -66,7 +55,7 @@ router.get('/', auth, async (req, res) => {
     ] = await Promise.all([
       // 1. Overall Summary (Revenue, Debt, Counts)
       Transaction.aggregate([
-        { $match: { businessId, ...txShopFilter } },
+        { $match: { businessId,  } },
         {
           $group: {
             _id: null,
@@ -96,19 +85,19 @@ router.get('/', auth, async (req, res) => {
 
       // 2. Current Month Revenue (For Trend)
       Transaction.aggregate([
-        { $match: { businessId, ...txShopFilter, transactionDate: { $gte: currentMonthStart } } },
+        { $match: { businessId, transactionDate: { $gte: currentMonthStart } } },
         { $group: { _id: null, revenue: { $sum: { $cond: [{ $ne: ['$isPreviousDebt', true] }, { $toDouble: '$totalAmount' }, 0] } } } }
       ]),
 
       // 3. Previous Month Revenue (For Trend)
       Transaction.aggregate([
-        { $match: { businessId, ...txShopFilter, transactionDate: { $gte: previousMonthStart, $lte: previousMonthEnd } } },
+        { $match: { businessId, transactionDate: { $gte: previousMonthStart, $lte: previousMonthEnd } } },
         { $group: { _id: null, revenue: { $sum: { $cond: [{ $ne: ['$isPreviousDebt', true] }, { $toDouble: '$totalAmount' }, 0] } } } }
       ]),
 
       // 4. Dynamic Chart Aggregation
       Transaction.aggregate([
-        { $match: { businessId, ...txShopFilter, transactionDate: { $gte: startDate } } },
+        { $match: { businessId, transactionDate: { $gte: startDate } } },
         {
           $group: {
             _id: { $dateToString: { format: dateFormat, date: '$transactionDate' } },
@@ -120,7 +109,7 @@ router.get('/', auth, async (req, res) => {
 
       // 5. Top Products
       Transaction.aggregate([
-        { $match: { businessId, ...txShopFilter } },
+        { $match: { businessId,  } },
         { $unwind: '$items' },
         {
           $group: {
@@ -133,53 +122,20 @@ router.get('/', auth, async (req, res) => {
         { $limit: 5 }
       ]),
 
-      // 6. Inventory Valuation (Shop Cost & Shop Worth)
+      // 6. Inventory Valuation
       Product.aggregate([
-        { $match: { businessId: req.businessId, isDeleted: { $ne: true } } },
-        {
-          $lookup: {
-            from: ProductShopStock.collection.name,
-            let: { productId: '$id' },
-            pipeline: [
-              {
-                $match: {
-                  $expr: {
-                    $and: [
-                      { $eq: ['$businessId', req.businessId] },
-                      { $eq: ['$productId', '$$productId'] },
-                      ...(allShopsMode
-                        ? [{ $in: ['$shopId', activeShopIds] }]
-                        : ((!requestedShopId) ? [] : [{ $eq: ['$shopId', requestedShopId] }]))
-                    ]
-                  }
-                }
-              }
-            ],
-            as: 'shopStockRows'
-          }
-        },
-        {
-          $addFields: {
-            effectiveStock: {
-              $cond: [
-                { $gt: [{ $size: '$shopStockRows' }, 0] },
-                { $sum: '$shopStockRows.onHand' },
-                '$stock'
-              ]
-            }
-          }
-        },
+        { $match: { businessId: String(req.businessId), isDeleted: { $ne: true } } },
         {
           $group: {
             _id: null,
             shopCost: {
               $sum: {
-                $multiply: ['$effectiveStock', { $toDouble: '$costPrice' }]
+                $multiply: ['$stock', { $toDouble: '$costPrice' }]
               }
             },
             shopWorth: {
               $sum: {
-                $multiply: ['$effectiveStock', { $toDouble: '$sellingPrice' }]
+                $multiply: ['$stock', { $toDouble: '$sellingPrice' }]
               }
             }
           }
@@ -188,7 +144,7 @@ router.get('/', auth, async (req, res) => {
 
       // 7. Daily Stats (Cash Collected + New Debt)
       Transaction.aggregate([
-        { $match: { businessId, ...txShopFilter, transactionDate: { $gte: todayStart } } },
+        { $match: { businessId, transactionDate: { $gte: todayStart } } },
         {
           $group: {
             _id: null,
@@ -200,13 +156,13 @@ router.get('/', auth, async (req, res) => {
 
       // 8. Monthly Revenue (Filtered)
       Transaction.aggregate([
-        { $match: { businessId, ...txShopFilter, transactionDate: { $gte: filterMonthStart, $lte: filterMonthEnd } } },
+        { $match: { businessId, transactionDate: { $gte: filterMonthStart, $lte: filterMonthEnd } } },
         { $group: { _id: null, totalSales: { $sum: { $cond: [{ $ne: ['$isPreviousDebt', true] }, { $toDouble: '$totalAmount' }, 0] } } } }
       ]),
 
       // 9. Yearly Revenue (Filtered)
       Transaction.aggregate([
-        { $match: { businessId, ...txShopFilter, transactionDate: { $gte: filterYearStart, $lte: filterYearEnd } } },
+        { $match: { businessId, transactionDate: { $gte: filterYearStart, $lte: filterYearEnd } } },
         { $group: { _id: null, totalSales: { $sum: { $cond: [{ $ne: ['$isPreviousDebt', true] }, { $toDouble: '$totalAmount' }, 0] } } } }
       ])
     ]);
@@ -227,7 +183,7 @@ router.get('/', auth, async (req, res) => {
     // --- Profit Calculation ---
     const [productSalesAgg] = await Promise.all([
       Transaction.aggregate([
-        { $match: { businessId, ...txShopFilter } },
+        { $match: { businessId,  } },
         { $unwind: '$items' },
         {
           $group: {
@@ -245,7 +201,7 @@ router.get('/', auth, async (req, res) => {
 
     // Current Month Profit Aggregation
     const productSalesCurrentMonth = await Transaction.aggregate([
-      { $match: { businessId, ...txShopFilter, transactionDate: { $gte: currentMonthStart } } },
+      { $match: { businessId, transactionDate: { $gte: currentMonthStart } } },
       { $unwind: '$items' },
       {
         $group: {
@@ -262,7 +218,7 @@ router.get('/', auth, async (req, res) => {
 
      // Previous Month Profit Aggregation
      const productSalesPrevMonth = await Transaction.aggregate([
-      { $match: { businessId, ...txShopFilter, transactionDate: { $gte: previousMonthStart, $lte: previousMonthEnd } } },
+      { $match: { businessId, transactionDate: { $gte: previousMonthStart, $lte: previousMonthEnd } } },
       { $unwind: '$items' },
       {
         $group: {
