@@ -30,7 +30,6 @@ const settingsRouter = require('./routes/settings');
 const supportRouter = require('./routes/support');
 const statsRouter = require('./routes/stats');
 const auditRouter = require('./routes/audit');
-const shopsRouter = require('./routes/shops');
 
 const app = express();
 
@@ -72,7 +71,6 @@ app.use('/api/settings', settingsRouter);
 app.use('/api/support', supportRouter);
 app.use('/api/stats', statsRouter);
 app.use('/api/audit', auditRouter);
-app.use('/api/shops', shopsRouter);
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/transactions', require('./routes/transactions'));
 app.use('/api/tax', require('./routes/tax'));

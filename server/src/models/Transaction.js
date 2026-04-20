@@ -13,8 +13,7 @@ const TransactionItemSchema = new mongoose.Schema({
 
 const TransactionSchema = new mongoose.Schema({
   businessId: { type: mongoose.Schema.Types.ObjectId, ref: 'Business', index: true, required: true },
-  shopId: { type: String, default: null, index: true },
-  id: { type: String, required: true },
+    id: { type: String, required: true },
   transactionDate: { type: Date },
   customerName: { type: String },
   customerPhone: { type: String },

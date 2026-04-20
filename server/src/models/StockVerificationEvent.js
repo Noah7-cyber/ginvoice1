@@ -2,8 +2,7 @@ const mongoose = require('mongoose');
 
 const StockVerificationEventSchema = new mongoose.Schema({
   businessId: { type: String, required: true, index: true },
-  shopId: { type: String, default: null, index: true },
-  productId: { type: String, required: true, index: true },
+    productId: { type: String, required: true, index: true },
   expectedQty: { type: Number, required: true },
   countedQty: { type: Number, required: true },
   variance: { type: Number, required: true },

@@ -10,12 +10,11 @@ router.get('/', auth, async (req, res) => {
   try {
     const businessId = req.user.businessId || req.user.id;
     const defaultShopId = await resolveShopId({ businessId, requestedShopId: null });
-    const requestedShopId = req.assignedShopId || (req.query.shopId ? String(req.query.shopId) : defaultShopId);
-    const allShopsMode = req.assignedShopId ? false : (req.query.allShops === 'true');
+        const allShopsMode = req.assignedShopId ? false : (req.query.allShops === 'true');
 
     const rawExpenditures = await Expenditure.find({
         business: businessId,
-        ...(allShopsMode ? {} : { shopId: requestedShopId })
+
     }).sort({ date: -1 }).lean();
 
     const expenditures = rawExpenditures.map(e => {
@@ -51,7 +50,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 router.post('/', auth, requireActiveSubscription, async (req, res) => {
-  const { title, amount, category, date, description, paymentMethod, id, expenseType, flowType, shopId: requestedShopId, allShops } = req.body;
+  const { title, amount, category, date, description, paymentMethod, id, expenseType, flowType } = req.body;
   try {
     // Force sign based on flowType
     let finalAmount = parseFloat(amount);
@@ -62,7 +61,6 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
     else if (flowType === 'in') finalAmount = Math.abs(finalAmount);
 
     const businessId = req.user.businessId || req.user.id;
-    const shopId = await ensureWritableShopContext({ businessId, requestedShopId, allShops, enforcedShopId: req.assignedShopId });
 
     const newExpenditure = new Expenditure({
       id: id || require('crypto').randomUUID(), // Ensure id is present
@@ -76,8 +74,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
       flowType: flowType || 'out',
       // FIX: Add fallback to req.user.id to match the GET route logic
       business: businessId,
-      shopId,
-      user: req.user.id
+            user: req.user.id
     });
     const saved = await newExpenditure.save();
     const expenditure = saved.toObject();
@@ -94,12 +91,11 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
 });
 
 router.put('/:id', auth, requireActiveSubscription, async (req, res) => {
-  const { title, amount, category, date, description, paymentMethod, expenseType, flowType, shopId: requestedShopId, allShops } = req.body;
+  const { title, amount, category, date, description, paymentMethod, expenseType, flowType } = req.body;
   try {
     const businessId = req.user.businessId || req.user.id;
     let expenditure = await Expenditure.findOne({ id: req.params.id, business: businessId });
     if (!expenditure) return res.status(404).json({ msg: 'Expenditure not found' });
-    const shopId = await ensureWritableShopContext({ businessId, requestedShopId: requestedShopId || expenditure.shopId, allShops, enforcedShopId: req.assignedShopId });
 
     // Force sign based on flowType
     let finalAmount = parseFloat(amount);
@@ -117,7 +113,6 @@ router.put('/:id', auth, requireActiveSubscription, async (req, res) => {
     expenditure.paymentMethod = paymentMethod;
     if (expenseType) expenditure.expenseType = expenseType;
     if (flowType) expenditure.flowType = flowType;
-    expenditure.shopId = shopId;
 
     await expenditure.save();
 

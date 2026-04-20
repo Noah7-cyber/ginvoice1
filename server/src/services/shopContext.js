@@ -1,48 +1,15 @@
-const Business = require('../models/Business');
-const Shop = require('../models/Shop');
-
 const ensureDefaultShopForBusiness = async (businessId) => {
-  const normalizedBusinessId = String(businessId);
-  const business = await Business.findById(normalizedBusinessId).select('name defaultShopId').lean();
-  if (!business) return null;
-
-  if (business.defaultShopId) {
-    return business.defaultShopId;
-  }
-
-  let mainShop = await Shop.findOne({ businessId: normalizedBusinessId, isMain: true }).select('_id').lean();
-  if (!mainShop) {
-    const fallbackName = business.name ? `${business.name} Main Shop` : 'Main Shop';
-    mainShop = await Shop.create({
-      businessId: normalizedBusinessId,
-      name: fallbackName,
-      normalizedName: fallbackName.toLowerCase(),
-      isMain: true,
-      status: 'active'
-    });
-  }
-
-  const defaultShopId = String(mainShop._id);
-  await Business.updateOne({ _id: normalizedBusinessId }, { $set: { defaultShopId } });
-  return defaultShopId;
+  return null;
 };
 
 const resolveShopId = async ({ businessId, requestedShopId }) => {
-  const normalizedBusinessId = String(businessId);
-  const defaultShopId = await ensureDefaultShopForBusiness(normalizedBusinessId);
-  return defaultShopId;
+  return null;
 };
 
-const isAllShopsMode = (value) => value === true || value === 'true' || value === '1';
+const isAllShopsMode = (value) => false;
 
 const ensureWritableShopContext = async ({ businessId, requestedShopId, allShops, enforcedShopId = null }) => {
-  const shopId = await resolveShopId({ businessId });
-  if (!shopId) {
-    const err = new Error('Could not resolve active shop for this business.');
-    err.status = 400;
-    throw err;
-  }
-  return shopId;
+  return null;
 };
 
 module.exports = {

@@ -7,7 +7,6 @@ const Business = require('../models/Business');
 const Product = require('../models/Product');
 const Transaction = require('../models/Transaction');
 const Expenditure = require('../models/Expenditure');
-const Shop = require('../models/Shop');
 const { sendSystemEmail } = require('../services/mail');
 const { buildWelcomeEmail, buildRecoveryEmail, buildVerificationEmail } = require('../services/emailTemplates');
 const { sendTikTokEvent } = require('../services/tiktok');
@@ -557,82 +556,32 @@ router.put('/change-pins', require('../middleware/auth'), async (req, res) => {
 
 router.get('/staff-shop-pins', require('../middleware/auth'), async (req, res) => {
   try {
-    if (req.user.role !== 'owner') return res.status(403).json({ message: 'Only owner can manage staff pins' });
-
-    const business = await Business.findById(req.businessId).select('shopStaffPins defaultShopId').lean();
-    if (!business) return res.status(404).json({ message: 'Business not found' });
-
-    const shops = await getActiveShops(req.businessId);
-    const pins = normalizeShopStaffPins(business);
-    const pinMap = new Map(pins.map((row) => [String(row.shopId), row]));
-
-    return res.json({
-      shops: shops.map((shop) => {
-        const row = pinMap.get(String(shop.id));
-        return {
-          shopId: shop.id,
-          shopName: shop.name,
-          isMain: shop.isMain,
-          hasStaffPin: Boolean(row?.staffPin),
-          staffName: row?.staffName || ''
-        };
-      }),
-      defaultShopId: business.defaultShopId || shops[0]?.id || null
+    const business = await Business.findById(req.businessId).select('staffPins').lean();
+    res.json({
+      pins: (business.staffPins || []).map(p => ({
+        shopId: 'default',
+        shopName: 'Main Store',
+        isPinSet: true
+      }))
     });
   } catch (err) {
-    return res.status(500).json({ message: 'Failed to load shop staff pins' });
+    res.status(500).json({ message: 'Failed to fetch pins' });
   }
 });
 
-router.put('/staff-shop-pins/:shopId', require('../middleware/auth'), async (req, res) => {
+        router.put('/staff-shop-pins/:shopId', require('../middleware/auth'), async (req, res) => {
   try {
-    if (req.user.role !== 'owner') return res.status(403).json({ message: 'Only owner can manage staff pins' });
+    const { newPin } = req.body;
+    if (!newPin || newPin.length < 4) return res.status(400).json({ message: 'Invalid PIN' });
+    const hashedPin = await bcrypt.hash(String(newPin), 10);
 
-    const shopId = String(req.params.shopId || '').trim();
-    const currentOwnerPin = String(req.body?.currentOwnerPin || '').trim();
-    const staffPin = String(req.body?.staffPin || '').trim();
-    const staffName = String(req.body?.staffName || '').trim();
-
-    if (!shopId) return res.status(400).json({ message: 'Shop ID required' });
-    if (!currentOwnerPin) return res.status(400).json({ message: 'Current owner PIN required' });
-    if (!staffPin || staffPin.length < 4) return res.status(400).json({ message: 'Staff PIN must be at least 4 digits' });
-
-    const shop = await Shop.findOne({ _id: shopId, businessId: String(req.businessId), status: 'active' }).lean();
-    if (!shop) return res.status(404).json({ message: 'Shop not found' });
-
-    const business = await Business.findById(req.businessId);
-    if (!business) return res.status(404).json({ message: 'Business not found' });
-
-    const isOwner = await bcrypt.compare(currentOwnerPin, business.ownerPin);
-    if (!isOwner) return res.status(401).json({ message: 'Invalid current owner PIN' });
-
-    const hashed = await bcrypt.hash(staffPin, 10);
-    const rows = normalizeShopStaffPins(business);
-    const idx = rows.findIndex((row) => String(row.shopId) === String(shopId));
-
-    const payload = {
-      shopId,
-      staffPin: hashed,
-      staffName: staffName || `Sales (${shop.name})`,
-      updatedAt: new Date()
-    };
-
-    if (idx >= 0) rows[idx] = payload;
-    else rows.push(payload);
-
-    business.shopStaffPins = rows;
-    // Force re-auth for staff users after pin changes.
-    business.credentialsVersion = (business.credentialsVersion || 1) + 1;
-    await business.save();
-
-    return res.json({
-      success: true,
-      shopId,
-      shopName: shop.name,
-      staffName: payload.staffName
-    });
+    await Business.updateOne(
+      { _id: req.businessId },
+      { $set: { staffPins: [{ shopId: 'default', staffPin: hashedPin }] } }
+    );
+    res.json({ message: 'Staff PIN updated successfully' });
   } catch (err) {
-    return res.status(500).json({ message: 'Failed to update shop staff PIN' });
+    res.status(500).json({ message: 'Failed to update pin' });
   }
 });
 

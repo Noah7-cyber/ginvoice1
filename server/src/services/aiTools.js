@@ -3,7 +3,6 @@ const OpenAI = require('openai');
 const Transaction = require('../models/Transaction');
 const Product = require('../models/Product');
 const Expenditure = require('../models/Expenditure');
-const ProductShopStock = require('../models/ProductShopStock');
 const { generateVerificationQueue } = require('./stockVerification');
 
 const client = new OpenAI({
@@ -251,39 +250,13 @@ const tools = [
 // --- Tool Logic ---
 
 const resolveShopContext = (context = {}) => {
-    const requestedShopId = context?.shopId ? String(context.shopId) : '';
+
     const allShops = Boolean(context?.allShops);
     return { requestedShopId, allShops };
 };
 
-const applyShopFilter = (criteria, context = {}, field = 'shopId') => {
-    const { requestedShopId, allShops } = resolveShopContext(context);
-    if (!allShops && requestedShopId) {
-        if (criteria.$or) {
-            const existingOr = criteria.$or;
-            delete criteria.$or;
 
-            criteria.$and = criteria.$and || [];
-            criteria.$and.push({ $or: existingOr });
-            criteria.$and.push({
-                $or: [
-                    { [field]: requestedShopId },
-                    { [field]: { $exists: false } },
-                    { [field]: null }
-                ]
-            });
-        } else {
-            criteria.$or = [
-                { [field]: requestedShopId },
-                { [field]: { $exists: false } },
-                { [field]: null }
-            ];
-        }
-    }
-    return criteria;
-};
-
-const get_business_report = async ({ startDate, endDate }, { businessId, userRole, shopId, allShops }) => {
+const get_business_report = async ({ startDate, endDate }, { businessId, userRole }) => {
     if (!businessId) return { error: "Login required." };
 
     // 1. Determine Date Range
@@ -292,10 +265,10 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
     end.setHours(23, 59, 59, 999);
 
     const businessObjectId = new mongoose.Types.ObjectId(businessId);
-    const transactionMatch = applyShopFilter({
+    const transactionMatch = ({ businessId }) => ({ businessId })({
         businessId: businessObjectId,
         transactionDate: { $gte: start, $lte: end }
-    }, { shopId, allShops });
+    });
 
     // 2. Top Products
     const topProductResult = await Transaction.aggregate([
@@ -344,10 +317,10 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
 
     // 5. Expenses & Cash Flow (Split by Type)
     const expenseAggregation = await Expenditure.aggregate([
-        { $match: applyShopFilter({
+        { $match: ({ businessId }) => ({ businessId })({
             business: businessObjectId,
             date: { $gte: start, $lte: end }
-        }, { shopId, allShops })},
+        })},
         { $group: {
             _id: {
                 category: { $ifNull: ['$category', 'Uncategorized'] },
@@ -442,13 +415,13 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
     };
 };
 
-const check_debtors = async ({}, { businessId, shopId, allShops }) => {
+const check_debtors = async ({}, { businessId }) => {
     if (!businessId) return { error: "Login required." };
 
-    const criteria = applyShopFilter({
+    const criteria = ({ businessId }) => ({ businessId })({
         businessId,
         balance: { $gt: 0 }
-    }, { shopId, allShops });
+    });
 
     const count = await Transaction.countDocuments(criteria);
 
@@ -472,18 +445,16 @@ const check_debtors = async ({}, { businessId, shopId, allShops }) => {
     }
 };
 
-const check_low_stock = async ({}, { businessId, shopId, allShops }) => {
+const check_low_stock = async ({}, { businessId }) => {
     if (!businessId) return { error: "Login required." };
 
     const stockCriteria = { businessId, isListed: { $ne: false }, onHand: { $lte: 5 } };
-    if (!allShops && shopId) stockCriteria.shopId = String(shopId);
 
-    const lowRows = await ProductShopStock.find(stockCriteria).sort({ onHand: 1 }).limit(20).lean();
+    const lowRows = await Product.find({ businessId: businessKey, stock: { $lte: 10 } }).sort({ stock: 1 }).limit(20).lean();
     const lowProductIds = Array.from(new Set(lowRows.map((row) => String(row.productId))));
     const products = lowProductIds.length ? await Product.find({ businessId, id: { $in: lowProductIds } }).lean() : [];
     const merged = lowRows.map((row) => ({
-        shopId: row.shopId,
-        productId: row.productId,
+                productId: row.productId,
         onHand: Number(row.onHand || 0),
         name: products.find((p) => String(p.id) === String(row.productId))?.name || row.productId
     }));
@@ -537,17 +508,17 @@ const product_search = async ({ query }, { businessId }) => {
     }
 };
 
-const search_expenses = async ({ query, startDate, endDate }, { businessId, shopId, allShops }) => {
+const search_expenses = async ({ query, startDate, endDate }, { businessId }) => {
     if (!businessId) return { error: "Login required." };
 
-    const criteria = applyShopFilter({
+    const criteria = ({ businessId }) => ({ businessId })({
         business: businessId,
         $or: [
             { description: { $regex: query, $options: 'i' } },
             { title: { $regex: query, $options: 'i' } },
             { category: { $regex: query, $options: 'i' } }
         ]
-    }, { shopId, allShops });
+    });
 
     if (startDate || endDate) {
         criteria.date = {};
@@ -727,7 +698,7 @@ const get_category_performance = async ({ category, startDate, endDate }, { busi
     };
 };
 
-const get_inventory_intelligence = async ({ days = 30, restockHorizonDays = 30, topN = 10 } = {}, { businessId, userRole, shopId, allShops }) => {
+const get_inventory_intelligence = async ({ days = 30, restockHorizonDays = 30, topN = 10 } = {}, { businessId, userRole }) => {
     if (!businessId) return { error: 'Login required.' };
 
     const safeDays = Math.min(Math.max(Number(days) || 30, 7), 120);
@@ -742,7 +713,7 @@ const get_inventory_intelligence = async ({ days = 30, restockHorizonDays = 30, 
         Transaction.find({ businessId: businessId, transactionDate: { $gte: periodStart } })
             .select('transactionDate items')
             .lean(),
-        ProductShopStock.find(applyShopFilter({ businessId: businessKey }, { shopId, allShops })).lean()
+        Promise.resolve([])
     ]);
 
     const soldMap = new Map();
@@ -828,11 +799,11 @@ const get_inventory_intelligence = async ({ days = 30, restockHorizonDays = 30, 
 };
 
 
-const search_sales_records = async ({ startDate, endDate, customerName, paymentStatus, limit = 20 }, { businessId, userRole, shopId, allShops }) => {
+const search_sales_records = async ({ startDate, endDate, customerName, paymentStatus, limit = 20 }, { businessId, userRole }) => {
     if (!businessId) return { error: "Login required." };
 
     const parsedLimit = Math.min(Math.max(Number(limit) || 20, 1), 50);
-    const criteria = applyShopFilter({ businessId }, { shopId, allShops });
+    const criteria = { businessId };
 
     if (startDate || endDate) {
         criteria.transactionDate = {};
@@ -890,10 +861,10 @@ const search_sales_records = async ({ startDate, endDate, customerName, paymentS
     return baseResult;
 };
 
-const get_recent_transaction = async ({}, { businessId, shopId, allShops }) => {
+const get_recent_transaction = async ({}, { businessId }) => {
     if (!businessId) return { error: "Login required." };
 
-    const result = await Transaction.findOne(applyShopFilter({ businessId }, { shopId, allShops }))
+    const result = await Transaction.findOne({ businessId })
         .sort({ transactionDate: -1 });
 
     if (!result) {
@@ -916,7 +887,7 @@ const get_stock_verification_queue = async ({}, { businessId }) => {
 // --- Executor ---
 const executeTool = async ({ name, args }, businessId, userRole = 'staff', shopContext = {}) => {
     try {
-        const context = { businessId, userRole, shopId: shopContext?.activeShopId || null, allShops: Boolean(shopContext?.allShopsMode) };
+        const context = { businessId, userRole,  };
         switch (name) {
             case 'get_business_report':
                 return await get_business_report(args, context);
