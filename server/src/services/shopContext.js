@@ -30,44 +30,18 @@ const ensureDefaultShopForBusiness = async (businessId) => {
 const resolveShopId = async ({ businessId, requestedShopId }) => {
   const normalizedBusinessId = String(businessId);
   const defaultShopId = await ensureDefaultShopForBusiness(normalizedBusinessId);
-  if (!defaultShopId) return null;
-
-  if (!requestedShopId) return defaultShopId;
-
-  const requested = await Shop.findOne({
-    _id: String(requestedShopId),
-    businessId: normalizedBusinessId,
-    status: 'active'
-  }).select('_id').lean();
-
-  return requested ? String(requested._id) : defaultShopId;
+  return defaultShopId;
 };
 
 const isAllShopsMode = (value) => value === true || value === 'true' || value === '1';
 
 const ensureWritableShopContext = async ({ businessId, requestedShopId, allShops, enforcedShopId = null }) => {
-  if (isAllShopsMode(allShops)) {
-    const err = new Error('All Shops mode is read-only. Select a specific shop to continue.');
-    err.status = 400;
-    throw err;
-  }
-
-  if (enforcedShopId) {
-    if (requestedShopId && String(requestedShopId) !== String(enforcedShopId)) {
-      const err = new Error('Staff account is locked to an assigned shop.');
-      err.status = 403;
-      throw err;
-    }
-    return String(enforcedShopId);
-  }
-
-  const shopId = await resolveShopId({ businessId, requestedShopId });
+  const shopId = await resolveShopId({ businessId });
   if (!shopId) {
     const err = new Error('Could not resolve active shop for this business.');
     err.status = 400;
     throw err;
   }
-
   return shopId;
 };
 
