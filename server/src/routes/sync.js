@@ -431,7 +431,13 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
         ? await Product.find({ businessId, id: { $in: incomingProductIds } }).lean()
         : [];
 
+      // Pre-fetch server-side truth for manual update comparison
+      const existingStocks = incomingProductIds.length > 0
+        ? await ProductShopStock.find({ businessId, productId: { $in: incomingProductIds } }).lean()
+        : [];
+
       const existingProductMap = new Map(existingProducts.map((p) => [p.id, p]));
+      const existingStockMap = new Map(existingStocks.map((s) => [`${s.productId}_${s.shopId}`, s.onHand || 0]));
 
       const productNotifications = [];
       const shopPresenceOps = [];
@@ -452,12 +458,45 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
 
         const productShopId = req.assignedShopId || p.shopId || defaultShopId;
 
+        if (p.expectedAbsoluteStock !== undefined && p.expectedAbsoluteStock !== null) {
+            const currentStock = existingStockMap.get(`${productId}_${productShopId}`) || 0;
+            const absoluteIncomingStock = Number(p.expectedAbsoluteStock);
+            const serverDelta = absoluteIncomingStock - currentStock;
+
+            if (serverDelta !== 0) {
+                transactions.push({
+                    idempotencyKey: `adj_${productId}_${Date.now()}_${Math.random()}`,
+                    transactionId: `adj_${productId}_${Date.now()}_${Math.random()}`,
+                    inventoryEffect: serverDelta > 0 ? 'restock' : 'sale',
+                    customerName: 'Stock Adjustment',
+                    paymentStatus: 'paid',
+                    transactionDate: new Date().toISOString(),
+                    shopId: productShopId,
+                    items: [{
+                        productId: productId,
+                        productName: p.name || existing?.name || 'Unknown',
+                        quantity: Math.abs(serverDelta),
+                        multiplier: 1,
+                        unitPrice: 0,
+                        discount: 0,
+                        total: 0
+                    }],
+                    subtotal: 0,
+                    globalDiscount: 0,
+                    totalAmount: 0,
+                    amountPaid: 0,
+                    balance: 0,
+                    createdByRole: req.userRole === 'staff' ? 'staff' : 'owner'
+                });
+            }
+        }
+
         shopPresenceOps.push({
           updateOne: {
             filter: { businessId, shopId: productShopId, productId },
             update: {
-              $set: { businessId, shopId: productShopId, productId, isListed: true },
-              $setOnInsert: { onHand: Number(p.currentStock || p.stock || 0) }
+              $set: { businessId, shopId: productShopId, productId, isListed: true, ...(p.expectedAbsoluteStock !== undefined && p.expectedAbsoluteStock !== null ? { onHand: Number(p.expectedAbsoluteStock) } : {}) },
+              $setOnInsert: { onHand: Number(p.expectedAbsoluteStock !== undefined && p.expectedAbsoluteStock !== null ? p.expectedAbsoluteStock : (p.currentStock || p.stock || 0)) }
             },
             upsert: true
           }

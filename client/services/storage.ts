@@ -110,12 +110,13 @@ export const flushPendingSyncQueue = async () => {
     const jobs = await getSyncJobs();
     for (const job of jobs) {
       if (!job.id) continue;
+      if ((job.retryCount || 0) >= 5) continue;
+
       try {
         await syncState(job.payload);
         await removeSyncJob(job.id);
       } catch (err: any) {
         await incrementRetryCount(job.id, Number(job.retryCount || 0));
-        throw err;
       }
     }
   })();

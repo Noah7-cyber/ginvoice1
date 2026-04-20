@@ -209,7 +209,8 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
     for (const [index, p] of updatedProductsList.entries()) {
         if (selectedIds.has(p.id)) {
-            let updated = { ...p, isManualUpdate: true, updatedAt: new Date().toISOString() };
+            let updated = { ...p, updatedAt: new Date().toISOString() };
+            // Strip out isManualUpdate
 
             let stockChanged = false;
             let stockDelta = 0;
@@ -233,6 +234,11 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
               stockChanged = true;
             }
 
+            if (stockChanged) {
+               // @ts-ignore
+               updated.expectedAbsoluteStock = updated.currentStock;
+            }
+
             if (typeof bulkCostPrice === 'number') {
               updated.costPrice = bulkCostPrice;
             }
@@ -242,32 +248,6 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                 const finalItem = updatedFromApi?.id ? updatedFromApi : updated;
                 updatedProductsList[index] = finalItem;
                 anySuccess = true;
-
-                if (stockChanged && stockDelta !== 0) {
-                    await api.post('/transactions', {
-                        idempotencyKey: crypto.randomUUID(),
-                        transactionId: crypto.randomUUID(),
-                        inventoryEffect: stockDelta > 0 ? 'restock' : 'sale',
-                        customerName: 'Stock Adjustment',
-                        paymentStatus: 'paid', // not a real sale
-                        transactionDate: new Date().toISOString(),
-                        items: [{
-                            productId: p.id,
-                            productName: p.name,
-                            quantity: Math.abs(stockDelta),
-                            multiplier: 1,
-                            unitPrice: 0,
-                            discount: 0,
-                            total: 0
-                        }],
-                        subtotal: 0,
-                        globalDiscount: 0,
-                        totalAmount: 0,
-                        amountPaid: 0,
-                        balance: 0,
-                        shopId: activeShopId || null
-                    }).catch(e => console.error("Failed to sync stock adjustment transaction:", e));
-                }
 
             } catch (err) {
                 console.error(`Failed to update product ${p.id}`, err);
@@ -351,37 +331,16 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
              const updatedItem = {
                  ...(newProduct as Product),
                  id: editingProductId,
-                 isManualUpdate: true,
                  updatedAt: new Date().toISOString()
              };
 
-             const updatedFromApi = await updateProduct(updatedItem);
-
-             if (delta !== 0) {
-                 await api.post('/transactions', {
-                     idempotencyKey: crypto.randomUUID(),
-                     transactionId: crypto.randomUUID(),
-                     inventoryEffect: delta > 0 ? 'restock' : 'sale',
-                     customerName: 'Stock Adjustment',
-                     paymentStatus: 'paid',
-                     transactionDate: new Date().toISOString(),
-                     items: [{
-                         productId: editingProductId,
-                         productName: oldProduct?.name || newProduct.name || 'Unknown',
-                         quantity: Math.abs(delta),
-                         multiplier: 1,
-                         unitPrice: 0,
-                         discount: 0,
-                         total: 0
-                     }],
-                     subtotal: 0,
-                     globalDiscount: 0,
-                     totalAmount: 0,
-                     amountPaid: 0,
-                     balance: 0,
-                     shopId: activeShopId || null
-                 }).catch(e => console.error("Failed to sync stock adjustment transaction:", e));
+             // Check if stock was modified manually
+             if (oldStock !== newStock) {
+                 // @ts-ignore
+                 updatedItem.expectedAbsoluteStock = newStock;
              }
+
+             const updatedFromApi = await updateProduct(updatedItem);
 
              // Update state AFTER backend confirmation
              const updatedProducts = products.map(p => p.id === editingProductId ? (updatedFromApi?.id ? updatedFromApi : updatedItem) : p);
@@ -400,9 +359,11 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
              const newItem: Product = {
                  ...sanitizedProduct,
                  id: `PRD-${Date.now()}`,
-                 isManualUpdate: true,
                  updatedAt: new Date().toISOString()
              };
+             // For brand new products, expectedAbsoluteStock should be set to set initial stock
+             // @ts-ignore
+             newItem.expectedAbsoluteStock = sanitizedProduct.currentStock;
 
              const createdFromApi = await createProduct(newItem);
 
@@ -445,41 +406,16 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
         return;
     }
 
-    const updatedItem = { ...product, ...edits, isManualUpdate: true, updatedAt: new Date().toISOString() };
+    const updatedItem = { ...product, ...edits, updatedAt: new Date().toISOString() };
+
+    if (edits.currentStock !== undefined && edits.currentStock !== product.currentStock) {
+         // @ts-ignore
+         updatedItem.expectedAbsoluteStock = edits.currentStock;
+    }
 
     setIsInlineSaving(id);
     try {
         const updatedFromApi = await updateProduct(updatedItem);
-
-        if (edits.currentStock !== undefined) {
-            const oldStock = product.currentStock || 0;
-            const delta = edits.currentStock - oldStock;
-            if (delta !== 0) {
-                await api.post('/transactions', {
-                    idempotencyKey: crypto.randomUUID(),
-                    transactionId: crypto.randomUUID(),
-                    inventoryEffect: delta > 0 ? 'restock' : 'sale',
-                    customerName: 'Stock Adjustment',
-                    paymentStatus: 'paid',
-                    transactionDate: new Date().toISOString(),
-                    items: [{
-                        productId: product.id,
-                        productName: product.name,
-                        quantity: Math.abs(delta),
-                        multiplier: 1,
-                        unitPrice: 0,
-                        discount: 0,
-                        total: 0
-                    }],
-                    subtotal: 0,
-                    globalDiscount: 0,
-                    totalAmount: 0,
-                    amountPaid: 0,
-                    balance: 0,
-                    shopId: activeShopId || null
-                }).catch(e => console.error("Failed to sync stock adjustment transaction:", e));
-            }
-        }
 
         // Update local state AFTER backend confirms
         const updatedProducts = products.map(p => p.id === id ? (updatedFromApi?.id ? updatedFromApi : updatedItem) : p);
