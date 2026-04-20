@@ -117,7 +117,7 @@ router.get('/version', auth, async (req, res) => {
 router.get('/', auth, async (req, res) => {
   try {
     // FORCE FIX: Trim whitespace to prevent invisible mismatches
-    const businessId = String(req.businessId);
+    const businessId = String(req.businessId).trim();
 
     console.log(`[SYNC] 🚀 STARTING FETCH for Business ID: "${businessId}"`);
 
@@ -380,7 +380,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
     if (isAllShopsMode(req.body?.allShops)) {
       return res.status(400).json({ message: 'All Shops mode is read-only. Select a specific shop to continue.' });
     }
-    const businessId = String(req.businessId);
+    const businessId = req.businessId;
     const defaultShopId = req.assignedShopId || await resolveShopId({ businessId, requestedShopId: req.body?.shopId });
     if (req.assignedShopId && req.body?.shopId && String(req.body.shopId) !== String(req.assignedShopId)) {
       return res.status(403).json({ message: 'Staff account is locked to an assigned shop.' });
@@ -767,7 +767,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
 router.delete('/products/:id', auth, requireActiveSubscription, async (req, res) => {
   try {
     const { id } = req.params;
-    const businessId = String(req.businessId);
+    const businessId = String(req.businessId).trim();
     const shopId = await resolveShopId({ businessId, requestedShopId: req.query.shopId });
 
     // Hard Delete?
@@ -809,7 +809,7 @@ router.delete('/products/:id', auth, requireActiveSubscription, async (req, res)
 router.delete('/transactions/:id', auth, requireActiveSubscription, async (req, res) => {
   try {
     const { id } = req.params;
-    const businessId = new mongoose.Types.ObjectId(req.businessId);
+    const businessId = new mongoose.Types.ObjectId(req.businessId); // Transactions use ObjectId
     const defaultShopId = await resolveShopId({ businessId: req.businessId, requestedShopId: req.query.shopId });
 
     // 1. Find transaction first (needed for both restock and notification)
@@ -850,7 +850,7 @@ router.delete('/transactions/:id', auth, requireActiveSubscription, async (req, 
 router.delete('/expenditures/:id', auth, requireActiveSubscription, async (req, res) => {
   try {
     const { id } = req.params;
-    const businessId = String(req.businessId);
+    const businessId = req.businessId;
     await Expenditure.deleteOne({ business: businessId, id });
     res.json({ success: true, id });
   } catch (err) {
