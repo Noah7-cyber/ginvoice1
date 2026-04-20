@@ -451,10 +451,14 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
         }
 
         const productShopId = req.assignedShopId || p.shopId || defaultShopId;
+
         shopPresenceOps.push({
           updateOne: {
             filter: { businessId, shopId: productShopId, productId },
-            update: { $set: { businessId, shopId: productShopId, productId, isListed: true } },
+            update: {
+              $set: { businessId, shopId: productShopId, productId, isListed: true },
+              $setOnInsert: { onHand: Number(p.currentStock || p.stock || 0) }
+            },
             upsert: true
           }
         });
