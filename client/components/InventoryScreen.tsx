@@ -3,7 +3,7 @@ import { Plus, Search, Edit3, Trash2, CheckCircle2, X, ListTodo, Layers, Tag, Do
 import { Product, Category } from '../types';
 import { CURRENCY } from '../constants';
 import { formatCurrency } from '../utils/currency';
-import { deleteProduct, createProduct, updateProduct, getCategories, getStockVerificationQueue, verifyStockItem } from '../services/api';
+import api, { deleteProduct, createProduct, updateProduct, getCategories, getStockVerificationQueue, verifyStockItem } from '../services/api';
 import { useToast } from './ToastProvider';
 import CategoryManager from './CategoryManager';
 import AlphabetScrubber from './AlphabetScrubber';
@@ -144,14 +144,15 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   const filteredProducts = useMemo(() => products.filter(p => {
     if (p.isDeleted) return false; // Hide deleted items
     const term = searchTerm.toLowerCase();
-    const matchesSearch = p.name.toLowerCase().includes(term) || (p.category && p.category.toLowerCase().includes(term));
+    const safeName = p.name || '';
+    const matchesSearch = safeName.toLowerCase().includes(term) || (p.category && p.category.toLowerCase().includes(term));
     const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
     const matchesLowStock = !filterLowStock || p.currentStock < lowStockThreshold;
     const matchesMinPrice = minPrice === '' || p.sellingPrice >= minPrice;
     const matchesMaxPrice = maxPrice === '' || p.sellingPrice <= maxPrice;
 
     return matchesSearch && matchesCategory && matchesLowStock && matchesMinPrice && matchesMaxPrice;
-  }).sort((a, b) => a.name.localeCompare(b.name)), [products, searchTerm, selectedCategory, filterLowStock, lowStockThreshold, minPrice, maxPrice]);
+  }).sort((a, b) => (a.name || '').localeCompare(b.name || '')), [products, searchTerm, selectedCategory, filterLowStock, lowStockThreshold, minPrice, maxPrice]);
 
   // Reset pagination on filter change
   useEffect(() => {
@@ -210,6 +211,9 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
         if (selectedIds.has(p.id)) {
             let updated = { ...p, isManualUpdate: true, updatedAt: new Date().toISOString() };
 
+            let stockChanged = false;
+            let stockDelta = 0;
+
             // Partial Updates: Only update if value is provided
             if (bulkCategory) updated.category = bulkCategory;
 
@@ -219,12 +223,14 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
             if (typeof bulkStockAdd === 'number') {
               updated.currentStock = Math.max(0, updated.currentStock + bulkStockAdd);
-              updated.stockDelta = (updated.stockDelta || 0) + bulkStockAdd;
+              stockDelta += bulkStockAdd;
+              stockChanged = true;
             }
 
             if (typeof bulkStockReduce === 'number') {
               updated.currentStock = Math.max(0, updated.currentStock - bulkStockReduce);
-              updated.stockDelta = (updated.stockDelta || 0) - bulkStockReduce;
+              stockDelta -= bulkStockReduce;
+              stockChanged = true;
             }
 
             if (typeof bulkCostPrice === 'number') {
@@ -233,8 +239,36 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
             try {
                 const updatedFromApi = await updateProduct(updated);
-                updatedProductsList[index] = updatedFromApi || updated;
+                const finalItem = updatedFromApi?.id ? updatedFromApi : updated;
+                updatedProductsList[index] = finalItem;
                 anySuccess = true;
+
+                if (stockChanged && stockDelta !== 0) {
+                    await api.post('/transactions', {
+                        idempotencyKey: crypto.randomUUID(),
+                        transactionId: crypto.randomUUID(),
+                        inventoryEffect: stockDelta > 0 ? 'restock' : 'sale',
+                        customerName: 'Stock Adjustment',
+                        paymentStatus: 'paid', // not a real sale
+                        transactionDate: new Date().toISOString(),
+                        items: [{
+                            productId: p.id,
+                            productName: p.name,
+                            quantity: Math.abs(stockDelta),
+                            multiplier: 1,
+                            unitPrice: 0,
+                            discount: 0,
+                            total: 0
+                        }],
+                        subtotal: 0,
+                        globalDiscount: 0,
+                        totalAmount: 0,
+                        amountPaid: 0,
+                        balance: 0,
+                        shopId: activeShopId || null
+                    }).catch(e => console.error("Failed to sync stock adjustment transaction:", e));
+                }
+
             } catch (err) {
                 console.error(`Failed to update product ${p.id}`, err);
                 hasError = true;
@@ -318,14 +352,39 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                  ...(newProduct as Product),
                  id: editingProductId,
                  isManualUpdate: true,
-                 updatedAt: new Date().toISOString(),
-                 stockDelta: (oldProduct?.stockDelta || 0) + delta
+                 updatedAt: new Date().toISOString()
              };
 
              const updatedFromApi = await updateProduct(updatedItem);
 
+             if (delta !== 0) {
+                 await api.post('/transactions', {
+                     idempotencyKey: crypto.randomUUID(),
+                     transactionId: crypto.randomUUID(),
+                     inventoryEffect: delta > 0 ? 'restock' : 'sale',
+                     customerName: 'Stock Adjustment',
+                     paymentStatus: 'paid',
+                     transactionDate: new Date().toISOString(),
+                     items: [{
+                         productId: editingProductId,
+                         productName: oldProduct?.name || newProduct.name || 'Unknown',
+                         quantity: Math.abs(delta),
+                         multiplier: 1,
+                         unitPrice: 0,
+                         discount: 0,
+                         total: 0
+                     }],
+                     subtotal: 0,
+                     globalDiscount: 0,
+                     totalAmount: 0,
+                     amountPaid: 0,
+                     balance: 0,
+                     shopId: activeShopId || null
+                 }).catch(e => console.error("Failed to sync stock adjustment transaction:", e));
+             }
+
              // Update state AFTER backend confirmation
-             const updatedProducts = products.map(p => p.id === editingProductId ? (updatedFromApi || updatedItem) : p);
+             const updatedProducts = products.map(p => p.id === editingProductId ? (updatedFromApi?.id ? updatedFromApi : updatedItem) : p);
              onUpdateProducts(updatedProducts);
              addToast('Product updated successfully.', 'success');
         } else {
@@ -337,19 +396,18 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                currentStock: Number(newProduct.currentStock) || 0,
              } as Product;
 
-             // Ensure new products have a delta so backend initializes stock correctly via $inc
+             // Ensure new products are handled correctly
              const newItem: Product = {
                  ...sanitizedProduct,
                  id: `PRD-${Date.now()}`,
                  isManualUpdate: true,
-                 updatedAt: new Date().toISOString(),
-                 stockDelta: sanitizedProduct.currentStock
+                 updatedAt: new Date().toISOString()
              };
 
              const createdFromApi = await createProduct(newItem);
 
              // Update state AFTER backend confirmation
-             onUpdateProducts([...products, (createdFromApi || newItem)]);
+             onUpdateProducts([...products, (createdFromApi?.id ? createdFromApi : newItem)]);
              addToast('Product created successfully.', 'success');
         }
         setIsModalOpen(false);
@@ -393,8 +451,38 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     try {
         const updatedFromApi = await updateProduct(updatedItem);
 
+        if (edits.currentStock !== undefined) {
+            const oldStock = product.currentStock || 0;
+            const delta = edits.currentStock - oldStock;
+            if (delta !== 0) {
+                await api.post('/transactions', {
+                    idempotencyKey: crypto.randomUUID(),
+                    transactionId: crypto.randomUUID(),
+                    inventoryEffect: delta > 0 ? 'restock' : 'sale',
+                    customerName: 'Stock Adjustment',
+                    paymentStatus: 'paid',
+                    transactionDate: new Date().toISOString(),
+                    items: [{
+                        productId: product.id,
+                        productName: product.name,
+                        quantity: Math.abs(delta),
+                        multiplier: 1,
+                        unitPrice: 0,
+                        discount: 0,
+                        total: 0
+                    }],
+                    subtotal: 0,
+                    globalDiscount: 0,
+                    totalAmount: 0,
+                    amountPaid: 0,
+                    balance: 0,
+                    shopId: activeShopId || null
+                }).catch(e => console.error("Failed to sync stock adjustment transaction:", e));
+            }
+        }
+
         // Update local state AFTER backend confirms
-        const updatedProducts = products.map(p => p.id === id ? (updatedFromApi || updatedItem) : p);
+        const updatedProducts = products.map(p => p.id === id ? (updatedFromApi?.id ? updatedFromApi : updatedItem) : p);
         onUpdateProducts(updatedProducts);
 
         setInlineEditingId(null);
@@ -418,12 +506,6 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
         if (!product) return prev;
 
         const nextEdits = { ...currentEdits, [field]: numValue };
-
-        if (field === 'currentStock') {
-             const oldStock = product.currentStock || 0;
-             const delta = numValue - oldStock;
-             nextEdits.stockDelta = (product.stockDelta || 0) + delta;
-        }
 
         return { ...prev, [id]: nextEdits };
     });
@@ -931,8 +1013,10 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
       <div className="md:hidden space-y-3 pb-10">
         {filteredProducts.slice(0, visibleCount).map((product, index) => {
             // Check if this is the first item starting with this letter
-            const firstChar = product.name.charAt(0).toUpperCase();
-            const prevChar = index > 0 ? filteredProducts[index - 1].name.charAt(0).toUpperCase() : null;
+            const safeName = product.name || '';
+            const firstChar = safeName.length > 0 ? safeName.charAt(0).toUpperCase() : '?';
+            const prevSafeName = index > 0 ? (filteredProducts[index - 1].name || '') : '';
+            const prevChar = index > 0 ? (prevSafeName.length > 0 ? prevSafeName.charAt(0).toUpperCase() : '?') : null;
             const showHeader = firstChar !== prevChar;
             const isAlpha = /[A-Z]/.test(firstChar);
             const headerId = `section-${isAlpha ? firstChar : '#'}`;
