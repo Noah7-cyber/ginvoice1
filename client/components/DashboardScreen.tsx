@@ -217,12 +217,21 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
 
   // Top products
   const topProducts = useMemo(() => {
-    // If remote, we might need to enhance it with local categories if possible,
-    // but for now let's assume remote is simple or we fallback to local calc for better detail
-    // Actually, local calc is better if we have all transactions.
+    // Top products should only calculate based on the transactions within the selected time range.
+    const now = new Date();
+    const rangeStart = new Date();
+    if (timeRange === '7d') rangeStart.setDate(now.getDate() - 7);
+    if (timeRange === '30d') rangeStart.setDate(now.getDate() - 30);
+    if (timeRange === '1y') rangeStart.setFullYear(now.getFullYear() - 1);
+
+    // Filter transactions by time range
+    const relevantTx = transactions.filter(tx => {
+       if (tx.isPreviousDebt) return false;
+       return new Date(tx.transactionDate) >= rangeStart;
+    });
 
     const productSales: Record<string, { name: string, qty: number, category: string }> = {};
-    transactions.filter(tx => !tx.isPreviousDebt).forEach(tx => {
+    relevantTx.forEach(tx => {
       tx.items.forEach(item => {
         if (!productSales[item.productId]) {
           const product = products.find(p => p.id === item.productId);
@@ -239,7 +248,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
     return Object.values(productSales)
       .sort((a, b) => b.qty - a.qty)
       .slice(0, 5);
-  }, [transactions, products]);
+  }, [transactions, products, timeRange]);
 
   // Top Expense Categories
   const topExpenseCategories = useMemo(() => {
