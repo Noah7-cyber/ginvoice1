@@ -16,11 +16,10 @@ interface InventoryScreenProps {
   isOwner: boolean;
   isReadOnly?: boolean;
   isOnline: boolean;
-  activeShopId?: string;
   initialParams?: { id?: string; search?: string; filter?: string };
 }
 
-const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdateProducts, isOwner, isReadOnly, isOnline, activeShopId, initialParams }) => {
+const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdateProducts, isOwner, isReadOnly, isOnline, initialParams }) => {
   // Ensure safeReadOnly respects the passed prop (for subscription lock), falling back to permissions logic if needed
   // App.tsx handles the permission logic in the passed isReadOnly prop.
   const safeReadOnly = isReadOnly;
@@ -487,7 +486,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     if (hard) {
         if (!confirm('Permanently delete this item? This cannot be undone.')) return;
         try {
-            await deleteProduct(id, true, activeShopId);
+            await deleteProduct(id, true);
             onUpdateProducts(products.filter(p => p.id !== id));
             addToast('Product permanently deleted.', 'success');
         } catch(err) {
@@ -506,7 +505,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     const nowIso = new Date().toISOString();
 
     try {
-      await deleteProduct(targetId, false, activeShopId);
+      await deleteProduct(targetId, false);
 
       // Update local state AFTER backend confirmation
       const updatedProducts = products.filter((p) => p.id !== targetId).map((p) => ({ ...p, updatedAt: nowIso }));

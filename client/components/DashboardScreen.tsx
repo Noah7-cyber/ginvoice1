@@ -91,7 +91,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
     return () => {
       active = false;
     };
-  }, [transactions, timeRange, activeShopId, allShopsMode, analyticsAllDataMode]);
+  }, [transactions, timeRange]);
 
   const localStats = useMemo(() => {
     const salesTransactions = transactions.filter(tx => !tx.isPreviousDebt);
