@@ -796,29 +796,16 @@ export const changeBusinessPins = async (currentOwnerPin: string, newStaffPin?: 
     body: JSON.stringify({ currentOwnerPin, newStaffPin, newOwnerPin })
   });
 };
-
-export const getShopStaffPins = async (): Promise<{ shops: Array<{ shopId: string; shopName: string; isMain: boolean; hasStaffPin: boolean; staffName?: string }>; defaultShopId?: string | null }> => {
+export const updateStaffPin = async (currentOwnerPin: string, newStaffPin: string) => {
   const token = loadAuthToken();
-  if (!token) throw new Error('Missing auth token');
+  if (!token) throw new Error("Missing auth token");
 
-  return request('/api/auth/staff-shop-pins', {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${token}`
-    }
-  });
-};
-
-export const updateShopStaffPin = async (shopId: string, currentOwnerPin: string, staffPin: string, staffName?: string) => {
-  const token = loadAuthToken();
-  if (!token) throw new Error('Missing auth token');
-
-  return request(`/api/auth/staff-shop-pins/${shopId}`, {
-    method: 'PUT',
+  return request(`/api/auth/update-staff-pin`, {
+    method: "PUT",
     headers: {
       Authorization: `Bearer ${token}`
     },
-    body: JSON.stringify({ currentOwnerPin, staffPin, staffName })
+    body: JSON.stringify({ currentOwnerPin, newStaffPin })
   });
 };
 

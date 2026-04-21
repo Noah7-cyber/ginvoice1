@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Store, Save, RefreshCw, CloudCheck, Upload, Trash2, Image as ImageIcon, MessageSquare, HeadphonesIcon, HelpCircle, Lock, AlertTriangle, X, Ticket, ToggleLeft, ToggleRight, Loader2, CreditCard, ShieldCheck, CheckCircle2, Palette, Database, Download, Printer } from 'lucide-react';
 import { BusinessProfile, DiscountCode, Shop } from '../types';
 import { THEME_COLORS, FONTS } from '../constants';
-import { deleteAccount, uploadFile, updateSettings, generateDiscountCode, verifyPayment, getEntitlements, cancelSubscription, pauseSubscription, resumeSubscription, exportBusinessData, getShopStaffPins, updateShopStaffPin } from '../services/api';
+import { deleteAccount, uploadFile, updateSettings, generateDiscountCode, verifyPayment, getEntitlements, cancelSubscription, pauseSubscription, resumeSubscription, exportBusinessData, updateStaffPin } from '../services/api';
 import api from '../services/api';
 import SupportBot from './SupportBot';
 import { useToast } from './ToastProvider';
@@ -35,10 +35,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, shops = [], a
   const [currentOwnerPin, setCurrentOwnerPin] = useState('');
   const [newStaffPin, setNewStaffPin] = useState('');
   const [confirmStaffPin, setConfirmStaffPin] = useState('');
-  const [selectedStaffShopId, setSelectedStaffShopId] = useState('');
-  const [staffNameInput, setStaffNameInput] = useState('');
-  const [shopStaffRows, setShopStaffRows] = useState<Array<{ shopId: string; shopName: string; isMain: boolean; hasStaffPin: boolean; staffName?: string }>>([]);
-  const [securityMsg, setSecurityMsg] = useState('');
+        const [securityMsg, setSecurityMsg] = useState('');
 
   // Delete Account State
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -221,33 +218,21 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, shops = [], a
     const newVal = !currentPerms[key];
     const newPermissions = { ...currentPerms, [key]: newVal };
 
-    try {
-        await updateSettings(undefined, newPermissions);
-        setFormData(prev => ({ ...prev, staffPermissions: newPermissions }));
-        onUpdateBusiness({ ...formData, staffPermissions: newPermissions });
-    } catch (err) {
-        addToast('Failed to update permission.', 'error');
-    }
+    await handleUpdateBusiness({ staffPermissions: newPermissions as any });
   };
 
   const handleUpdatePins = async () => {
     if (!isOnline) return setSecurityMsg('Internet connection required');
     if (!currentOwnerPin) return setSecurityMsg('Current Owner PIN required');
-    if (!selectedStaffShopId) return setSecurityMsg('Select a shop');
     if (!newStaffPin) return setSecurityMsg('Enter a new staff PIN');
     if (newStaffPin !== confirmStaffPin) return setSecurityMsg('Staff PIN confirmation does not match');
 
     try {
-      await updateShopStaffPin(selectedStaffShopId, currentOwnerPin, newStaffPin, staffNameInput || undefined);
+      await updateStaffPin(currentOwnerPin, newStaffPin);
       setSecurityMsg('PINs updated successfully');
       setCurrentOwnerPin('');
       setNewStaffPin('');
       setConfirmStaffPin('');
-      const refreshed = await getShopStaffPins();
-      setShopStaffRows(refreshed?.shops || []);
-      if (!selectedStaffShopId) {
-        setSelectedStaffShopId(String(refreshed?.defaultShopId || refreshed?.shops?.[0]?.shopId || ''));
-      }
       setTimeout(() => setSecurityMsg(''), 3000);
     } catch (err: any) {
       setSecurityMsg(err.message || 'Failed to update PINs');
@@ -268,26 +253,6 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, shops = [], a
       setIsDeleting(false);
     }
   };
-
-  useEffect(() => {
-    if (activeTab !== 'security') return;
-    if (!isOnline) return;
-    getShopStaffPins()
-      .then((data) => {
-        const rows = data?.shops || [];
-        setShopStaffRows(rows);
-        setSelectedStaffShopId(String(data?.defaultShopId || rows[0]?.shopId || ''));
-      })
-      .catch(() => {
-        // no-op
-      });
-  }, [activeTab, isOnline]);
-
-  useEffect(() => {
-    if (!selectedStaffShopId) return;
-    const row = shopStaffRows.find((r) => String(r.shopId) === String(selectedStaffShopId));
-    setStaffNameInput(row?.staffName || '');
-  }, [selectedStaffShopId, shopStaffRows]);
 
   const handleVerifyPayment = async () => {
       if (!paystackReference) return;
@@ -540,22 +505,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, shops = [], a
                             )}
                             </div>
 
-                            <div className="rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4 flex items-center justify-between gap-3">
-                              <div>
-                                <p className="text-[11px] font-black uppercase tracking-widest text-indigo-600">Shop Context</p>
-                                <p className="text-sm font-bold text-gray-800 mt-1">{activeShopId === 'all' ? 'All Shops (Read-only)' : (shops.find((s) => s.id === activeShopId)?.name || shops[0]?.name || 'Main Shop')}</p>
-                                <p className="text-xs text-gray-500 mt-1">Manage create/rename/delete/switch from one place.</p>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={onOpenShopManager}
-                                disabled={!onOpenShopManager || isShopSwitching || !isOnline}
-                                className="px-3 py-2 text-xs font-black rounded-xl border bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                {isShopSwitching ? 'Switching...' : 'Manage Shops'}
-                              </button>
                             </div>
-                        </div>
                     </div>
              </div>
           )}
@@ -889,10 +839,6 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, shops = [], a
                         <input type="password" value={currentOwnerPin} onChange={e => setCurrentOwnerPin(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold text-center tracking-widest" placeholder="****" />
                         </div>
                         <div>
-                        <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Staff Name (Optional)</label>
-                        <input type="text" value={staffNameInput} onChange={e => setStaffNameInput(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold" placeholder="e.g. Sales (A)" />
-                        </div>
-                        <div>
                         <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">New Staff PIN</label>
                         <input type="password" value={newStaffPin} onChange={e => setNewStaffPin(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold text-center tracking-widest" placeholder="****" />
                         </div>
@@ -901,11 +847,6 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, shops = [], a
                         <input type="password" value={confirmStaffPin} onChange={e => setConfirmStaffPin(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold text-center tracking-widest" placeholder="****" />
                         </div>
                     </div>
-                    {!!shopStaffRows.length && (
-                      <p className="text-xs text-gray-500">
-                        {shopStaffRows.find((x) => String(x.shopId) === String(selectedStaffShopId))?.hasStaffPin ? 'This shop already has a staff PIN configured.' : 'This shop will use the global staff PIN until a shop PIN is set.'}
-                      </p>
-                    )}
                     <div className="flex justify-between items-center">
                         <p className={`text-xs font-bold ${securityMsg.includes('success') ? 'text-green-600' : 'text-red-500'}`}>{securityMsg}</p>
                         <button type="button" onClick={handleUpdatePins} className="text-xs font-black uppercase text-white bg-gray-900 px-6 py-3 rounded-xl hover:bg-black transition-all">Update Staff PIN</button>
