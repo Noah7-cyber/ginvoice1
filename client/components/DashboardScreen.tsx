@@ -36,15 +36,10 @@ interface DashboardScreenProps {
   products: Product[];
   expenditures?: Expenditure[];
   business?: BusinessProfile;
-  activeShopId?: string;
-  allShopsMode?: boolean;
-  analyticsAllDataMode?: boolean;
-  hubOverview?: { rows: Array<{ shopId: string; name: string; sales: number; expenses: number; profit: number; inventoryValue?: number; lastActivity?: string | null }>; totals?: { sales?: number; expenses?: number; profit?: number; inventoryValue?: number } } | null;
-  onSelectShop?: (shopId: string) => void;
   onUpdateBusiness?: (business: Partial<BusinessProfile>) => void;
 }
 
-const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, products, expenditures = [], business, activeShopId, allShopsMode, analyticsAllDataMode, hubOverview, onSelectShop, onUpdateBusiness }) => {
+const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, products, expenditures = [], business, onUpdateBusiness }) => {
   const [showShieldModal, setShowShieldModal] = useState(false);
 
   const [remoteAnalytics, setRemoteAnalytics] = useState<{
@@ -79,11 +74,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
     let active = true;
     if (!navigator.onLine) return;
     if (!localStorage.getItem('ginvoice_auth_token_v1')) return;
-    const shouldUseAllShopsAnalytics = Boolean(allShopsMode || analyticsAllDataMode);
-    getAnalyticsByShop({
-      range: timeRange,
-      shopId: shouldUseAllShopsAnalytics ? undefined : activeShopId,
-      allShops: shouldUseAllShopsAnalytics
+    getAnalytics({
+      range: timeRange
     })
       .then((data) => {
         if (active) setRemoteAnalytics(data);
@@ -288,25 +280,6 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
     return { daily, monthly, yearly };
   }, [transactions]);
 
-  const normalizedHubRows = useMemo(() => {
-    if (!hubOverview?.rows?.length) return [];
-    return hubOverview.rows.map((raw: any) => {
-      const sales = Number(raw.sales ?? raw.revenue ?? raw.totalRevenue ?? 0);
-      const expenses = Number(raw.expenses ?? raw.totalExpenses ?? raw.outflow ?? 0);
-      const profit = Number(raw.profit ?? (sales - expenses));
-      const inventoryValue = Number(raw.inventoryValue ?? raw.stockValue ?? raw.shopWorth ?? 0);
-      return {
-        shopId: String(raw.shopId || raw.id || ''),
-        name: raw.name || raw.shopName || 'Shop',
-        sales,
-        expenses,
-        profit,
-        inventoryValue,
-        lastActivity: raw.lastActivity || raw.updatedAt || null
-      };
-    });
-  }, [hubOverview]);
-
   const totalExpensesToday = useMemo(() => expenditures
     .filter((e) => e.flowType === 'out' && new Date(e.date).toDateString() === new Date().toDateString())
     .reduce((sum, e) => sum + Math.abs(e.amount || 0), 0), [expenditures]);
@@ -483,54 +456,6 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
           color="bg-purple-50"
         />
       </div>
-
-      {allShopsMode ? (
-        <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 md:p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-sm font-black text-gray-800">Per-Shop Summary</h3>
-            <span className="text-xs text-gray-500">Read-only hub view</span>
-          </div>
-          {normalizedHubRows.length ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-              {normalizedHubRows.map((row) => (
-                <button
-                  key={row.shopId}
-                  onClick={() => row.shopId && onSelectShop?.(row.shopId)}
-                  className="text-left rounded-2xl border border-gray-100 p-4 hover:shadow-md hover:border-indigo-100 transition-all bg-gradient-to-br from-white to-gray-50"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="font-black text-gray-900 truncate">{row.name}</p>
-                    <span className="text-[10px] font-bold uppercase text-indigo-600 bg-indigo-50 px-2 py-1 rounded-full">Open</span>
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                    <div className="rounded-xl bg-blue-50 p-2">
-                      <p className="text-gray-500 font-semibold">Revenue</p>
-                      <p className="font-black text-blue-700">{CURRENCY}{row.sales.toLocaleString()}</p>
-                    </div>
-                    <div className="rounded-xl bg-red-50 p-2">
-                      <p className="text-gray-500 font-semibold">Expenses</p>
-                      <p className="font-black text-red-700">{CURRENCY}{row.expenses.toLocaleString()}</p>
-                    </div>
-                    <div className="rounded-xl bg-green-50 p-2">
-                      <p className="text-gray-500 font-semibold">Profit</p>
-                      <p className="font-black text-green-700">{CURRENCY}{row.profit.toLocaleString()}</p>
-                    </div>
-                    <div className="rounded-xl bg-purple-50 p-2">
-                      <p className="text-gray-500 font-semibold">Inventory</p>
-                      <p className="font-black text-purple-700">{CURRENCY}{row.inventoryValue.toLocaleString()}</p>
-                    </div>
-                  </div>
-                  <p className="mt-3 text-[11px] text-gray-500 font-semibold">
-                    Last activity: {row.lastActivity ? new Date(row.lastActivity).toLocaleDateString('en-NG') : '—'}
-                  </p>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-gray-500">No branch analytics available yet. Make sales in each shop to populate this view.</p>
-          )}
-        </section>
-      ) : null}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-8">
         {/* Sales Chart */}

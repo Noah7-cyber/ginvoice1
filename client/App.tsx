@@ -28,7 +28,7 @@ import { CURRENCY, INITIAL_PRODUCTS } from './constants';
 import { safeCalculate } from './utils/math';
 import { saveState, loadState, pushToBackend, getDataVersion, saveDataVersion, getDomainVersions, saveDomainVersions, getLastSync, saveLastSync, clearLocalData, flushPendingSyncQueue, hasPendingSyncJobs, listPendingSyncJobs, syncPendingJobsWithProgress, getPendingTransactionIds } from './services/storage';
 import type { PendingSyncJobView } from './services/storage';
-import { login, registerBusiness, saveAuthToken, clearAuthToken, getEntitlements, initializePayment, fetchRemoteState, deleteExpenditure, snoozeStockVerification, dismissNotification, checkServerVersion, createShop, renameShop, getShopsOverview, deleteShop } from './services/api';
+import { login, registerBusiness, saveAuthToken, clearAuthToken, getEntitlements, initializePayment, fetchRemoteState, deleteExpenditure, snoozeStockVerification, dismissNotification, checkServerVersion, fetchPermissions } from './services/api';
 import { useToast } from './components/ToastProvider';
 import SalesScreen from './components/SalesScreen';
 import InventoryScreen from './components/InventoryScreen';
@@ -356,13 +356,8 @@ const App: React.FC = () => {
       }));
   }, [state.transactions]);
 
-  const isAllShopsMode = state.activeShopId === ALL_SHOPS_ID || Boolean(state.allShopsMode);
-
   const botUiContext = useMemo(() => {
-    const baseShopContext = {
-      activeShopId: state.activeShopId || state.business.defaultShopId || null,
-      allShopsMode: isAllShopsMode
-    };
+    const baseShopContext = {};
 
     if (activeTab === 'sales') {
       const cartSubtotal = cart.reduce((sum, item) => sum + (item.total || 0), 0);
@@ -489,7 +484,7 @@ const App: React.FC = () => {
     }
 
     return { ...baseShopContext, tab: activeTab };
-  }, [activeTab, cart, historySelectedInvoice, customerName, state.products, state.transactions, state.expenditures, state.business, entitlements, topSellingPreview, recentTransactionsPreview, inventorySalesSnapshot, isAllShopsMode]);
+  }, [activeTab, cart, historySelectedInvoice, customerName, state.products, state.transactions, state.expenditures, state.business, entitlements, topSellingPreview, recentTransactionsPreview, inventorySalesSnapshot]);
 
   const refreshData = useCallback(async (overrideState?: InventoryState) => {
     if (!navigator.onLine) return;
@@ -500,25 +495,27 @@ const App: React.FC = () => {
 
     setIsSyncing(true);
     try {
+      // Fetch permissions lightweight if staff
+      if (currentState.role === 'staff') {
+         fetchPermissions().then(res => {
+            if (res.staffPermissions) {
+               setState(prev => ({
+                 ...prev,
+                 business: {
+                   ...prev.business,
+                   staffPermissions: res.staffPermissions
+                 }
+               }));
+            }
+         }).catch(err => console.error("Failed to fetch permissions on load", err));
+      }
+
       // TRUE = Force Full Fetch (Ignore versions)
-      const requestedShopId = MULTI_SHOP_TEMP_DISABLED ? ALL_SHOPS_ID : currentState.activeShopId;
-      const response = await fetchRemoteState(true, {
-        shopId: requestedShopId && requestedShopId !== ALL_SHOPS_ID ? requestedShopId : undefined,
-        allShops: requestedShopId === ALL_SHOPS_ID
-      });
+      const response = await fetchRemoteState(true, {});
 
       if (response.status === 200 && response.data) {
-         let { products, transactions, categories, expenditures, business, notifications, shops, activeShopId, allShopsMode, staffContext, partial, versions } = response.data;
+         let { products, transactions, categories, expenditures, business, notifications, staffContext, partial, versions } = response.data;
          const pendingTxIds = await getPendingTransactionIds();
-
-         // Legacy fix: Normalize records without shopId
-         const fallbackShopId = activeShopId || currentState.activeShopId || business?.defaultShopId;
-         if (transactions) {
-            transactions = transactions.map((t: any) => ({ ...t, shopId: t.shopId || fallbackShopId }));
-         }
-         if (expenditures) {
-            expenditures = expenditures.map((e: any) => ({ ...e, shopId: e.shopId || fallbackShopId }));
-         }
 
          const isPartial = Boolean(partial);
          const mergedTransactions = isPartial
@@ -527,13 +524,6 @@ const App: React.FC = () => {
          const mergedExpenditures = isPartial
            ? mergeByIdPreferServer(expenditures ?? currentState.expenditures, currentState.expenditures)
            : mergeByIdPreferServer(expenditures || [], currentState.expenditures);
-         const normalizedActiveShopId = MULTI_SHOP_TEMP_DISABLED
-           ? (
-               (currentState.activeShopId && currentState.activeShopId !== ALL_SHOPS_ID
-                 ? currentState.activeShopId
-                 : (business?.defaultShopId || currentState.business?.defaultShopId || activeShopId || undefined))
-             )
-           : (activeShopId || currentState.activeShopId || business?.defaultShopId);
 
          const nextState: InventoryState = {
            ...currentState,
@@ -542,9 +532,6 @@ const App: React.FC = () => {
            categories: isPartial ? (categories ?? currentState.categories) : (categories || []),
            expenditures: mergedExpenditures,
            notifications: isPartial ? (notifications ?? currentState.notifications) : (notifications || []),
-           shops: isPartial ? (shops ?? (currentState.shops || [])) : (shops || currentState.shops || []),
-           activeShopId: normalizedActiveShopId,
-           allShopsMode: MULTI_SHOP_TEMP_DISABLED ? false : Boolean(allShopsMode),
            business: business ? { ...currentState.business, ...business, staffContext: staffContext || currentState.business?.staffContext || null } : currentState.business,
            lastSyncedAt: new Date().toISOString(),
            isLoggedIn: true
@@ -740,6 +727,27 @@ const App: React.FC = () => {
     };
   }, [safeSyncWithServer]);
 
+  // Add lightweight permissions check on focus
+  useEffect(() => {
+    const handleFocusPermissions = () => {
+      if (stateRef.current.isLoggedIn && stateRef.current.role === 'staff' && navigator.onLine) {
+         fetchPermissions().then(res => {
+            if (res.staffPermissions) {
+               setState(prev => ({
+                 ...prev,
+                 business: {
+                   ...prev.business,
+                   staffPermissions: res.staffPermissions
+                 }
+               }));
+            }
+         }).catch(() => undefined); // Silently fail, it's just a background check
+      }
+    };
+    window.addEventListener('focus', handleFocusPermissions);
+    return () => window.removeEventListener('focus', handleFocusPermissions);
+  }, []);
+
   useEffect(() => {
     const onResize = () => setIsMobileView(window.innerWidth < 768);
     window.addEventListener('resize', onResize);
@@ -782,32 +790,12 @@ const App: React.FC = () => {
 
              if (safeServerVersion > safeLocalVersion || changedDomains.length > 0) {
                  if (changedDomains.length > 0) {
-                   const requestedShopId = MULTI_SHOP_TEMP_DISABLED ? ALL_SHOPS_ID : stateRef.current.activeShopId;
                    const response = await fetchRemoteState(true, {
-                     shopId: requestedShopId && requestedShopId !== ALL_SHOPS_ID ? requestedShopId : undefined,
-                     allShops: requestedShopId === ALL_SHOPS_ID,
                      domains: changedDomains
                    });
                    if (response.status === 200 && response.data) {
                      let { transactions, expenditures } = response.data;
                      const pendingTxIds = await getPendingTransactionIds();
-
-                     // Legacy fix: Normalize records without shopId
-                     const fallbackShopId = stateRef.current.activeShopId || stateRef.current.business.defaultShopId;
-                     if (transactions) {
-                       transactions = transactions.map((t: any) => ({ ...t, shopId: t.shopId || fallbackShopId }));
-                     }
-                     if (expenditures) {
-                       expenditures = expenditures.map((e: any) => ({ ...e, shopId: e.shopId || fallbackShopId }));
-                     }
-
-                     const normalizedActiveShopId = MULTI_SHOP_TEMP_DISABLED
-                       ? (
-                           (stateRef.current.activeShopId && stateRef.current.activeShopId !== ALL_SHOPS_ID)
-                             ? stateRef.current.activeShopId
-                             : (stateRef.current.business.defaultShopId || undefined)
-                         )
-                       : stateRef.current.activeShopId;
 
                      const merged = {
                        ...stateRef.current,
@@ -815,8 +803,6 @@ const App: React.FC = () => {
                        transactions: mergeByIdPreferServer(transactions ?? stateRef.current.transactions, stateRef.current.transactions, (tx: any) => pendingTxIds.has(getRecordId(tx))),
                        expenditures: mergeByIdPreferServer(expenditures ?? stateRef.current.expenditures, stateRef.current.expenditures),
                        categories: response.data.categories ?? stateRef.current.categories,
-                       activeShopId: normalizedActiveShopId,
-                       allShopsMode: MULTI_SHOP_TEMP_DISABLED ? false : Boolean(stateRef.current.allShopsMode),
                        lastSyncedAt: new Date().toISOString()
                      };
                      setState(merged);
@@ -886,19 +872,14 @@ const App: React.FC = () => {
         addToast('Please connect to the internet to perform this action.', 'error');
         return;
     }
-    if (stateRef.current.activeShopId === ALL_SHOPS_ID) {
-      addToast('Select a specific shop to add an expense.', 'warning');
-      return;
-    }
 
     const payload = {
-      ...newExpenditure,
-      shopId: stateRef.current.activeShopId || stateRef.current.business.defaultShopId
+      ...newExpenditure
     };
 
     setState(prev => {
       const updated = [payload, ...prev.expenditures];
-      if (navigator.onLine) pushToBackend({ expenditures: [payload], shopId: payload.shopId });
+      if (navigator.onLine) pushToBackend({ expenditures: [payload] });
       return { ...prev, expenditures: updated };
     });
   };
@@ -1008,7 +989,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleLogin = async (pin: string, selectedRole: UserRole, shopId?: string) => {
+  const handleLogin = async (pin: string, selectedRole: UserRole) => {
     if (!navigator.onLine) {
       addToast('Login requires internet connection.', 'error');
       return false;
@@ -1016,7 +997,7 @@ const App: React.FC = () => {
 
     try {
       if (state.business.email) {
-        const response = await login(state.business.email, pin, selectedRole, shopId);
+        const response = await login(state.business.email, pin, selectedRole);
         saveAuthToken(response.token);
 
         const newState = {
@@ -1145,8 +1126,7 @@ const App: React.FC = () => {
       ...transaction,
       transactionId: transaction.id,
       idempotencyKey: transaction.idempotencyKey || transaction.id,
-      inventoryEffect: 'sale',
-      shopId: state.activeShopId || state.business.defaultShopId
+      inventoryEffect: 'sale'
     };
 
     // 1. Calculate new state first (with Delta Accumulation)
@@ -1192,7 +1172,7 @@ const App: React.FC = () => {
     // 3. PUSH to Server immediately
     if (navigator.onLine) {
       // Use the stable timestamp from state, don't generate new one on retry
-      pushToBackend({ transactions: [txWithShop], shopId: txWithShop.shopId })
+      pushToBackend({ transactions: [txWithShop] })
         .then(() => {
           refreshPendingJobs().catch(() => undefined);
         })
@@ -1234,7 +1214,7 @@ const App: React.FC = () => {
 
       if (changedProducts.length === 0) return;
 
-      pushToBackend({ products: changedProducts, shopId: activeShopId })
+      pushToBackend({ products: changedProducts })
         .then(() => {
           refreshPendingJobs().catch(() => undefined);
         })
@@ -1249,15 +1229,7 @@ const App: React.FC = () => {
   const canManageStock = state.role === 'owner' || perms.canEditInventory;
   const canManageHistory = state.role === 'owner' || perms.canEditHistory;
 
-  const visibleTransactions = useMemo(() => {
-    // Multi-shop disabled - use all state directly
-    if (MULTI_SHOP_TEMP_DISABLED) return state.transactions;
-    if (isAllShopsMode) return state.transactions;
-    if (!state.activeShopId) return state.transactions;
-    // Legacy fix: Include records without shopId in active shop view
-    return state.transactions.filter((tx) => !tx.shopId || String(tx.shopId) === String(state.activeShopId));
-  }, [state.transactions, state.activeShopId, isAllShopsMode]);
-
+  const visibleTransactions = state.transactions;
   const visibleExpenditures = state.expenditures || [];
   const visibleNotifications = state.notifications || [];
 
@@ -1380,79 +1352,6 @@ const App: React.FC = () => {
       setIsSavingShop(false);
     }
   };
-
-  const hasMultipleShops = (state.shops || []).length > 1;
-
-  const allShopsRollups = useMemo(() => {
-    if (!isAllShopsMode) return [] as Array<any>;
-    const now = new Date();
-    const dayStart = new Date(now); dayStart.setHours(0, 0, 0, 0);
-    const weekStart = new Date(dayStart); weekStart.setDate(dayStart.getDate() - 6);
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const yearStart = new Date(now.getFullYear(), 0, 1);
-
-    const base = (state.shops || []).map((s) => ({
-      shopId: String(s.id),
-      name: s.name,
-      sales: { daily: 0, weekly: 0, monthly: 0, yearly: 0, count: 0 },
-      expenses: { daily: 0, weekly: 0, monthly: 0, yearly: 0 },
-      inventoryUnits: 0,
-      inventoryValue: 0
-    }));
-    const map = new Map(base.map((row) => [row.shopId, row]));
-
-    (state.transactions || []).forEach((tx) => {
-      const shopId = String(tx.shopId || '');
-      if (!shopId || !map.has(shopId) || tx.isPreviousDebt) return;
-      const row = map.get(shopId)!;
-      const date = new Date(tx.transactionDate);
-      if (Number.isNaN(date.getTime())) return;
-      const amt = Number(tx.totalAmount || 0);
-      row.sales.count += 1;
-      if (date >= dayStart) row.sales.daily += amt;
-      if (date >= weekStart) row.sales.weekly += amt;
-      if (date >= monthStart) row.sales.monthly += amt;
-      if (date >= yearStart) row.sales.yearly += amt;
-    });
-
-    (state.expenditures || []).forEach((exp: any) => {
-      const shopId = String(exp.shopId || '');
-      if (!shopId || !map.has(shopId)) return;
-      const row = map.get(shopId)!;
-      const date = new Date(exp.date);
-      if (Number.isNaN(date.getTime())) return;
-      const amt = Math.abs(Number(exp.amount || 0));
-      if (date >= dayStart) row.expenses.daily += amt;
-      if (date >= weekStart) row.expenses.weekly += amt;
-      if (date >= monthStart) row.expenses.monthly += amt;
-      if (date >= yearStart) row.expenses.yearly += amt;
-    });
-
-    (hubOverview?.rows || []).forEach((row: any) => {
-      const shopId = String(row.shopId || '');
-      if (!shopId || !map.has(shopId)) return;
-      const target = map.get(shopId)!;
-      target.inventoryUnits = Number(row.inventoryUnits || target.inventoryUnits || 0);
-      target.inventoryValue = Number(row.inventoryValue || target.inventoryValue || 0);
-    });
-
-    return Array.from(map.values());
-  }, [isAllShopsMode, state.shops, state.transactions, state.expenditures, hubOverview]);
-
-  useEffect(() => {
-    if (!state.isLoggedIn || !isOnline || !isAllShopsMode) return;
-    let active = true;
-    getShopsOverview()
-      .then((data) => {
-        if (active) setHubOverview(data);
-      })
-      .catch((err) => {
-        console.error('Shops overview failed', err);
-      });
-    return () => {
-      active = false;
-    };
-  }, [state.isLoggedIn, isOnline, isAllShopsMode, state.transactions, state.expenditures, state.products]);
 
   const allowedTabs = useMemo(() => {
     const hasPro = entitlements?.plan === 'PRO' || state.business.isSubscribed;
@@ -1587,7 +1486,7 @@ const App: React.FC = () => {
             {state.business.logo ? <img src={state.business.logo} alt="Logo" className="w-10 h-10 rounded-lg bg-white p-1" /> : <ShoppingBag size={32} />}
             <div className="min-w-0">
               <h1 className="text-2xl font-black truncate">{state.business.name}</h1>
-              <p className="text-[10px] font-bold uppercase tracking-widest opacity-70 truncate">{isAllShopsMode ? 'All Shops' : ((state.shops || []).find((s) => s.id === state.activeShopId)?.name || 'Main Shop')}</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest opacity-70 truncate">Main Shop</p>
             </div>
           </div>
           <div className="mt-4 flex items-center gap-2 text-[10px] font-bold uppercase opacity-60">
@@ -1617,7 +1516,7 @@ const App: React.FC = () => {
              {state.business.logo && <img src={state.business.logo} alt="Logo" className="w-8 h-8 rounded-lg bg-white p-0.5 border shrink-0" />}
              <div className="min-w-0">
                <h1 className="text-lg font-black text-primary truncate">{state.business.name}</h1>
-               <p className="text-[10px] font-bold text-gray-400 truncate">{isAllShopsMode ? 'All Shops' : ((state.shops || []).find((s) => s.id === state.activeShopId)?.name || 'Main Shop')}</p>
+               <p className="text-[10px] font-bold text-gray-400 truncate">Main Shop</p>
              </div>
           </div>
           <div className="hidden md:flex items-center gap-2 text-gray-400 text-xs font-bold uppercase tracking-widest">
@@ -1686,7 +1585,7 @@ const App: React.FC = () => {
                className="absolute inset-0 overflow-y-auto p-4 md:p-8"
                style={{ display: activeTab === 'sales' ? 'block' : 'none' }}
             >
-               <SalesScreen products={state.products} onAddToCart={addToCart} isReadOnly={subscriptionLocked || isAllShopsMode} />
+               <SalesScreen products={state.products} onAddToCart={addToCart} isReadOnly={subscriptionLocked} />
             </div>
           )}
 
@@ -1695,32 +1594,14 @@ const App: React.FC = () => {
                className="absolute inset-0 overflow-y-auto p-4 md:p-8"
                style={{ display: activeTab === 'inventory' ? 'block' : 'none' }}
             >
-               {isAllShopsMode ? (
-                <div className="space-y-4">
-                  <h3 className="text-lg font-black text-gray-900">Inventory by Shop</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                    {allShopsRollups.map((row: any) => (
-                      <button key={row.shopId} onClick={() => handleShopSwitch(row.shopId)} className="text-left p-4 rounded-2xl border bg-white hover:shadow-md">
-                        <p className="font-black text-gray-900">{row.name}</p>
-                        <p className="text-xs text-gray-500 mt-1">Inventory Units</p>
-                        <p className="text-2xl font-black text-indigo-700">{Number(row.inventoryUnits || 0).toLocaleString()}</p>
-                        <p className="text-xs text-gray-500 mt-2">Inventory Value</p>
-                        <p className="text-lg font-black text-purple-700">{CURRENCY}{Number(row.inventoryValue || 0).toLocaleString()}</p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-               ) : (
                 <InventoryScreen
                   products={state.products}
                   onUpdateProducts={handleUpdateProducts}
                   isOwner={state.role === 'owner'}
-                  isReadOnly={!canManageStock || subscriptionLocked || isAllShopsMode}
+                  isReadOnly={!canManageStock || subscriptionLocked}
                   isOnline={isOnline}
-                  activeShopId={state.activeShopId}
                   initialParams={deepLinkParams}
                 />
-               )}
             </div>
           )}
 
@@ -1729,55 +1610,38 @@ const App: React.FC = () => {
                className="absolute inset-0 overflow-y-auto p-4 md:p-8"
                style={{ display: activeTab === 'history' ? 'block' : 'none' }}
             >
-               {isAllShopsMode ? (
-                <div className="space-y-4">
-                  <h3 className="text-lg font-black text-gray-900">Past Sales by Shop</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                    {allShopsRollups.map((row: any) => (
-                      <button key={row.shopId} onClick={() => handleShopSwitch(row.shopId)} className="text-left p-4 rounded-2xl border bg-white hover:shadow-md">
-                        <p className="font-black text-gray-900">{row.name}</p>
-                        <p className="text-xs text-gray-500 mt-2">Sales (Daily / Weekly / Monthly / Yearly)</p>
-                        <p className="text-sm font-bold text-gray-800 mt-1">{CURRENCY}{Number(row.sales.daily || 0).toLocaleString()} / {CURRENCY}{Number(row.sales.weekly || 0).toLocaleString()}</p>
-                        <p className="text-sm font-bold text-gray-800">{CURRENCY}{Number(row.sales.monthly || 0).toLocaleString()} / {CURRENCY}{Number(row.sales.yearly || 0).toLocaleString()}</p>
-                        <p className="text-xs text-gray-500 mt-2">Transactions: {Number(row.sales.count || 0).toLocaleString()}</p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-               ) : (
                <HistoryScreen
                 transactions={visibleTransactions}
                 products={state.products}
                 business={state.business}
                 onDeleteTransaction={handleDeleteTransaction}
                 onUpdateTransaction={(t, options) => {
-                  const payload = { ...t, shopId: t.shopId || stateRef.current.activeShopId || stateRef.current.business.defaultShopId, updatedAt: new Date().toISOString() };
+                  const payload = { ...t, updatedAt: new Date().toISOString() };
                   setState(prev => ({
                     ...prev,
                     transactions: prev.transactions.map(tx => tx.id === t.id ? payload : tx)
                   }));
                   if (navigator.onLine && !options?.skipSync) {
-                    pushToBackend({ transactions: [payload], shopId: payload.shopId }).catch(err => console.error("Failed to sync edit", err));
+                    pushToBackend({ transactions: [payload] }).catch(err => console.error("Failed to sync edit", err));
                   }
                 }}
                 onCreatePreviousDebt={(t) => {
-                  const created = { ...t, shopId: t.shopId || stateRef.current.activeShopId || stateRef.current.business.defaultShopId, updatedAt: new Date().toISOString(), isPreviousDebt: true };
+                  const created = { ...t, updatedAt: new Date().toISOString(), isPreviousDebt: true };
                   setState(prev => ({
                     ...prev,
                     transactions: [created, ...prev.transactions]
                   }));
                   if (navigator.onLine) {
-                    pushToBackend({ transactions: [created], shopId: created.shopId }).catch(err => console.error('Failed to sync opening debt', err));
+                    pushToBackend({ transactions: [created] }).catch(err => console.error('Failed to sync opening debt', err));
                   }
                 }}
                 isSubscriptionExpired={subscriptionLocked}
                 onRenewSubscription={openPaymentLink}
-               isReadOnly={!canManageHistory || subscriptionLocked || isAllShopsMode}
+               isReadOnly={!canManageHistory || subscriptionLocked}
                isOnline={isOnline}
                initialParams={deepLinkParams}
                onSelectedInvoiceChange={setHistorySelectedInvoice}
               />
-               )}
             </div>
           )}
 
@@ -1792,11 +1656,6 @@ const App: React.FC = () => {
                     products={state.products}
                     expenditures={visibleExpenditures}
                     business={state.business}
-                    activeShopId={state.activeShopId}
-                    allShopsMode={isAllShopsMode}
-                    analyticsAllDataMode={MULTI_SHOP_TEMP_DISABLED}
-                    hubOverview={hubOverview}
-                    onSelectShop={(shopId) => handleShopSwitch(shopId)}
                     onUpdateBusiness={b => setState(prev => ({ ...prev, business: { ...prev.business, ...b } }))}
                   />
                 </div>
@@ -1808,30 +1667,14 @@ const App: React.FC = () => {
                className="absolute inset-0 overflow-y-auto p-4 md:p-8"
                style={{ display: activeTab === 'expenditure' ? 'block' : 'none' }}
             >
-               {isAllShopsMode ? (
-                <div className="space-y-4">
-                  <h3 className="text-lg font-black text-gray-900">Expenses by Shop</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                    {allShopsRollups.map((row: any) => (
-                      <button key={row.shopId} onClick={() => handleShopSwitch(row.shopId)} className="text-left p-4 rounded-2xl border bg-white hover:shadow-md">
-                        <p className="font-black text-gray-900">{row.name}</p>
-                        <p className="text-xs text-gray-500 mt-2">Expenses (Daily / Weekly / Monthly / Yearly)</p>
-                        <p className="text-sm font-bold text-red-700 mt-1">{CURRENCY}{Number(row.expenses.daily || 0).toLocaleString()} / {CURRENCY}{Number(row.expenses.weekly || 0).toLocaleString()}</p>
-                        <p className="text-sm font-bold text-red-700">{CURRENCY}{Number(row.expenses.monthly || 0).toLocaleString()} / {CURRENCY}{Number(row.expenses.yearly || 0).toLocaleString()}</p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-               ) : (
                <ExpenditureScreen
                 expenditures={visibleExpenditures}
                 onAddExpenditure={handleAddExpenditure}
                 onDeleteExpenditure={handleDeleteExpenditure}
                 onEditExpenditure={handleEditExpenditure}
                 isOnline={isOnline}
-                isReadOnly={subscriptionLocked || isAllShopsMode}
+                isReadOnly={subscriptionLocked}
               />
-               )}
             </div>
           )}
 
@@ -1843,10 +1686,6 @@ const App: React.FC = () => {
                <SettingsScreen
                 business={state.business}
                 onUpdateBusiness={b => setState(prev => ({ ...prev, business: b }))}
-                shops={state.shops || []}
-                activeShopId={state.activeShopId}
-                isShopSwitching={isSwitchingShop}
-                onOpenShopManager={openShopManagementMenu}
                 onManualSync={() => safeSyncWithServer('manual')}
                 lastSyncedAt={state.lastSyncedAt}
                 onLogout={handleLogout}
@@ -1929,8 +1768,6 @@ const App: React.FC = () => {
         transactions={visibleTransactions}
         activities={state.activities}
         notifications={visibleNotifications}
-        activeShopId={state.activeShopId}
-        allShopsMode={isAllShopsMode}
         products={state.products}
         business={state.business}
         lowStockThreshold={state.business.settings?.lowStockThreshold || 10}
