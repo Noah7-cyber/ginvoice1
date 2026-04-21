@@ -311,7 +311,11 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
     }
 
     if (transactions.length > 0) {
-      const existingByIdMap = new Map();
+      const incomingTxIds = transactions.map((t) => String(t?.id || '').trim()).filter(Boolean);
+      const existingTxs = incomingTxIds.length > 0
+        ? await Transaction.find({ businessId, id: { $in: incomingTxIds } }).lean()
+        : [];
+      const existingByIdMap = new Map(existingTxs.map((tx) => [tx.id, tx]));
 
       for (const t of transactions) {
         const txId = String(t?.id || '').trim();

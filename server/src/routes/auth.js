@@ -179,37 +179,17 @@ router.post('/login', async (req, res) => {
     let isStaff = false;
     let staffContext = null;
 
-    const activeShops = await getActiveShops(business._id);
-    const defaultShopId = business.defaultShopId || activeShops[0]?.id || null;
 
     if (role) {
       // If role is specified, check strictly against that role
       if (role === 'owner') {
         isOwner = await bcrypt.compare(pin, business.ownerPin);
       } else if (role === 'staff') {
-        const targetShopId = requestedShopId
-          ? activeShops.find((s) => String(s.id) === String(requestedShopId))?.id
-          : defaultShopId;
-
-        if (!targetShopId) {
-          return res.status(400).json({ message: 'Staff login requires a valid shop.' });
-        }
-
-        const shopPins = normalizeShopStaffPins(business);
-        const shopConfig = shopPins.find((row) => String(row.shopId) === String(targetShopId));
-        if (shopConfig?.staffPin) {
-          isStaff = await bcrypt.compare(pin, shopConfig.staffPin);
-        } else {
-          // Backward compatibility for businesses that only have global staffPin configured.
-          isStaff = await bcrypt.compare(pin, business.staffPin);
-        }
-
+        // Flattened authentication for staff
+        isStaff = await bcrypt.compare(pin, business.staffPin);
         if (isStaff) {
-          const targetShop = activeShops.find((s) => String(s.id) === String(targetShopId));
           staffContext = {
-            assignedShopId: targetShopId,
-            assignedShopName: targetShop?.name || 'Shop',
-            staffName: shopConfig?.staffName || `Sales (${targetShop?.name || 'Shop'})`
+            staffName: 'Staff'
           };
         }
       }
