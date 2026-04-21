@@ -534,37 +534,6 @@ router.put('/change-pins', require('../middleware/auth'), async (req, res) => {
   }
 });
 
-router.get('/staff-shop-pins', require('../middleware/auth'), async (req, res) => {
-  try {
-    const business = await Business.findById(req.businessId).select('staffPins').lean();
-    res.json({
-      pins: (business.staffPins || []).map(p => ({
-        shopId: 'default',
-        shopName: 'Main Store',
-        isPinSet: true
-      }))
-    });
-  } catch (err) {
-    res.status(500).json({ message: 'Failed to fetch pins' });
-  }
-});
-
-        router.put('/staff-shop-pins/:shopId', require('../middleware/auth'), async (req, res) => {
-  try {
-    const { newPin } = req.body;
-    if (!newPin || newPin.length < 4) return res.status(400).json({ message: 'Invalid PIN' });
-    const hashedPin = await bcrypt.hash(String(newPin), 10);
-
-    await Business.updateOne(
-      { _id: req.businessId },
-      { $set: { staffPins: [{ shopId: 'default', staffPin: hashedPin }] } }
-    );
-    res.json({ message: 'Staff PIN updated successfully' });
-  } catch (err) {
-    res.status(500).json({ message: 'Failed to update pin' });
-  }
-});
-
 router.delete('/delete-account', require('../middleware/auth'), async (req, res) => {
   try {
     const { businessName } = req.body;
@@ -609,6 +578,29 @@ router.post('/cleanup-unverified', require('../middleware/auth'), async (req, re
   } catch (err) {
     console.error('Cleanup failed:', err);
     return res.status(500).json({ message: 'Cleanup failed' });
+  }
+});
+
+
+router.put('/update-staff-pin', require('../middleware/auth'), async (req, res) => {
+  try {
+    const { currentOwnerPin, newStaffPin } = req.body;
+    if (!currentOwnerPin || !newStaffPin || newStaffPin.length < 4) {
+      return res.status(400).json({ message: 'Invalid PIN' });
+    }
+
+    const business = await Business.findById(req.businessId);
+    if (!business) return res.status(404).json({ message: 'Business not found' });
+
+    const isOwner = await bcrypt.compare(currentOwnerPin, business.ownerPin);
+    if (!isOwner) return res.status(401).json({ message: 'Invalid current Owner PIN' });
+
+    business.staffPin = await bcrypt.hash(String(newStaffPin), 10);
+    await business.save();
+
+    res.json({ message: 'Staff PIN updated successfully' });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to update pin' });
   }
 });
 
