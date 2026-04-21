@@ -25,32 +25,12 @@ const sanitizeBusiness = (business) => ({
   address: business.address,
   logo: business.logo,
   theme: business.theme,
-  defaultShopId: business.defaultShopId || null,
   trialEndsAt: business.trialEndsAt,
   isSubscribed: business.isSubscribed,
   subscriptionExpiresAt: business.subscriptionExpiresAt,
   createdAt: business.createdAt,
   emailVerified: business.emailVerified // Added field
 });
-
-const getActiveShops = async (businessId) => {
-  const shops = await Shop.find({ businessId: String(businessId), status: 'active' }).sort({ isMain: -1, createdAt: 1 }).lean();
-  return shops.map((shop) => ({
-    id: String(shop._id),
-    name: shop.name,
-    isMain: Boolean(shop.isMain)
-  }));
-};
-
-const normalizeShopStaffPins = (business) => {
-  const rows = Array.isArray(business?.shopStaffPins) ? business.shopStaffPins : [];
-  return rows.map((row) => ({
-    shopId: String(row.shopId || ''),
-    staffPin: row.staffPin,
-    staffName: String(row.staffName || '').trim(),
-    updatedAt: row.updatedAt || new Date()
-  })).filter((row) => row.shopId && row.staffPin);
-};
 
 router.post('/register', async (req, res) => {
   try {
@@ -169,7 +149,7 @@ router.post('/register', async (req, res) => {
 
 router.post('/login', async (req, res) => {
   try {
-    const { email, pin, role, shopId: requestedShopId } = req.body || {};
+    const { email, pin, role } = req.body || {};
     if (!email || !pin) return res.status(400).json({ message: 'Email and pin required' });
 
     const business = await Business.findOne({ email });
@@ -236,23 +216,6 @@ router.post('/login', async (req, res) => {
   }
 });
 
-router.post('/staff-shop-options', async (req, res) => {
-  try {
-    const email = String(req.body?.email || '').trim();
-    if (!email) return res.status(400).json({ message: 'Email is required' });
-
-    const business = await Business.findOne({ email }).select('_id defaultShopId').lean();
-    if (!business) return res.status(404).json({ message: 'Business not found' });
-
-    const shops = await getActiveShops(business._id);
-    return res.json({
-      shops,
-      defaultShopId: business.defaultShopId || shops[0]?.id || null
-    });
-  } catch (err) {
-    return res.status(500).json({ message: 'Could not load shops for staff login' });
-  }
-});
 
 router.post('/forgot-password', async (req, res) => {
   try {
@@ -534,31 +497,22 @@ router.put('/change-pins', require('../middleware/auth'), async (req, res) => {
   }
 });
 
-router.get('/staff-shop-pins', require('../middleware/auth'), async (req, res) => {
+router.put('/update-staff-pin', require('../middleware/auth'), async (req, res) => {
   try {
-    const business = await Business.findById(req.businessId).select('staffPins').lean();
-    res.json({
-      pins: (business.staffPins || []).map(p => ({
-        shopId: 'default',
-        shopName: 'Main Store',
-        isPinSet: true
-      }))
-    });
-  } catch (err) {
-    res.status(500).json({ message: 'Failed to fetch pins' });
-  }
-});
+    const { currentOwnerPin, newStaffPin } = req.body;
+    if (!currentOwnerPin) return res.status(400).json({ message: 'Current owner PIN required' });
+    if (!newStaffPin) return res.status(400).json({ message: 'New staff PIN required' });
 
-        router.put('/staff-shop-pins/:shopId', require('../middleware/auth'), async (req, res) => {
-  try {
-    const { newPin } = req.body;
-    if (!newPin || newPin.length < 4) return res.status(400).json({ message: 'Invalid PIN' });
-    const hashedPin = await bcrypt.hash(String(newPin), 10);
+    const business = await Business.findById(req.businessId);
+    if (!business) return res.status(404).json({ message: 'Business not found' });
 
-    await Business.updateOne(
-      { _id: req.businessId },
-      { $set: { staffPins: [{ shopId: 'default', staffPin: hashedPin }] } }
-    );
+    const isOwner = await bcrypt.compare(currentOwnerPin, business.ownerPin);
+    if (!isOwner) return res.status(401).json({ message: 'Invalid current PIN' });
+
+    if (newStaffPin.length < 4) return res.status(400).json({ message: 'PIN too short' });
+    business.staffPin = await bcrypt.hash(newStaffPin, 10);
+
+    await business.save();
     res.json({ message: 'Staff PIN updated successfully' });
   } catch (err) {
     res.status(500).json({ message: 'Failed to update pin' });

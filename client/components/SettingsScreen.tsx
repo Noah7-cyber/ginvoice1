@@ -10,10 +10,6 @@ import { loadState } from '../services/storage';
 
 interface SettingsScreenProps {
   business: BusinessProfile;
-  shops?: Shop[];
-  activeShopId?: string;
-  isShopSwitching?: boolean;
-  onOpenShopManager?: () => void;
   onUpdateBusiness: (profile: BusinessProfile) => void;
   onManualSync?: () => void;
   lastSyncedAt?: string;
@@ -24,7 +20,7 @@ interface SettingsScreenProps {
   onSubscribe?: () => void;
 }
 
-const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, shops = [], activeShopId, isShopSwitching = false, onOpenShopManager, onUpdateBusiness, onManualSync, lastSyncedAt, isSyncing, onLogout, onDeleteAccount, isOnline, onSubscribe }) => {
+const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusiness, onManualSync, lastSyncedAt, isSyncing, onLogout, onDeleteAccount, isOnline, onSubscribe }) => {
   const { addToast } = useToast();
   const [formData, setFormData] = useState<BusinessProfile>(business);
   const [showSaved, setShowSaved] = useState(false);
@@ -827,17 +823,10 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, shops = [], a
                     <h2 className="text-lg font-bold flex items-center gap-2"><Lock className="text-orange-500" /> Manage PINs</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
-                        <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Shop *</label>
-                        <select value={selectedStaffShopId} onChange={e => setSelectedStaffShopId(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold">
-                          {(shopStaffRows || []).map((row) => (
-                            <option key={row.shopId} value={row.shopId}>{row.shopName}</option>
-                          ))}
-                        </select>
-                        </div>
-                        <div>
                         <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">Current Owner PIN *</label>
                         <input type="password" value={currentOwnerPin} onChange={e => setCurrentOwnerPin(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold text-center tracking-widest" placeholder="****" />
                         </div>
+                        <div></div> {/* Empty div for alignment if we want the new pins on the next row, or just keep them inline */}
                         <div>
                         <label className="block text-xs font-bold text-gray-400 uppercase mb-2 tracking-widest">New Staff PIN</label>
                         <input type="password" value={newStaffPin} onChange={e => setNewStaffPin(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold text-center tracking-widest" placeholder="****" />

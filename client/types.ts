@@ -5,7 +5,6 @@ export type TabId = 'sales' | 'inventory' | 'history' | 'dashboard' | 'settings'
 
 export interface BusinessProfile {
   id?: string;
-  defaultShopId?: string;
   name: string;
   address: string;
   phone: string;
@@ -65,8 +64,6 @@ export interface BusinessProfile {
   };
 
   staffContext?: {
-    assignedShopId?: string;
-    assignedShopName?: string;
     staffName?: string;
   } | null;
 }
@@ -129,7 +126,6 @@ export interface Transaction {
   transactionId?: string;
   idempotencyKey?: string;
   inventoryEffect?: 'sale' | 'restock';
-  shopId?: string;
   transactionDate: string;
   customerName: string;
   customerPhone?: string;
@@ -155,7 +151,6 @@ export interface Transaction {
 /* New: Expenditure item stored locally */
 export interface Expenditure {
   id: string;
-  shopId?: string;
   date: string;        // ISO string
   amount: number;      // in main currency units on client (e.g., Naira) but server expects integer kobo
   category?: string;
@@ -183,7 +178,6 @@ export interface ActivityLog {
 
 export interface Notification {
   id: string;
-  shopId?: string | null;
   title?: string;
   message: string;
   body?: string;
@@ -204,18 +198,8 @@ export interface InventoryState {
   isLoggedIn: boolean;
   isRegistered: boolean;
   business: BusinessProfile;
-  shops?: Shop[];
-  activeShopId?: string;
-  allShopsMode?: boolean;
   lastSyncedAt?: string;
   expenditures?: Expenditure[]; // added optional to preserve backwards compatibility
-}
-
-export interface Shop {
-  id: string;
-  name: string;
-  isMain: boolean;
-  status: 'active' | 'inactive';
 }
 
 export interface Category {

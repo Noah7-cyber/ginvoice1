@@ -16,6 +16,17 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
+// GET only permissions (lightweight fetch)
+router.get('/permissions', auth, async (req, res) => {
+  try {
+    const business = await Business.findById(req.businessId).select('staffPermissions');
+    if (!business) return res.status(404).json({ message: 'Business not found' });
+    res.json({ staffPermissions: business.staffPermissions });
+  } catch (err) {
+    res.status(500).json({ message: 'Fetch permissions failed' });
+  }
+});
+
 // UPDATE settings
 router.put('/', auth, requireActiveSubscription, async (req, res) => {
   try {

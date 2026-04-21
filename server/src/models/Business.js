@@ -7,16 +7,6 @@ const BusinessSchema = new mongoose.Schema({
   address: { type: String, default: '' },
   ownerPin: { type: String, required: true },
   staffPin: { type: String, required: true },
-  shopStaffPins: {
-    type: [
-      {
-                staffPin: { type: String, required: true },
-        staffName: { type: String, default: '' },
-        updatedAt: { type: Date, default: Date.now }
-      }
-    ],
-    default: []
-  },
   logo: { type: String },
   theme: { type: mongoose.Schema.Types.Mixed, default: {} },
   trialEndsAt: { type: Date, required: true },
@@ -75,8 +65,6 @@ const BusinessSchema = new mongoose.Schema({
       lastNotificationAt: { type: Date, default: null }
     }
   },
-
-  defaultShopId: { type: String, default: null, index: true },
 
   taxSettings: {
     isEnabled: { type: Boolean, default: false }, // User MUST opt-in

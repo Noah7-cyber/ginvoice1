@@ -4,7 +4,7 @@ import { UserCircle, ShieldCheck, ShoppingBag, Info, Lock, Eye, EyeOff, ArrowLef
 import { UserRole, BusinessProfile } from '../types';
 
 interface AuthScreenProps {
-  onLogin: (pin: string, role: UserRole, shopId?: string) => Promise<boolean>;
+  onLogin: (pin: string, role: UserRole) => Promise<boolean>;
   onForgotPassword: (email?: string) => void;
   onResetBusiness: () => void;
   business: BusinessProfile;
