@@ -1215,44 +1215,7 @@ const App: React.FC = () => {
     setState(nextState);
     if (navigator.onLine) {
       const activeShopId = stateRef.current.activeShopId && stateRef.current.activeShopId !== ALL_SHOPS_ID ? stateRef.current.activeShopId : undefined;
-      const previousMap = new Map((state.products || []).map((p) => [p.id, Number(p.currentStock || 0)]));
       const previousProductMap = new Map((state.products || []).map((p) => [p.id, p]));
-      const adjustmentTransactions: Transaction[] = stampedProducts
-        .map((p, index) => {
-          const prev = Number(previousMap.get(p.id) || 0);
-          const next = Number(p.currentStock || 0);
-          const delta = next - prev;
-          if (delta === 0) return null;
-          return {
-            id: `adj-${p.id}-${Date.now()}-${index}`,
-            transactionId: `adj-${p.id}-${Date.now()}-${index}`,
-            idempotencyKey: `adj-${p.id}-${Date.now()}-${index}`,
-            transactionDate: new Date().toISOString(),
-            customerName: 'Stock Adjustment',
-            customerPhone: '',
-            items: [{
-              cartId: crypto.randomUUID(),
-              productId: p.id,
-              productName: p.name,
-              quantity: Math.abs(delta),
-              unitPrice: 0,
-              discount: 0,
-              total: 0
-            }],
-            subtotal: 0,
-            globalDiscount: 0,
-            totalAmount: 0,
-            paymentMethod: 'cash',
-            amountPaid: 0,
-            balance: 0,
-            paymentStatus: 'paid',
-            staffId: stateRef.current.role,
-            createdByRole: stateRef.current.role,
-            inventoryEffect: delta > 0 ? 'restock' : 'sale',
-            shopId: activeShopId
-          } as Transaction;
-        })
-        .filter(Boolean) as Transaction[];
 
       const changedProducts = stampedProducts.filter((product) => {
         const prev = previousProductMap.get(product.id);
@@ -1262,15 +1225,16 @@ const App: React.FC = () => {
           product.category !== prev.category ||
           Number(product.sellingPrice || 0) !== Number(prev.sellingPrice || 0) ||
           Number(product.costPrice || 0) !== Number(prev.costPrice || 0) ||
+          Number(product.currentStock || 0) !== Number(prev.currentStock || 0) ||
           product.baseUnit !== prev.baseUnit ||
           Boolean(product.isDeleted) !== Boolean(prev.isDeleted) ||
           JSON.stringify(product.units || []) !== JSON.stringify(prev.units || [])
         );
       });
 
-      if (changedProducts.length === 0 && adjustmentTransactions.length === 0) return;
+      if (changedProducts.length === 0) return;
 
-      pushToBackend({ products: changedProducts, transactions: adjustmentTransactions, shopId: activeShopId })
+      pushToBackend({ products: changedProducts, shopId: activeShopId })
         .then(() => {
           refreshPendingJobs().catch(() => undefined);
         })
