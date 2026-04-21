@@ -26,7 +26,7 @@ import {
 } from 'recharts';
 import { Transaction, Product, BusinessProfile, Expenditure } from '../types';
 import { CURRENCY } from '../constants';
-import { getAnalyticsByShop, updateBusinessProfile } from '../services/api';
+import { getAnalytics, updateBusinessProfile } from '../services/api';
 import { safeCalculate, safeSum } from '../utils/math';
 import ComplianceShieldWidget from './ComplianceShieldWidget';
 import ComplianceShieldModal from './ComplianceShieldModal';
