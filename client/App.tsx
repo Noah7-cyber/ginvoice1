@@ -160,7 +160,7 @@ const App: React.FC = () => {
   const [shopSourceId, setShopSourceId] = useState('');
   const [isSavingShop, setIsSavingShop] = useState(false);
   const [isSwitchingShop, setIsSwitchingShop] = useState(false);
-  const [isMultiShopComingSoonOpen, setIsMultiShopComingSoonOpen] = useState(false);
+
   const [hubOverview, setHubOverview] = useState<{ rows: any[]; totals: any } | null>(null);
   const [deleteReplacementShopId, setDeleteReplacementShopId] = useState('');
   const isTimeBlocked = useTimeDrift();
@@ -1217,7 +1217,7 @@ const App: React.FC = () => {
       const activeShopId = stateRef.current.activeShopId && stateRef.current.activeShopId !== ALL_SHOPS_ID ? stateRef.current.activeShopId : undefined;
       const previousProductMap = new Map((state.products || []).map((p) => [p.id, p]));
 
-      const changedProducts = stampedProducts.filter((product) => {
+      const changedProducts = stampedProducts.filter((product: any) => {
         const prev = previousProductMap.get(product.id);
         if (!prev) return true;
         return (
@@ -1288,18 +1288,12 @@ const App: React.FC = () => {
   };
 
   const openShopSwitcherModal = () => {
-    if (MULTI_SHOP_TEMP_DISABLED) {
-      setIsMultiShopComingSoonOpen(true);
-      return;
-    }
+
     setShopModalMode('switch');
   };
 
   const openShopManagementMenu = () => {
-    if (MULTI_SHOP_TEMP_DISABLED) {
-      setIsMultiShopComingSoonOpen(true);
-      return;
-    }
+
     setShopModalMode('menu');
   };
 
@@ -1632,33 +1626,8 @@ const App: React.FC = () => {
           <div className="flex items-center gap-2">
             {state.role === 'owner' && (
               <>
-                {(state.shops || []).length > 0 && (
-                  <button
-                    onClick={openShopSwitcherModal}
-                    className="md:hidden text-[11px] font-black px-2 py-1.5 rounded-lg border bg-white hover:bg-gray-50"
-                  >
-                    {isAllShopsMode ? 'All Shops' : ((state.shops || []).find((s) => s.id === state.activeShopId)?.name || 'Shop')}
-                  </button>
-                )}
-                {hasMultipleShops && (
-                  <select
-                    value={state.activeShopId || state.business.defaultShopId || ''}
-                    onChange={(e) => {
-                      if (MULTI_SHOP_TEMP_DISABLED) {
-                        setIsMultiShopComingSoonOpen(true);
-                        return;
-                      }
-                      handleShopSwitch(e.target.value);
-                    }}
-                    disabled={isSwitchingShop || MULTI_SHOP_TEMP_DISABLED}
-                    className="hidden md:block text-xs font-bold border rounded-lg px-2 py-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {(state.shops || []).map((shop) => (
-                      <option key={shop.id} value={shop.id}>{shop.name}</option>
-                    ))}
-                    <option value={ALL_SHOPS_ID}>All Shops (read-only)</option>
-                  </select>
-                )}
+
+
               </>
             )}
             {isSwitchingShop && <span className="text-[10px] font-bold text-indigo-600">Switching…</span>}
@@ -1709,27 +1678,6 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {isAllShopsMode && (
-          <div className="bg-blue-50 border-b border-blue-100 p-3 text-sm shrink-0 space-y-2">
-            <span className="font-bold text-blue-700 block">All Shops mode is read-only for writes. Select a specific shop to sell or edit stock/expenses.</span>
-            {hubOverview?.rows?.length ? (
-              <div className="bg-white border border-blue-100 rounded-xl overflow-hidden">
-                <div className="px-3 py-2 text-xs font-black text-blue-700 border-b bg-blue-50/60">Hub Overview</div>
-                <div className="max-h-44 overflow-auto">
-                  {hubOverview.rows.map((row: any) => (
-                    <button key={row.shopId} onClick={() => handleShopSwitch(row.shopId)} className="w-full px-3 py-2 text-left hover:bg-gray-50 border-b last:border-b-0">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-gray-800">{row.name}</span>
-                        <span className="text-gray-500">Profit: {Number(row.profit || 0).toLocaleString()}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-          </div>
-        )}
-
         {/* Content Area - Independent Scrolling for Performance */}
         <div className="flex-1 relative overflow-hidden">
 
@@ -1751,7 +1699,7 @@ const App: React.FC = () => {
                 <div className="space-y-4">
                   <h3 className="text-lg font-black text-gray-900">Inventory by Shop</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                    {allShopsRollups.map((row) => (
+                    {allShopsRollups.map((row: any) => (
                       <button key={row.shopId} onClick={() => handleShopSwitch(row.shopId)} className="text-left p-4 rounded-2xl border bg-white hover:shadow-md">
                         <p className="font-black text-gray-900">{row.name}</p>
                         <p className="text-xs text-gray-500 mt-1">Inventory Units</p>
@@ -1785,7 +1733,7 @@ const App: React.FC = () => {
                 <div className="space-y-4">
                   <h3 className="text-lg font-black text-gray-900">Past Sales by Shop</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                    {allShopsRollups.map((row) => (
+                    {allShopsRollups.map((row: any) => (
                       <button key={row.shopId} onClick={() => handleShopSwitch(row.shopId)} className="text-left p-4 rounded-2xl border bg-white hover:shadow-md">
                         <p className="font-black text-gray-900">{row.name}</p>
                         <p className="text-xs text-gray-500 mt-2">Sales (Daily / Weekly / Monthly / Yearly)</p>
@@ -1864,7 +1812,7 @@ const App: React.FC = () => {
                 <div className="space-y-4">
                   <h3 className="text-lg font-black text-gray-900">Expenses by Shop</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                    {allShopsRollups.map((row) => (
+                    {allShopsRollups.map((row: any) => (
                       <button key={row.shopId} onClick={() => handleShopSwitch(row.shopId)} className="text-left p-4 rounded-2xl border bg-white hover:shadow-md">
                         <p className="font-black text-gray-900">{row.name}</p>
                         <p className="text-xs text-gray-500 mt-2">Expenses (Daily / Weekly / Monthly / Yearly)</p>
@@ -2084,17 +2032,6 @@ const App: React.FC = () => {
                   {shopModalMode === 'create' ? 'Create Shop' : shopModalMode === 'rename' ? 'Save Name' : 'Delete Shop'}
                 </button>
               )}
-            </div>
-          </div>
-        </div>
-      )}
-      {isMultiShopComingSoonOpen && (
-        <div className="fixed inset-0 z-[90] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setIsMultiShopComingSoonOpen(false)}>
-          <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl border border-gray-100 p-6" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-black text-gray-900">Multi-shop access</h3>
-            <p className="text-sm text-gray-600 mt-2">Coming soon. We have temporarily paused multi-shop switching while we harden offline sync.</p>
-            <div className="mt-4 flex justify-end">
-              <button onClick={() => setIsMultiShopComingSoonOpen(false)} className="px-4 py-2 rounded-xl bg-primary text-white font-bold">Okay</button>
             </div>
           </div>
         </div>
