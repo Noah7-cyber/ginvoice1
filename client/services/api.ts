@@ -797,30 +797,7 @@ export const changeBusinessPins = async (currentOwnerPin: string, newStaffPin?: 
   });
 };
 
-export const getShopStaffPins = async (): Promise<{ shops: Array<{ shopId: string; shopName: string; isMain: boolean; hasStaffPin: boolean; staffName?: string }>; defaultShopId?: string | null }> => {
-  const token = loadAuthToken();
-  if (!token) throw new Error('Missing auth token');
 
-  return request('/api/auth/staff-shop-pins', {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${token}`
-    }
-  });
-};
-
-export const updateShopStaffPin = async (shopId: string, currentOwnerPin: string, staffPin: string, staffName?: string) => {
-  const token = loadAuthToken();
-  if (!token) throw new Error('Missing auth token');
-
-  return request(`/api/auth/staff-shop-pins/${shopId}`, {
-    method: 'PUT',
-    headers: {
-      Authorization: `Bearer ${token}`
-    },
-    body: JSON.stringify({ currentOwnerPin, staffPin, staffName })
-  });
-};
 
 export const getAnalytics = async (range?: '7d' | '30d' | '1y') => {
   const token = loadAuthToken();
@@ -1019,5 +996,16 @@ export const dismissNotification = async (notificationId: string) => {
   return request(`/api/audit/dismiss/${notificationId}`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` }
+  });
+};
+
+export const updateStaffPin = async (currentOwnerPin: string, newStaffPin: string) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request(`/api/auth/update-staff-pin`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ currentOwnerPin, newStaffPin })
   });
 };

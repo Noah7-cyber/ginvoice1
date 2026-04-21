@@ -484,7 +484,9 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
       const invoiceLines = unpaidInvoices
         .map((tx) => `📅 ${new Date(tx.transactionDate || new Date()).toLocaleDateString()} - *${CURRENCY}${toMoneyNumber(tx.balance).toLocaleString()}*`)
         .join('\n');
-      const defaultStatement = [
+      const customMessage = business.settings?.debtorShareTemplate || "Kindly arrange payment";
+
+      const text = [
         `*Customer:* ${debtorName}`,
         `*Date:* ${new Date().toLocaleDateString()}`,
         '',
@@ -494,19 +496,8 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
         '',
         `*TOTAL DUE: ${CURRENCY}${debtorTotalOwed.toLocaleString()}*`,
         '',
-        'Please kindly arrange payment. Thank you!'
+        customMessage
       ].join('\n');
-
-      const customTemplate = (business.settings?.debtorShareTemplate || '').trim();
-      const text = customTemplate
-        ? customTemplate
-            .replace(/\{\{customerName\}\}/g, debtorName)
-            .replace(/\{\{date\}\}/g, new Date().toLocaleDateString())
-            .replace(/\{\{currency\}\}/g, CURRENCY)
-            .replace(/\{\{totalDue\}\}/g, debtorTotalOwed.toLocaleString())
-            .replace(/\{\{invoiceLines\}\}/g, invoiceLines)
-            .replace(/\{\{businessName\}\}/g, business.name || 'Our Business')
-        : defaultStatement;
 
       if (navigator.share) {
           try {
