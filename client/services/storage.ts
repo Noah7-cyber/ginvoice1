@@ -103,14 +103,14 @@ export const clearLocalData = () => {
 
 let flushInFlight: Promise<void> | null = null;
 
-export const flushPendingSyncQueue = async () => {
+export const flushPendingSyncQueue = async (forceAll: boolean = false) => {
   if (flushInFlight) return flushInFlight;
 
   flushInFlight = (async () => {
     const jobs = await getSyncJobs();
     for (const job of jobs) {
       if (!job.id) continue;
-      if ((job.retryCount || 0) >= 5) continue;
+      if (!forceAll && (job.retryCount || 0) >= 5) continue;
 
       try {
         await syncState(job.payload);
@@ -168,7 +168,8 @@ export const getPendingTransactionIds = async (): Promise<Set<string>> => {
 };
 
 export const syncPendingJobsWithProgress = async (
-  onProgress?: (info: { total: number; processed: number; succeeded: number; failed: number; currentJobId?: number }) => void
+  onProgress?: (info: { total: number; processed: number; succeeded: number; failed: number; currentJobId?: number }) => void,
+  forceAll: boolean = false
 ) => {
   const jobs = await getSyncJobs();
   const total = jobs.length;
@@ -178,6 +179,7 @@ export const syncPendingJobsWithProgress = async (
   const failedJobIds: number[] = [];
 
   for (const job of jobs) {
+    if (!forceAll && (job.retryCount || 0) >= 5) continue;
     const jobId = Number(job.id || 0);
     try {
       await syncState(job.payload);
