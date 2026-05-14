@@ -608,7 +608,7 @@ const App: React.FC = () => {
     setSyncProgress({ total: pendingSyncJobs.length, processed: 0, succeeded: 0, failed: 0 });
     const result = await syncPendingJobsWithProgress(({ total, processed, succeeded, failed }) => {
       setSyncProgress({ total, processed, succeeded, failed });
-    });
+    }, true);
     await refreshPendingJobs();
     if (result.failed > 0) {
       setSyncFailedJobIds(result.failedJobIds);

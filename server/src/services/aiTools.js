@@ -249,13 +249,6 @@ const tools = [
 
 // --- Tool Logic ---
 
-const resolveShopContext = (context = {}) => {
-
-    const allShops = Boolean(context?.allShops);
-    return { requestedShopId, allShops };
-};
-
-
 const get_business_report = async ({ startDate, endDate }, { businessId, userRole }) => {
     if (!businessId) return { error: "Login required." };
 
@@ -265,10 +258,10 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
     end.setHours(23, 59, 59, 999);
 
     const businessObjectId = new mongoose.Types.ObjectId(businessId);
-    const transactionMatch = ({ businessId }) => ({ businessId })({
+    const transactionMatch = {
         businessId: businessObjectId,
         transactionDate: { $gte: start, $lte: end }
-    });
+    };
 
     // 2. Top Products
     const topProductResult = await Transaction.aggregate([
@@ -317,10 +310,10 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
 
     // 5. Expenses & Cash Flow (Split by Type)
     const expenseAggregation = await Expenditure.aggregate([
-        { $match: ({ businessId }) => ({ businessId })({
+        { $match: {
             business: businessObjectId,
             date: { $gte: start, $lte: end }
-        })},
+        }},
         { $group: {
             _id: {
                 category: { $ifNull: ['$category', 'Uncategorized'] },
@@ -418,10 +411,10 @@ const get_business_report = async ({ startDate, endDate }, { businessId, userRol
 const check_debtors = async ({}, { businessId }) => {
     if (!businessId) return { error: "Login required." };
 
-    const criteria = ({ businessId }) => ({ businessId })({
+    const criteria = {
         businessId,
         balance: { $gt: 0 }
-    });
+    };
 
     const count = await Transaction.countDocuments(criteria);
 
@@ -448,15 +441,13 @@ const check_debtors = async ({}, { businessId }) => {
 const check_low_stock = async ({}, { businessId }) => {
     if (!businessId) return { error: "Login required." };
 
-    const stockCriteria = { businessId, isListed: { $ne: false }, onHand: { $lte: 5 } };
-
-    const lowRows = await Product.find({ businessId: businessKey, stock: { $lte: 10 } }).sort({ stock: 1 }).limit(20).lean();
-    const lowProductIds = Array.from(new Set(lowRows.map((row) => String(row.productId))));
+    const lowRows = await Product.find({ businessId, stock: { $lte: 10 } }).sort({ stock: 1 }).limit(20).lean();
+    const lowProductIds = Array.from(new Set(lowRows.map((row) => String(row.id))));
     const products = lowProductIds.length ? await Product.find({ businessId, id: { $in: lowProductIds } }).lean() : [];
     const merged = lowRows.map((row) => ({
-                productId: row.productId,
-        onHand: Number(row.onHand || 0),
-        name: products.find((p) => String(p.id) === String(row.productId))?.name || row.productId
+        productId: row.id,
+        onHand: Number(row.stock || 0),
+        name: products.find((p) => String(p.id) === String(row.id))?.name || row.id
     }));
 
     if (merged.length > 5) {
@@ -464,7 +455,7 @@ const check_low_stock = async ({}, { businessId }) => {
             special_action: "NAVIGATE",
             screen: "inventory",
             params: { filter: "low_stock" },
-            message: `You have ${merged.length} low stock item(s)${allShops ? ' across shops' : ''}.`
+            message: `You have ${merged.length} low stock item(s).`
         };
     }
 
@@ -511,14 +502,14 @@ const product_search = async ({ query }, { businessId }) => {
 const search_expenses = async ({ query, startDate, endDate }, { businessId }) => {
     if (!businessId) return { error: "Login required." };
 
-    const criteria = ({ businessId }) => ({ businessId })({
+    const criteria = {
         business: businessId,
         $or: [
             { description: { $regex: query, $options: 'i' } },
             { title: { $regex: query, $options: 'i' } },
             { category: { $regex: query, $options: 'i' } }
         ]
-    });
+    };
 
     if (startDate || endDate) {
         criteria.date = {};
@@ -885,9 +876,9 @@ const get_stock_verification_queue = async ({}, { businessId }) => {
 };
 
 // --- Executor ---
-const executeTool = async ({ name, args }, businessId, userRole = 'staff', shopContext = {}) => {
+const executeTool = async ({ name, args }, businessId, userRole = 'staff') => {
     try {
-        const context = { businessId, userRole,  };
+        const context = { businessId, userRole };
         switch (name) {
             case 'get_business_report':
                 return await get_business_report(args, context);

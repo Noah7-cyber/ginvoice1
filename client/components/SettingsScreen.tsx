@@ -88,15 +88,24 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
   const [cancelReason, setCancelReason] = useState('');
   const [isManagingSub, setIsManagingSub] = useState(false);
 
+  const fetchAndSyncEntitlements = async () => {
+    try {
+      const data = await getEntitlements();
+      const newBusiness = { ...business, autoRenew: data.autoRenew, subscriptionStatus: data.subscriptionStatus, subscriptionExpiresAt: data.subscriptionExpiresAt, isSubscribed: data.plan === 'PRO' };
+      onUpdateBusiness(newBusiness as any);
+      setFormData(prev => ({ ...prev, ...newBusiness } as any));
+    } catch (err) {
+      console.error("Failed to sync entitlements", err);
+    }
+  };
+
   const handlePause = async () => {
     if(!confirm("Pause auto-renewal? You will keep access until your current period ends.")) return;
     setIsManagingSub(true);
     try {
        await pauseSubscription();
        addToast("Auto-renewal paused.", "success");
-       const newBusiness = { ...business, autoRenew: false, subscriptionStatus: 'non-renewing' };
-       onUpdateBusiness(newBusiness as any);
-       setFormData(prev => ({ ...prev, ...newBusiness } as any));
+       await fetchAndSyncEntitlements();
     } catch(e) {
        addToast("Failed to pause.", "error");
     } finally {
@@ -109,9 +118,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
     try {
        await resumeSubscription();
        addToast("Auto-renewal resumed!", "success");
-       const newBusiness = { ...business, autoRenew: true, subscriptionStatus: 'active' };
-       onUpdateBusiness(newBusiness as any);
-       setFormData(prev => ({ ...prev, ...newBusiness } as any));
+       await fetchAndSyncEntitlements();
     } catch(e) {
        addToast("Failed to resume.", "error");
     } finally {
@@ -125,9 +132,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
       try {
           await cancelSubscription(cancelReason);
           addToast("Subscription cancelled.", "success");
-          const newBusiness = { ...business, autoRenew: false, subscriptionStatus: 'cancelled' };
-          onUpdateBusiness(newBusiness as any);
-          setFormData(prev => ({ ...prev, ...newBusiness } as any));
+          await fetchAndSyncEntitlements();
           setShowCancelModal(false);
       } catch(e) {
           addToast("Cancellation failed.", "error");
