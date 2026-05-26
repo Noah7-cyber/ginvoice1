@@ -7,6 +7,7 @@ import api from '../services/api';
 import SupportBot from './SupportBot';
 import { useToast } from './ToastProvider';
 import { loadState } from '../services/storage';
+import { useTranslation } from 'react-i18next';
 
 interface SettingsScreenProps {
   business: BusinessProfile;
@@ -21,6 +22,7 @@ interface SettingsScreenProps {
 }
 
 const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusiness, onManualSync, lastSyncedAt, isSyncing, onLogout, onDeleteAccount, isOnline, onSubscribe }) => {
+  const { t, i18n } = useTranslation();
   const { addToast } = useToast();
   const [formData, setFormData] = useState<BusinessProfile>(business);
   const [showSaved, setShowSaved] = useState(false);
@@ -300,12 +302,12 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
   ];
 
   const TABS = [
-      { id: 'shop', label: 'Shop', icon: Store },
-      { id: 'preferences', label: 'Preferences', icon: Palette },
-      { id: 'billing', label: 'Billing', icon: CreditCard },
-      { id: 'security', label: 'Security', icon: ShieldCheck },
-      { id: 'data', label: 'Data', icon: Database },
-      { id: 'help', label: 'Help', icon: HelpCircle },
+      { id: 'shop', label: t('shop', 'Shop'), icon: Store },
+      { id: 'preferences', label: t('preferences', 'Preferences'), icon: Palette },
+      { id: 'billing', label: t('billing', 'Billing'), icon: CreditCard },
+      { id: 'security', label: t('security', 'Security'), icon: ShieldCheck },
+      { id: 'data', label: t('data', 'Data'), icon: Database },
+      { id: 'help', label: t('help', 'Help'), icon: HelpCircle },
   ];
 
   const handleExport = (type: 'inventory' | 'transactions' | 'expenses') => {
@@ -387,7 +389,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
       {/* Header */}
       <div className="flex justify-between items-center mb-6 shrink-0">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{t('settings', 'Settings')}</h1>
           <p className="text-gray-500 text-sm">Manage your store profile and preferences</p>
         </div>
         
@@ -514,6 +516,23 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
           {/* PREFERENCES TAB */}
           {activeTab === 'preferences' && (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                  {/* Language Settings */}
+                  <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
+                      <h2 className="text-lg font-bold flex items-center gap-2"><Palette className="text-primary" /> Language Preference</h2>
+                      <div>
+                          <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Select Default Language</label>
+                          <select
+                              value={i18n.language}
+                              onChange={(e) => i18n.changeLanguage(e.target.value)}
+                              className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-primary outline-none font-bold text-gray-900"
+                          >
+                              <option value="en">English</option>
+                              <option value="pcm">Nigerian Pidgin</option>
+                          </select>
+                          <p className="text-[10px] text-gray-500 mt-2">Changes apply immediately to your dashboard view.</p>
+                      </div>
+                  </div>
+
                   {/* Colors */}
                   <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
                       <h2 className="text-lg font-bold flex items-center gap-2"><Palette className="text-primary" /> Appearance</h2>
@@ -900,7 +919,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                className="bg-gray-900 text-white px-8 py-3 rounded-xl font-bold text-lg shadow-xl hover:bg-gray-800 active:scale-95 transition-all flex items-center gap-2"
             >
                {isLoading ? <Loader2 className="animate-spin" /> : <Save size={20} />}
-               Save Changes
+               {t('save_changes', 'Save Changes')}
             </button>
          </div>
       )}

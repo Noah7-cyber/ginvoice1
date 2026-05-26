@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Sparkles, ShieldCheck, Box, User, Receipt, CheckCircle, ArrowRight, Star, Globe, Lock, Play, Layers, WifiOff, Cloud, Database, ShoppingBag, Scissors, Wrench, Pill, ShoppingCart, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { getBusinessCount } from '../services/api';
+import { useTranslation } from 'react-i18next';
 
 interface WelcomeScreenProps {
   onRegister: () => void;
@@ -8,6 +9,7 @@ interface WelcomeScreenProps {
 }
 
 const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onRegister, onLogin }) => {
+  const { t, i18n } = useTranslation();
   const BOT_BRAND_IMAGE = '/gbot.png';
   const [businessCount, setBusinessCount] = useState<number | null>(null);
 
@@ -29,6 +31,14 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onRegister, onLogin }) =>
              <span className="text-xl font-bold tracking-tight">Ginvoice Market OS</span>
           </div>
           <div className="flex items-center gap-4">
+             <select
+               value={i18n.language}
+               onChange={(e) => i18n.changeLanguage(e.target.value)}
+               className="text-sm font-bold text-gray-600 bg-transparent outline-none cursor-pointer"
+             >
+               <option value="en">English</option>
+               <option value="pcm">Pidgin</option>
+             </select>
              <button onClick={onLogin} className="text-sm font-bold text-gray-600 hover:text-indigo-600 transition-colors">
                Login
              </button>
@@ -47,7 +57,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onRegister, onLogin }) =>
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center gap-12">
            <div className="flex-1 text-center md:text-left space-y-6 animate-in slide-in-from-bottom-8 fade-in duration-700">
               <h1 className="text-4xl md:text-6xl font-black text-gray-900 leading-tight">
-                The Operating System for Nigerian Traders.
+                {t('welcome_message', 'The Operating System for Nigerian Traders.')}
               </h1>
               <p className="text-xl text-gray-600 font-medium max-w-lg mx-auto md:mx-0">
                 Track Sales, Control Stock, and Master Your Finances. Works perfectly without internet.
