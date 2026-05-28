@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Search, Edit3, Trash2, CheckCircle2, X, ListTodo, Layers, Tag, DollarSign, ArrowUp, Maximize2, Save, Loader2, Calculator, SlidersHorizontal } from 'lucide-react';
+import { Plus, Search, Edit3, Trash2, CheckCircle2, X, ListTodo, Layers, Tag, DollarSign, ArrowUp, Maximize2, Save, Loader2, Calculator, SlidersHorizontal, Download } from 'lucide-react';
 import { Product, Category } from '../types';
 import { CURRENCY } from '../constants';
 import { formatCurrency } from '../utils/currency';
 import api, { deleteProduct, createProduct, updateProduct, getCategories, getStockVerificationQueue, verifyStockItem } from '../services/api';
+import { BulkImportModal } from './BulkImportModal';
 import { useToast } from './ToastProvider';
 import CategoryManager from './CategoryManager';
 import AlphabetScrubber from './AlphabetScrubber';
@@ -63,6 +64,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
   // Bulk Edit Panel States
   const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
   const [bulkCategory, setBulkCategory] = useState('');
   const [bulkPriceChange, setBulkPriceChange] = useState<number | ''>('');
   const [bulkStockAdd, setBulkStockAdd] = useState<number | ''>('');
@@ -671,25 +673,42 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
             {(isLoadingVerification || isVerifying) ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />} <span className="hidden md:inline">Verify Stock</span>
           </button>
           {!safeReadOnly && (
-            <button 
-              onClick={handleAddNew}
-              className="hidden md:flex bg-primary text-white px-6 py-3 rounded-xl items-center gap-2 font-bold shadow-lg shadow-indigo-100 hover:opacity-90 transition-all active:scale-95"
-            >
-              <Plus size={20} /> <span className="hidden md:inline">Add New</span>
-            </button>
+            <>
+              <button
+                onClick={() => setIsBulkImportOpen(true)}
+                className="hidden md:flex bg-white text-gray-700 border border-gray-200 px-6 py-3 rounded-xl items-center gap-2 font-bold hover:bg-gray-50 transition-all active:scale-95"
+              >
+                <Download size={20} /> <span className="hidden md:inline">Import CSV</span>
+              </button>
+              <button
+                onClick={handleAddNew}
+                className="hidden md:flex bg-primary text-white px-6 py-3 rounded-xl items-center gap-2 font-bold shadow-lg shadow-indigo-100 hover:opacity-90 transition-all active:scale-95"
+              >
+                <Plus size={20} /> <span className="hidden md:inline">Add New</span>
+              </button>
+            </>
           )}
         </div>
       </div>
 
       {/* Mobile Floating Action Button */}
       {!safeReadOnly && (
-        <button
-          onClick={handleAddNew}
-          className="md:hidden fixed bottom-24 right-4 z-50 p-4 bg-primary text-white rounded-full shadow-xl hover:bg-indigo-700 active:scale-95 transition-all"
-          aria-label="Add New Product"
-        >
-          <Plus size={24} />
-        </button>
+        <div className="md:hidden fixed bottom-24 right-4 z-50 flex flex-col gap-3">
+          <button
+            onClick={() => setIsBulkImportOpen(true)}
+            className="p-4 bg-white text-gray-700 border border-gray-200 rounded-full shadow-xl hover:bg-gray-50 active:scale-95 transition-all"
+            aria-label="Import CSV"
+          >
+            <Download size={24} />
+          </button>
+          <button
+            onClick={handleAddNew}
+            className="p-4 bg-primary text-white rounded-full shadow-xl hover:bg-indigo-700 active:scale-95 transition-all"
+            aria-label="Add New Product"
+          >
+            <Plus size={24} />
+          </button>
+        </div>
       )}
 
       {/* Filters */}
@@ -1333,6 +1352,17 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
             </div>
           </div>
         </div>
+      )}
+
+      {/* Bulk Import Modal */}
+      {isBulkImportOpen && (
+        <BulkImportModal
+          onClose={() => setIsBulkImportOpen(false)}
+          onSuccess={() => {
+             refreshData();
+             addToast('Bulk import completed successfully!', 'success');
+          }}
+        />
       )}
 
       {isVerifyOpen && (
