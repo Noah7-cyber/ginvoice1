@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import Papa from 'papaparse';
 import { useDropzone } from 'react-dropzone';
-import { apiCall } from '../services/api';
+import api from '../services/api';
 import { useTranslation } from 'react-i18next';
 import { Download, UploadCloud, X, AlertCircle, CheckCircle } from 'lucide-react';
 
@@ -89,6 +89,11 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({ onClose, onSuc
         header: true,
         skipEmptyLines: true,
         complete: (results) => {
+          if (results.data.length > 1000) {
+            setUploadError('File contains more than 1,000 products. Please reduce the size to a maximum of 1,000 rows.');
+            setStep(3); // Go to step 3 to show the error
+            return;
+          }
           validateData(results.data);
         },
       });
@@ -129,14 +134,11 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({ onClose, onSuc
     setUploadError(null);
 
     try {
-      await apiCall('/api/bulk-import', {
-        method: 'POST',
-        body: JSON.stringify({ products: parsedData }),
-      });
+      await api.post('/api/bulk-import', { products: parsedData });
       onSuccess();
       onClose();
     } catch (err: any) {
-      setUploadError(err.message || 'Failed to import products');
+      setUploadError(err.response?.data?.error || err.message || 'Failed to import products');
     } finally {
       setIsUploading(false);
     }
