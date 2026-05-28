@@ -1,0 +1,7 @@
+{
+  "name": "Ginvoice",
+  "description": "Professional inventory and invoicing PWA designed for Nigerian market traders with offline support and role-based access.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

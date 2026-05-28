@@ -1,0 +1,34 @@
+{
+  "name": "ginvoice-server",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "MONGODB_URI=mongodb://localhost:27017/ginvoice-test jest --detectOpenHandles",
+    "migrate:multishop-foundation": "node src/scripts/migrateMultiShopFoundation.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cloudinary": "^2.8.0",
+    "compression": "^1.7.4",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.19.2",
+    "groq-sdk": "^0.37.0",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.7.0",
+    "multer": "^2.0.2",
+    "nodemailer": "^6.9.16",
+    "openai": "^4.0.0",
+    "sharp": "^0.34.5"
+  },
+  "devDependencies": {
+    "jest": "^30.2.0",
+    "mongodb-memory-server": "^11.0.1",
+    "nodemon": "^3.1.11",
+    "supertest": "^7.2.2"
+  }
+}

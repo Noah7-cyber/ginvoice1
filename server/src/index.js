@@ -1,0 +1,130 @@
+
+require('dotenv').config();
+
+const express = require('express');
+const mongoose = require('mongoose');
+const cors = require('cors');
+const compression = require('compression');
+const helmet = require('helmet');
+
+// 1. Import Services & Plugins FIRST
+const { archiveInactiveBusinesses } = require('./services/archiver');
+const decimal128ToNumberPlugin = require('./services/mongoosePlugin');
+const Product = require('./models/Product'); // Needed for Garbage Collection
+
+// 2. IMPORTANT: Register Plugin GLOBALLY before importing routes
+// This ensures that when the routes load the Models, the plugin is already applied.
+mongoose.plugin(decimal128ToNumberPlugin);
+
+// 3. Import Routes (Now safe to load models)
+const expendituresRouter = require('./routes/expenditures');
+const authRoutes = require('./routes/auth');
+const syncRoutes = require('./routes/sync');
+const paymentRoutes = require('./routes/payments');
+const analyticsRoutes = require('./routes/analytics');
+const entitlementsRoutes = require('./routes/entitlements');
+const uploadRouter = require('./routes/upload');
+const categoriesRouter = require('./routes/categories');
+const discountsRouter = require('./routes/discounts');
+const settingsRouter = require('./routes/settings');
+const supportRouter = require('./routes/support');
+const statsRouter = require('./routes/stats');
+const auditRouter = require('./routes/audit');
+
+const app = express();
+
+// Set security HTTP headers
+app.use(helmet());
+
+app.use(compression());
+
+app.use(cors({
+  // In production, default to false (block) if variable is missing, otherwise allow all (*) for dev
+  origin: process.env.FRONTEND_URL
+    ? process.env.FRONTEND_URL.split(',').map(url => url.replace(/\/$/, ''))
+    : (process.env.NODE_ENV === 'production' ? false : '*'),
+  credentials: true
+}));
+
+app.use(express.json({
+  limit: '20mb',
+  verify: (req, _res, buf) => {
+    req.rawBody = buf;
+  }
+}));
+app.use(express.urlencoded({ extended: true, limit: '20mb' }));
+
+app.get('/health', (_req, res) => {
+  res.json({ status: 'ok' });
+});
+
+app.use('/api/auth', authRoutes);
+app.use('/api/sync', syncRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/entitlements', entitlementsRoutes);
+app.use('/api/expenditures', expendituresRouter);
+app.use('/api/upload', uploadRouter);
+app.use('/api/categories', categoriesRouter);
+app.use('/api/discounts', discountsRouter);
+app.use('/api/settings', settingsRouter);
+app.use('/api/support', supportRouter);
+app.use('/api/stats', statsRouter);
+app.use('/api/audit', auditRouter);
+app.use('/api/admin', require('./routes/admin'));
+app.use('/api/transactions', require('./routes/transactions'));
+app.use('/api/tax', require('./routes/tax'));
+
+const port = process.env.PORT || 4000;
+const mongoUri = process.env.MONGODB_URI || '';
+
+if (require.main === module) {
+  // Security Check: Hard fail if JWT_SECRET is missing in production
+  if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
+    console.error('FATAL: JWT_SECRET is missing in production environment.');
+    process.exit(1);
+  }
+
+  // Register the plugin globally for all schemas
+  mongoose.plugin(decimal128ToNumberPlugin);
+
+  mongoose.connect(mongoUri, { autoIndex: true })
+    .then(() => {
+      app.listen(port, () => {
+        console.log(`Server listening on ${port}`);
+      });
+
+      if (paymentRoutes.reconcilePending) {
+        paymentRoutes.reconcilePending();
+        setInterval(() => {
+          paymentRoutes.reconcilePending();
+        }, 10 * 60 * 1000);
+      }
+
+      // Schedule daily archival task
+      setInterval(archiveInactiveBusinesses, 24 * 60 * 60 * 1000);
+      archiveInactiveBusinesses(); // Run once on startup
+
+      // Garbage Collector for Tombstones (Every 12 hours)
+      setInterval(async () => {
+        try {
+          const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+          const result = await Product.deleteMany({
+            isDeleted: true,
+            deletedAt: { $lt: thirtyDaysAgo }
+          });
+          if (result.deletedCount > 0) {
+            console.log(`[GC] Permanently purged ${result.deletedCount} old product tombstones.`);
+          }
+        } catch (err) {
+          console.error('[GC] Tombstone cleanup failed:', err);
+        }
+      }, 12 * 60 * 60 * 1000);
+    })
+    .catch(err => {
+      console.error('Mongo connection failed', err);
+      process.exit(1);
+    });
+}
+
+module.exports = app;

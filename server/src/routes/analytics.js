@@ -1,0 +1,369 @@
+const express = require('express');
+const mongoose = require('mongoose');
+
+const auth = require('../middleware/auth');
+const Transaction = require('../models/Transaction');
+const Product = require('../models/Product');
+
+const router = express.Router();
+
+router.get('/', auth, async (req, res) => {
+  try {
+    const businessId = new mongoose.Types.ObjectId(req.businessId);
+    const range = req.query.range || '7d'; // '7d', '30d', '1y'
+
+    const now = new Date();
+    let startDate = new Date();
+    let dateFormat = '%Y-%m-%d';
+
+    if (range === '30d') {
+        startDate.setDate(now.getDate() - 30);
+    } else if (range === '1y') {
+        startDate.setMonth(now.getMonth() - 11); // Last 12 months
+        startDate.setDate(1);
+        dateFormat = '%Y-%m'; // Group by month
+    } else {
+        startDate.setDate(now.getDate() - 6); // Default 7d
+    }
+    startDate.setHours(0,0,0,0);
+
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const previousMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+
+    // Daily Revenue Start (Today 00:00)
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    // Carousel Filter Logic
+    const filterDate = req.query.date ? new Date(req.query.date) : new Date();
+    const filterMonthStart = new Date(filterDate.getFullYear(), filterDate.getMonth(), 1);
+    const filterMonthEnd = new Date(filterDate.getFullYear(), filterDate.getMonth() + 1, 0, 23, 59, 59, 999);
+    const filterYearStart = new Date(filterDate.getFullYear(), 0, 1);
+    const filterYearEnd = new Date(filterDate.getFullYear(), 11, 31, 23, 59, 59, 999);
+
+    const [
+      summaryStats,
+      currentMonthStats,
+      previousMonthStats,
+      chartAgg,
+      topProducts,
+      inventoryValuation,
+      dailyRevenueAgg,
+      monthlyRevenueAgg,
+      yearlyRevenueAgg
+    ] = await Promise.all([
+      // 1. Overall Summary (Revenue, Debt, Counts)
+      Transaction.aggregate([
+        { $match: { businessId,  } },
+        {
+          $group: {
+            _id: null,
+            totalRevenue: {
+              $sum: { $cond: [{ $ne: ['$isPreviousDebt', true] }, { $toDouble: '$totalAmount' }, 0] }
+            },
+            totalDiscount: {
+              $sum: { $cond: [{ $ne: ['$isPreviousDebt', true] }, { $toDouble: '$globalDiscount' }, 0] }
+            },
+            totalDebt: { $sum: { $toDouble: '$balance' } },
+            totalSales: {
+              $sum: { $cond: [{ $ne: ['$isPreviousDebt', true] }, 1, 0] }
+            },
+            cashSales: {
+              $sum: { $cond: [{ $and: [{ $ne: ['$isPreviousDebt', true] }, { $eq: ['$paymentMethod', 'cash'] }] }, 1, 0] }
+            },
+            transferSales: {
+              $sum: { $cond: [{ $and: [{ $ne: ['$isPreviousDebt', true] }, { $in: ['$paymentMethod', ['transfer', 'bank']] }] }, 1, 0] }
+            },
+            posSales: {
+              $sum: { $cond: [{ $and: [{ $ne: ['$isPreviousDebt', true] }, { $eq: ['$paymentMethod', 'pos'] }] }, 1, 0] }
+            }
+          }
+        },
+        { $project: { _id: 0 } }
+      ]),
+
+      // 2. Current Month Revenue (For Trend)
+      Transaction.aggregate([
+        { $match: { businessId, transactionDate: { $gte: currentMonthStart } } },
+        { $group: { _id: null, revenue: { $sum: { $cond: [{ $ne: ['$isPreviousDebt', true] }, { $toDouble: '$totalAmount' }, 0] } } } }
+      ]),
+
+      // 3. Previous Month Revenue (For Trend)
+      Transaction.aggregate([
+        { $match: { businessId, transactionDate: { $gte: previousMonthStart, $lte: previousMonthEnd } } },
+        { $group: { _id: null, revenue: { $sum: { $cond: [{ $ne: ['$isPreviousDebt', true] }, { $toDouble: '$totalAmount' }, 0] } } } }
+      ]),
+
+      // 4. Dynamic Chart Aggregation
+      Transaction.aggregate([
+        { $match: { businessId, transactionDate: { $gte: startDate } } },
+        {
+          $group: {
+            _id: { $dateToString: { format: dateFormat, date: '$transactionDate' } },
+            amount: { $sum: { $cond: [{ $ne: ['$isPreviousDebt', true] }, { $toDouble: '$totalAmount' }, 0] } }
+          }
+        },
+        { $sort: { _id: 1 } }
+      ]),
+
+      // 5. Top Products
+      Transaction.aggregate([
+        { $match: { businessId,  } },
+        { $unwind: '$items' },
+        {
+          $group: {
+            _id: '$items.productId',
+            name: { $first: '$items.productName' },
+            qty: { $sum: '$items.quantity' }
+          }
+        },
+        { $sort: { qty: -1 } },
+        { $limit: 5 }
+      ]),
+
+      // 6. Inventory Valuation
+      Product.aggregate([
+        { $match: { businessId: String(req.businessId), isDeleted: { $ne: true } } },
+        {
+          $group: {
+            _id: null,
+            shopCost: {
+              $sum: {
+                $multiply: ['$stock', { $toDouble: '$costPrice' }]
+              }
+            },
+            shopWorth: {
+              $sum: {
+                $multiply: ['$stock', { $toDouble: '$sellingPrice' }]
+              }
+            }
+          }
+        }
+      ]),
+
+      // 7. Daily Stats (Cash Collected + New Debt)
+      Transaction.aggregate([
+        { $match: { businessId, transactionDate: { $gte: todayStart } } },
+        {
+          $group: {
+            _id: null,
+            cashCollected: { $sum: { $toDouble: '$amountPaid' } },
+            newDebt: { $sum: { $toDouble: '$balance' } }
+          }
+        }
+      ]),
+
+      // 8. Monthly Revenue (Filtered)
+      Transaction.aggregate([
+        { $match: { businessId, transactionDate: { $gte: filterMonthStart, $lte: filterMonthEnd } } },
+        { $group: { _id: null, totalSales: { $sum: { $cond: [{ $ne: ['$isPreviousDebt', true] }, { $toDouble: '$totalAmount' }, 0] } } } }
+      ]),
+
+      // 9. Yearly Revenue (Filtered)
+      Transaction.aggregate([
+        { $match: { businessId, transactionDate: { $gte: filterYearStart, $lte: filterYearEnd } } },
+        { $group: { _id: null, totalSales: { $sum: { $cond: [{ $ne: ['$isPreviousDebt', true] }, { $toDouble: '$totalAmount' }, 0] } } } }
+      ])
+    ]);
+
+    const stats = summaryStats[0] || { totalRevenue: 0, totalDebt: 0, totalSales: 0, cashSales: 0, transferSales: 0, posSales: 0 };
+    const curRev = currentMonthStats[0]?.revenue || 0;
+    const prevRev = previousMonthStats[0]?.revenue || 0;
+
+    // New Metrics
+    const shopCost = inventoryValuation[0]?.shopCost || 0;
+    const shopWorth = inventoryValuation[0]?.shopWorth || 0;
+
+    // Carousel Metrics
+    const dailyStats = dailyRevenueAgg[0] || { cashCollected: 0, newDebt: 0 };
+    const monthlySales = monthlyRevenueAgg[0]?.totalSales || 0;
+    const yearlySales = yearlyRevenueAgg[0]?.totalSales || 0;
+
+    // --- Profit Calculation ---
+    const [productSalesAgg] = await Promise.all([
+      Transaction.aggregate([
+        { $match: { businessId,  } },
+        { $unwind: '$items' },
+        {
+          $group: {
+            _id: {
+                 id: '$items.productId',
+                 unit: '$items.unit',
+                 selectedUnit: '$items.selectedUnit' // Need access to the full unit object for multiplier fallback
+            },
+            totalSales: { $sum: { $toDouble: '$items.total' } }, // Revenue per product
+            totalQty: { $sum: '$items.quantity' }
+          }
+        }
+      ])
+    ]);
+
+    // Current Month Profit Aggregation
+    const productSalesCurrentMonth = await Transaction.aggregate([
+      { $match: { businessId, transactionDate: { $gte: currentMonthStart } } },
+      { $unwind: '$items' },
+      {
+        $group: {
+          _id: {
+               id: '$items.productId',
+               unit: '$items.unit',
+               selectedUnit: '$items.selectedUnit'
+          },
+          totalSales: { $sum: { $toDouble: '$items.total' } },
+          totalQty: { $sum: '$items.quantity' }
+        }
+      }
+    ]);
+
+     // Previous Month Profit Aggregation
+     const productSalesPrevMonth = await Transaction.aggregate([
+      { $match: { businessId, transactionDate: { $gte: previousMonthStart, $lte: previousMonthEnd } } },
+      { $unwind: '$items' },
+      {
+        $group: {
+           _id: {
+               id: '$items.productId',
+               unit: '$items.unit',
+               selectedUnit: '$items.selectedUnit'
+          },
+          totalSales: { $sum: { $toDouble: '$items.total' } },
+          totalQty: { $sum: '$items.quantity' }
+        }
+      }
+    ]);
+
+    // Fetch Product Costs
+    const toNumber = (val) => {
+      if (!val) return 0;
+      if (val.toString) return parseFloat(val.toString());
+      return Number(val);
+    };
+
+    const products = await Product.find({ businessId: req.businessId }, { id: 1, costPrice: 1, units: 1 }).lean();
+    const productMap = new Map();
+    products.forEach(p => productMap.set(p.id, p));
+
+    const calculateProfit = (aggResult) => {
+      let profit = 0;
+      aggResult.forEach(group => {
+        const product = productMap.get(group._id.id);
+        if (!product) return; // Should not happen if data is consistent
+
+        let itemCost = 0;
+
+        const selectedUnit = group._id.selectedUnit; // Check for stored unit data first
+        const unitName = group._id.unit;
+
+        // Cost Priority Logic:
+        // 1. Transaction-stored unit cost (if available in future schema, currently not stored directly usually)
+        // 2. Product-defined unit cost (from product units array)
+        // 3. Fallback: Product Base Cost * Unit Multiplier
+
+        let baseCost = toNumber(product.costPrice);
+        let multiplier = 1;
+
+        if (selectedUnit) {
+             // If we have selectedUnit snapshot from transaction
+             if (selectedUnit.costPrice > 0) {
+                 itemCost = toNumber(selectedUnit.costPrice);
+             } else {
+                 multiplier = toNumber(selectedUnit.multiplier) || 1;
+                 itemCost = baseCost * multiplier;
+             }
+        } else if (unitName && Array.isArray(product.units)) {
+             // Fallback to looking up current product definition if no snapshot
+             const unitDef = product.units.find(u => u.name === unitName);
+             if (unitDef) {
+                 if (unitDef.costPrice > 0) {
+                     itemCost = toNumber(unitDef.costPrice);
+                 } else {
+                     multiplier = toNumber(unitDef.multiplier) || 1;
+                     itemCost = baseCost * multiplier;
+                 }
+             } else {
+                 itemCost = baseCost; // Fallback to base
+             }
+        } else {
+             itemCost = baseCost;
+        }
+
+        const revenue = toNumber(group.totalSales);
+        const qty = group.totalQty;
+        profit += (revenue - (qty * itemCost));
+      });
+      return profit;
+    };
+
+    let totalProfit = calculateProfit(productSalesAgg);
+    const currentMonthProfit = calculateProfit(productSalesCurrentMonth);
+    const previousMonthProfit = calculateProfit(productSalesPrevMonth);
+
+    // Subtract global discounts from totalProfit
+    totalProfit -= (stats.totalDiscount || 0);
+
+    // Format Chart Data
+    // We'll fill gaps based on range
+    const chartDataFormatted = [];
+    const chartMap = new Map();
+    chartAgg.forEach(d => chartMap.set(d._id, d.amount));
+
+    if (range === '1y') {
+       for (let i = 11; i >= 0; i--) {
+           const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+           const dateKey = d.toISOString().slice(0, 7); // YYYY-MM
+           const displayDate = d.toLocaleDateString('en-NG', { month: 'short', year: '2-digit' });
+           const amount = chartMap.get(dateKey) || 0;
+           chartDataFormatted.push({ date: displayDate, amount: toNumber(amount) });
+       }
+    } else {
+        const days = range === '30d' ? 29 : 6;
+        for (let i = days; i >= 0; i--) {
+          const d = new Date();
+          d.setDate(now.getDate() - i);
+          const dateStr = d.toISOString().split('T')[0];
+          const displayDate = d.toLocaleDateString('en-NG', { weekday: 'short', day: 'numeric' });
+          const amount = chartMap.get(dateStr) || 0;
+          chartDataFormatted.push({ date: displayDate, amount: toNumber(amount) });
+        }
+    }
+
+    const formatTrendText = (current, previous) => {
+      if (previous <= 0) return '0% from last month';
+      const pct = ((current - previous) / previous) * 100;
+      const rounded = Math.round(pct * 10) / 10;
+      const sign = rounded >= 0 ? '+' : '';
+      return `${sign}${rounded}% from last month`;
+    };
+
+    return res.json({
+      stats: {
+        totalRevenue: toNumber(stats.totalRevenue),
+        totalProfit,
+        totalDebt: toNumber(stats.totalDebt),
+        totalSales: stats.totalSales,
+        cashSales: stats.cashSales,
+        transferSales: stats.transferSales,
+        posSales: stats.posSales,
+        shopCost: toNumber(shopCost),
+        shopWorth: toNumber(shopWorth),
+        // Carousel Data
+        cashCollectedToday: toNumber(dailyStats.cashCollected),
+        newDebtToday: toNumber(dailyStats.newDebt),
+        monthlySales: toNumber(monthlySales),
+        yearlySales: toNumber(yearlySales),
+
+        revenueTrendText: formatTrendText(toNumber(curRev), toNumber(prevRev)),
+        profitTrendText: formatTrendText(currentMonthProfit, previousMonthProfit)
+      },
+      chartData: chartDataFormatted,
+      topProducts: topProducts.map(p => ({ name: p.name, qty: p.qty }))
+    });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Analytics fetch failed' });
+  }
+});
+
+module.exports = router;

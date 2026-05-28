@@ -1,0 +1,958 @@
+import { InventoryState, BusinessProfile, Product, Category, DiscountCode } from '../types';
+
+const API_BASE = (import.meta as any).env?.VITE_API_URL || '';
+const TOKEN_KEY = 'ginvoice_auth_token_v1';
+const ADMIN_TOKEN_KEY = 'ginvoice_admin_token_v1';
+
+const buildUrl = (path: string) => {
+  if (!API_BASE) return path;
+  return `${API_BASE.replace(/\/$/, '')}${path}`;
+};
+
+export const saveAuthToken = (token: string) => {
+  localStorage.setItem(TOKEN_KEY, token);
+};
+
+export const loadAuthToken = (): string | null => {
+  return localStorage.getItem(TOKEN_KEY);
+};
+
+export const clearAuthToken = () => {
+  localStorage.removeItem(TOKEN_KEY);
+};
+
+// Admin Token Helpers
+export const saveAdminToken = (token: string) => {
+    localStorage.setItem(ADMIN_TOKEN_KEY, token);
+};
+
+export const loadAdminToken = (): string | null => {
+    return localStorage.getItem(ADMIN_TOKEN_KEY);
+};
+
+export const clearAdminToken = () => {
+    localStorage.removeItem(ADMIN_TOKEN_KEY);
+};
+
+const request = async (path: string, options: RequestInit = {}) => {
+  let res;
+  try {
+    res = await fetch(buildUrl(path), {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options.headers || {})
+      }
+    });
+  } catch (networkErr) {
+    console.error('[API] Network request failed:', networkErr);
+    throw networkErr;
+  }
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    console.error('[API] Request returned error status:', res.status, data);
+    const message = data?.message || data?.text || 'Request failed';
+
+    // Global Handling for Permission/Auth Issues
+    if (res.status === 401) {
+       const normalized = String(message || '').toLowerCase();
+       const shouldForceLogout =
+         normalized.includes('session expired') ||
+         normalized.includes('permissions updated') ||
+         normalized.includes('invalid token') ||
+         normalized.includes('unauthorized') ||
+         normalized.includes('business not found');
+
+       if (shouldForceLogout) {
+         const isAdminPath = path.startsWith('/api/admin');
+         window.dispatchEvent(new CustomEvent('auth:force-reload', {
+           detail: {
+             message: message || 'Session expired. Please log in again.',
+             reason: 'unauthorized',
+             scope: isAdminPath ? 'admin' : 'user'
+           }
+         }));
+       }
+    } else if (res.status === 403) {
+       if (message.includes('Permissions updated') || message.includes('Session expired')) {
+           window.dispatchEvent(new CustomEvent('auth:force-reload', { detail: { message, reason: 'forbidden' } }));
+       }
+    }
+
+    const err = new Error(message) as Error & { status?: number; data?: any };
+    err.status = res.status;
+    err.data = data;
+    throw err;
+  }
+  return data;
+};
+
+export const login = async (email: string, pin: string, role?: string, shopId?: string) => {
+  return request('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, pin, role, shopId })
+  });
+};
+
+export const getStaffShopOptions = async (email: string): Promise<{ shops: Shop[]; defaultShopId?: string | null }> => {
+  return request('/api/auth/staff-shop-options', {
+    method: 'POST',
+    body: JSON.stringify({ email })
+  });
+};
+
+export const registerBusiness = async (payload: {
+  name: string;
+  email?: string;
+  phone: string;
+  address: string;
+  ownerPassword: string;
+  staffPassword: string;
+  logo?: string;
+  theme: BusinessProfile['theme'];
+}) => {
+  return request('/api/auth/register', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+};
+
+export const requestPasswordReset = async (email: string) => {
+  return request('/api/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email })
+  });
+};
+
+// NEW: Verify OTP
+export const verifyEmailCode = async (email: string, code: string) => {
+  return request('/api/auth/verify-email-code', {
+    method: 'POST',
+    body: JSON.stringify({ email, code })
+  });
+};
+
+export const resetPassword = async (email: string, code: string, newOwnerPin: string) => {
+  return request('/api/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ email, code, newOwnerPin })
+  });
+};
+
+// NEW: Resend Verification Email
+export const resendVerification = async (email: string) => {
+  return request('/api/auth/resend-verification', {
+    method: 'POST',
+    body: JSON.stringify({ email })
+  });
+};
+
+// NEW: Check Verification Status
+export const checkVerificationStatus = async (email: string) => {
+  return request('/api/auth/verification-status', {
+    method: 'POST',
+    body: JSON.stringify({ email })
+  });
+};
+
+export const syncState = async (state: InventoryState) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  const sanitizedPayload: any = {
+    ...state,
+    products: Array.isArray((state as any)?.products)
+      ? (state as any).products.map((product: any) => {
+          const { currentStock, stockDelta, stock, ...rest } = product || {};
+          return rest;
+        })
+      : (state as any)?.products,
+    transactions: Array.isArray((state as any)?.transactions)
+      ? (state as any).transactions.map((tx: any) => ({
+          ...tx,
+          transactionId: tx?.transactionId || tx?.id,
+          idempotencyKey: tx?.idempotencyKey || tx?.id || tx?.transactionId
+        }))
+      : (state as any)?.transactions
+  };
+
+  return request('/api/sync', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify(sanitizedPayload)
+  });
+};
+
+// Updated: supports forceFull mode to ignore versions and get full state
+export const fetchRemoteState = async (
+  forceFull = false,
+  options?: { shopId?: string; allShops?: boolean; domains?: Array<'transactions' | 'products' | 'expenditures' | 'categories' | 'notifications' | 'shops'> }
+) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  // If forceFull is true, send NO query params to trigger server legacy fallback
+  const params = new URLSearchParams();
+  if (!forceFull) {
+    params.set('version', '0');
+    params.set('lastSync', '');
+  }
+  if (options?.shopId) params.set('shopId', options.shopId);
+  if (options?.allShops) params.set('allShops', 'true');
+  if (options?.domains && options.domains.length > 0) params.set('domains', options.domains.join(','));
+  const query = params.toString();
+
+  const url = buildUrl(`/api/sync${query ? `?${query}` : ''}`);
+
+  try {
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      }
+    });
+
+    if (res.status === 204) {
+        // Should not happen with forceFull=true as server always returns data
+        return { status: 204 };
+    }
+
+    if (!res.ok) {
+        throw new Error('Sync failed');
+    }
+
+    const data = await res.json();
+    return { status: 200, data };
+  } catch (err) {
+    console.error('Fetch remote state error', err);
+    throw err;
+  }
+};
+
+// NEW: Smart Sync Version Check
+export const checkServerVersion = async (): Promise<{
+  version: number;
+  versions: { transactions: number; products: number; expenditures: number; categories: number };
+}> => {
+  const token = loadAuthToken();
+  if (!token) return { version: 0, versions: { transactions: 0, products: 0, expenditures: 0, categories: 0 } }; // Silent fail
+
+  try {
+      const res = await fetch(buildUrl('/api/sync/version'), {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) return { version: 0, versions: { transactions: 0, products: 0, expenditures: 0, categories: 0 } };
+      const data = await res.json();
+      const version = typeof data.version === 'number' ? data.version : 0;
+      const versions = {
+        transactions: typeof data?.versions?.transactions === 'number' ? data.versions.transactions : 0,
+        products: typeof data?.versions?.products === 'number' ? data.versions.products : 0,
+        expenditures: typeof data?.versions?.expenditures === 'number' ? data.versions.expenditures : 0,
+        categories: typeof data?.versions?.categories === 'number' ? data.versions.categories : 0
+      };
+      return { version, versions };
+  } catch (err) {
+      return { version: 0, versions: { transactions: 0, products: 0, expenditures: 0, categories: 0 } }; // Network error or offline
+  }
+};
+
+export const updateSettings = async (settings: Partial<BusinessProfile['settings']>, staffPermissions?: Partial<BusinessProfile['staffPermissions']>) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/settings', {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ settings, staffPermissions })
+  });
+};
+
+export const updateBusinessProfile = async (profile: Partial<BusinessProfile>) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/settings', {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(profile)
+  });
+};
+
+export const generateDiscountCode = async (payload: { type: 'fixed' | 'percent', value: number, scope: 'global' | 'product', productId?: string, expiryDate?: string }) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/discounts/generate', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload)
+  });
+};
+
+export const validateDiscountCode = async (code: string, cartItems: any[]) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/discounts/validate', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ code, cartItems })
+  });
+};
+
+export const getCategories = async () => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/categories', {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+};
+
+export const createCategory = async (category: Partial<Category>) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/categories', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(category)
+  });
+};
+
+export const updateCategory = async (id: string, category: Partial<Category>) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request(`/api/categories/${id}`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(category)
+  });
+};
+
+export const deleteCategory = async (id: string) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request(`/api/categories/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+};
+
+export const uploadFile = async (file: File): Promise<string> => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('No auth token');
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const res = await fetch(buildUrl('/api/upload'), {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` }, // Don't set Content-Type for FormData
+    body: formData
+  });
+
+  if (!res.ok) throw new Error('Upload failed');
+  const data = await res.json();
+  return data.url;
+};
+
+export const deleteAccount = async (businessName: string) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/auth/delete-account', {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ businessName })
+  });
+};
+
+export const deleteExpenditure = async (id: string) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request(`/api/sync/expenditures/${id}`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+};
+
+export const fetchPermissions = async () => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/settings/permissions', {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+};
+
+export const sendChat = async (message: string, history: any[], uiContext?: any) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  // Keep payload small to reduce backend memory usage and AI token cost.
+  const compactHistory = (Array.isArray(history) ? history : [])
+    .slice(-8)
+    .map((item) => ({
+      from: item?.from === 'bot' ? 'bot' : 'user',
+      text: typeof item?.text === 'string' ? item.text.slice(0, 400) : ''
+    }))
+    .filter((item) => item.text.trim().length > 0);
+
+  const compactUiContext = uiContext && typeof uiContext === 'object'
+    ? {
+        tab: typeof uiContext.tab === 'string' ? uiContext.tab : undefined,
+        cart: uiContext.cart
+          ? {
+              itemCount: Number(uiContext.cart.itemCount || 0),
+              subtotal: Number(uiContext.cart.subtotal || 0),
+              customerName: uiContext.cart.customerName ? String(uiContext.cart.customerName).slice(0, 50) : undefined,
+              items: Array.isArray(uiContext.cart.items)
+                ? uiContext.cart.items.slice(0, 8).map((item: any) => ({
+                    name: String(item?.name || '').slice(0, 80),
+                    quantity: Number(item?.quantity || 0),
+                    unitPrice: Number(item?.unitPrice || 0),
+                    total: Number(item?.total || 0)
+                  }))
+                : []
+            }
+          : undefined,
+        inventory: uiContext.inventory
+          ? {
+              totalProducts: Number(uiContext.inventory.totalProducts || 0),
+              lowStockCount: Number(uiContext.inventory.lowStockCount || 0),
+              outOfStockCount: Number(uiContext.inventory.outOfStockCount || 0),
+              deadStockCount: Number(uiContext.inventory.deadStockCount || 0),
+              totalValue: Number(uiContext.inventory.totalValue || 0),
+              lowStockPreview: Array.isArray(uiContext.inventory.lowStockPreview)
+                ? uiContext.inventory.lowStockPreview.slice(0, 8).map((item: any) => ({
+                    id: String(item?.id || '').slice(0, 40),
+                    name: String(item?.name || '').slice(0, 80),
+                    stock: Number(item?.stock || 0),
+                    category: String(item?.category || '').slice(0, 40)
+                  }))
+                : [],
+              topSellingPreview: Array.isArray(uiContext.inventory.topSellingPreview)
+                ? uiContext.inventory.topSellingPreview.slice(0, 8).map((item: any) => ({
+                    id: String(item?.id || '').slice(0, 40),
+                    name: String(item?.name || '').slice(0, 80),
+                    category: String(item?.category || '').slice(0, 40),
+                    sold: Number(item?.sold || 0)
+                  }))
+                : [],
+              deadStockWindowDays: Number(uiContext.inventory.deadStockWindowDays || 0),
+              deadStockPreview: Array.isArray(uiContext.inventory.deadStockPreview)
+                ? uiContext.inventory.deadStockPreview.slice(0, 8).map((item: any) => ({
+                    id: String(item?.id || '').slice(0, 40),
+                    name: String(item?.name || '').slice(0, 80),
+                    stock: Number(item?.stock || 0),
+                    category: String(item?.category || '').slice(0, 40),
+                    lastSoldAt: item?.lastSoldAt ? String(item.lastSoldAt).slice(0, 40) : null
+                  }))
+                : []
+            }
+          : undefined,
+        expenditure: uiContext.expenditure
+          ? {
+              totalCount: Number(uiContext.expenditure.totalCount || 0),
+              thisMonthTotal: Number(uiContext.expenditure.thisMonthTotal || 0)
+            }
+          : undefined,
+        dashboard: uiContext.dashboard
+          ? {
+              totalRevenue: Number(uiContext.dashboard.totalRevenue || 0),
+              totalProfit: Number(uiContext.dashboard.totalProfit || 0),
+              topProduct: String(uiContext.dashboard.topProduct || '').slice(0, 50)
+            }
+          : undefined,
+        settings: uiContext.settings
+          ? {
+              plan: String(uiContext.settings.plan || '').slice(0, 20),
+              businessName: String(uiContext.settings.businessName || '').slice(0, 50)
+            }
+          : undefined,
+        selectedInvoice: uiContext.selectedInvoice
+          ? {
+              id: String(uiContext.selectedInvoice.id || '').slice(0, 50),
+              customerName: String(uiContext.selectedInvoice.customerName || '').slice(0, 80),
+              totalAmount: Number(uiContext.selectedInvoice.totalAmount || 0),
+              amountPaid: Number(uiContext.selectedInvoice.amountPaid || 0),
+              balance: Number(uiContext.selectedInvoice.balance || 0),
+              paymentStatus: String(uiContext.selectedInvoice.paymentStatus || '').slice(0, 20),
+              itemCount: Number(uiContext.selectedInvoice.itemCount || 0),
+              transactionDate: String(uiContext.selectedInvoice.transactionDate || '').slice(0, 40)
+            }
+          : undefined,
+        recentTransactions: Array.isArray(uiContext.recentTransactions)
+          ? uiContext.recentTransactions.slice(0, 8).map((tx: any) => ({
+              id: String(tx?.id || '').slice(0, 50),
+              customerName: String(tx?.customerName || '').slice(0, 80),
+              totalAmount: Number(tx?.totalAmount || 0),
+              balance: Number(tx?.balance || 0),
+              paymentStatus: String(tx?.paymentStatus || '').slice(0, 20),
+              transactionDate: String(tx?.transactionDate || '').slice(0, 40)
+            }))
+          : [],
+        activeShopId: uiContext.activeShopId ? String(uiContext.activeShopId).slice(0, 64) : undefined,
+        allShopsMode: Boolean(uiContext.allShopsMode)
+      }
+    : undefined;
+
+  return request('/api/support/chat', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ message: message.slice(0, 500), history: compactHistory, uiContext: compactUiContext })
+  });
+};
+
+
+export const exportBusinessData = async (scope: 'lite' | 'full' = 'lite') => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request(`/api/support/export-data?scope=${scope}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+};
+
+// Admin API
+export const adminLogin = async (email: string, password: string) => {
+    return request('/api/admin/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password })
+    });
+};
+
+export const getAdminStats = async () => {
+  const token = loadAdminToken();
+  if (!token) throw new Error('Missing admin token');
+  return request('/api/admin/stats', {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+};
+
+export const getAdminUsers = async (page = 1, search = '') => {
+  const token = loadAdminToken();
+  if (!token) throw new Error('Missing admin token');
+  return request(`/api/admin/users?page=${page}&search=${search}`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+};
+
+export const getAdminUserDetails = async (id: string) => {
+  const token = loadAdminToken();
+  if (!token) throw new Error('Missing admin token');
+  return request(`/api/admin/users/${id}`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+};
+
+export const updateUserAdmin = async (id: string, data: any) => {
+  const token = loadAdminToken();
+  if (!token) throw new Error('Missing admin token');
+  return request(`/api/admin/users/${id}`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(data)
+  });
+};
+
+export const deleteUserAdmin = async (id: string) => {
+  const token = loadAdminToken();
+  if (!token) throw new Error('Missing admin token');
+  return request(`/api/admin/users/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+};
+
+export const grantSubscriptionAdmin = async (id: string, days: number) => {
+  const token = loadAdminToken();
+  if (!token) throw new Error('Missing admin token');
+  return request(`/api/admin/users/${id}/grant-subscription`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ days })
+  });
+};
+
+export const sendUserEmailAdmin = async (id: string, formData: FormData) => {
+  const token = loadAdminToken();
+  if (!token) throw new Error('Missing admin token');
+
+  const res = await fetch(buildUrl(`/api/admin/users/${id}/send-email`), {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData
+  });
+
+  if (!res.ok) {
+     const data = await res.json().catch(() => ({}));
+     throw new Error(data.message || 'Failed to send email');
+  }
+
+  return res.json();
+};
+
+export const purgeDeletedProducts = async () => {
+  const token = loadAdminToken();
+  if (!token) throw new Error('Missing admin token');
+  return request('/api/admin/purge-deleted-products', {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+};
+
+export const purgeInactiveShops = async () => {
+  const token = loadAdminToken();
+  if (!token) throw new Error('Missing admin token');
+  return request('/api/admin/purge-inactive-shops', {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+};
+
+export const cancelSubscription = async (reason: string) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/payments/subscription/cancel', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ reason })
+  });
+};
+
+export const pauseSubscription = async () => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/payments/subscription/pause', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+};
+
+export const resumeSubscription = async () => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/payments/subscription/resume', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+};
+
+export const settleTransaction = async (id: string) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request(`/api/transactions/${id}/settle`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+};
+
+export const getBusinessCount = async () => {
+  return request('/api/stats/business-count', {
+    method: 'GET'
+  });
+};
+
+export const contactSupport = async (message: string, email: string, businessName: string) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/support/contact', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ message, email, businessName })
+  });
+};
+
+export const updateExpenditure = async (expenditure: any) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request(`/api/expenditures/${expenditure.id}`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(expenditure)
+  });
+};
+
+// NEW: Helper for creating a single product via Sync
+export const createProduct = async (product: Product) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/sync', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ products: [product] })
+  });
+};
+
+// NEW: Helper for updating a single product via Sync
+export const updateProduct = async (product: Product) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/sync', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ products: [product] })
+  });
+};
+
+const api = {
+  get: async (url: string) => {
+    const token = loadAuthToken();
+    return request(`/api${url}`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+  },
+
+  post: async (url: string, body: any) => {
+    const token = loadAuthToken();
+    return request(`/api${url}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body)
+    });
+  },
+
+  put: async (url: string, body: any) => {
+    const token = loadAuthToken();
+    return request(`/api${url}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body)
+    });
+  },
+
+  patch: async (url: string, body: any) => {
+    const token = loadAuthToken();
+    return request(`/api${url}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body)
+    });
+  },
+
+  delete: async (url: string) => {
+    const token = loadAuthToken();
+    return request(`/api${url}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+  }
+};
+
+export default api;
+
+export const checkSyncAccess = async () => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/sync/check', {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+};
+
+export const changeBusinessPins = async (currentOwnerPin: string, newStaffPin?: string, newOwnerPin?: string) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/auth/change-pins', {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ currentOwnerPin, newStaffPin, newOwnerPin })
+  });
+};
+export const updateStaffPin = async (currentOwnerPin: string, newStaffPin: string) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error("Missing auth token");
+
+  return request(`/api/auth/update-staff-pin`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ currentOwnerPin, newStaffPin })
+  });
+};
+
+export const getAnalytics = async (params: { range?: '7d' | '30d' | '1y' }) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  const query = new URLSearchParams();
+  if (params.range) query.set('range', params.range);
+
+  return request(`/api/analytics${query.toString() ? `?${query.toString()}` : ''}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+};
+
+export const getEntitlements = async () => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/entitlements', {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+};
+
+export const verifyPayment = async (reference: string) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/payments/verify', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ reference })
+  });
+};
+
+export const initializePayment = async (amount: number, email: string) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token. Please login again.');
+
+  try {
+    return await request('/api/payments/initialize', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ amount, email })
+    });
+  } catch (err: any) {
+    if (err.status === 401) {
+      throw new Error('Session expired. Please login again.');
+    }
+    throw err;
+  }
+};
+
+export const deleteProduct = async (id: string, hard = false, shopId?: string) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  const query = new URLSearchParams();
+  if (hard) query.set('hard', 'true');
+  if (shopId) query.set('shopId', shopId);
+
+  return request(`/api/sync/products/${id}${query.toString() ? `?${query.toString()}` : ''}`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+};
+
+export const deleteTransaction = async (id: string, restock: boolean) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request(`/api/sync/transactions/${id}?restock=${restock}`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+};
+
+export const getStockVerificationQueue = async () => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/audit/queue', {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+};
+
+export const verifyStockItem = async (payload: {
+  productId: string;
+  countedQty: number;
+  expectedQtyAtOpen: number;
+  reasonCode?: 'CYCLE_COUNT' | 'MANUAL_CHECK' | 'FOLLOW_UP';
+  notes?: string;
+  confirmChangedExpected?: boolean;
+}) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/audit/verify', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload)
+  });
+};
+
+export const snoozeStockVerification = async () => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request('/api/audit/snooze', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+};
+
+export const dismissNotification = async (notificationId: string) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Missing auth token');
+
+  return request(`/api/audit/dismiss/${notificationId}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+};

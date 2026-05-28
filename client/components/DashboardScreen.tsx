@@ -1,0 +1,703 @@
+
+import React, { useMemo, useEffect, useState } from 'react';
+import { 
+  TrendingUp, 
+  DollarSign, 
+  Package,
+  Calendar,
+  Wallet,
+  ShoppingBag,
+  Banknote,
+  CreditCard,
+  AlertCircle,
+  Coins,
+  Gem,
+  ChevronLeft,
+  ChevronRight
+} from 'lucide-react';
+import { 
+  AreaChart, 
+  Area, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer
+} from 'recharts';
+import { Transaction, Product, BusinessProfile, Expenditure } from '../types';
+import { CURRENCY } from '../constants';
+import { getAnalytics, updateBusinessProfile } from '../services/api';
+import { safeCalculate, safeSum } from '../utils/math';
+import ComplianceShieldWidget from './ComplianceShieldWidget';
+import ComplianceShieldModal from './ComplianceShieldModal';
+
+interface DashboardScreenProps {
+  transactions: Transaction[];
+  products: Product[];
+  expenditures?: Expenditure[];
+  business?: BusinessProfile;
+  onUpdateBusiness?: (business: Partial<BusinessProfile>) => void;
+}
+
+const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, products, expenditures = [], business, onUpdateBusiness }) => {
+  const [showShieldModal, setShowShieldModal] = useState(false);
+
+  const [remoteAnalytics, setRemoteAnalytics] = useState<{
+    stats: {
+      totalRevenue: number;
+      totalProfit: number;
+      totalDebt: number;
+      totalSales: number;
+      cashSales: number;
+      transferSales: number;
+      posSales: number;
+      shopCost: number;
+      shopWorth: number;
+      dailyRevenue: number;
+      cashCollectedToday: number;
+      newDebtToday: number;
+      monthlySales: number;
+      yearlySales: number;
+      revenueTrendText?: string;
+      profitTrendText?: string;
+    };
+    chartData: { date: string; amount: number }[];
+    topProducts: { name: string; qty: number }[];
+  } | null>(null);
+
+  const [timeRange, setTimeRange] = useState<'7d' | '30d' | '1y'>('7d');
+  const [salesCountRange, setSalesCountRange] = useState<'daily' | 'monthly' | 'yearly'>('daily');
+  const [cashRange, setCashRange] = useState<'daily' | 'monthly' | 'yearly'>('daily');
+  const [expenseRange, setExpenseRange] = useState<'daily' | 'monthly' | 'yearly'>('daily');
+
+  useEffect(() => {
+    let active = true;
+    if (!navigator.onLine) return;
+    if (!localStorage.getItem('ginvoice_auth_token_v1')) return;
+    getAnalytics({
+      range: timeRange
+    })
+      .then((data) => {
+        if (active) setRemoteAnalytics(data);
+      })
+      .catch((err) => {
+        const status = err?.status;
+        if (status === 402 && active) {
+          setRemoteAnalytics(null);
+        } else {
+          console.error('Analytics fetch failed', err);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [transactions, timeRange]);
+
+  const localStats = useMemo(() => {
+    const salesTransactions = transactions.filter(tx => !tx.isPreviousDebt);
+    const activeProducts = products.filter(p => !p.isDeleted); // Filter out deleted items
+
+    // SAFE MATH IMPLEMENTATION
+    const totalRevenue = safeSum(salesTransactions, 'totalAmount');
+    const totalDebt = safeSum(transactions, 'balance');
+    
+    // Calculate total profit
+    const totalProfit = salesTransactions.reduce((sum, tx) => {
+      const txProfit = tx.items.reduce((pSum, item) => {
+        // Use full products list for profit calc (historical), or active?
+        // Ideally historical transactions should still reference deleted products if needed,
+        // but profit calculation logic doesn't strictly depend on active status for past sales.
+        // However, looking up costPrice might fail if product is hard deleted. Soft deleted is fine.
+        const product = products.find(p => p.id === item.productId);
+        // FIX: If unit cost is 0, use base cost * multiplier
+        let cost = 0;
+
+        // Check if item has a selected unit (variant sale)
+        if (item.selectedUnit) {
+            // Priority 1: Unit specific cost price
+            if (item.selectedUnit.costPrice > 0) {
+                cost = item.selectedUnit.costPrice;
+            }
+            // Priority 2: Base Product Cost * Multiplier
+            else if (product && product.costPrice > 0) {
+                cost = product.costPrice * item.selectedUnit.multiplier;
+            }
+        }
+        // Direct Base Product Sale (no unit selected or base unit)
+        else {
+             if (product) cost = product.costPrice;
+        }
+
+        // [FIX] Use item.total (net price) - (cost * quantity)
+        // Profit per item = total_selling - total_cost
+        const itemTotalCost = safeCalculate(cost, item.quantity);
+        return pSum + (item.total - itemTotalCost);
+      }, 0);
+
+      // Subtract tx.globalDiscount from profit
+      // Net Profit = Gross Profit - Global Discount.
+      return sum + txProfit - (tx.globalDiscount || 0);
+    }, 0);
+
+    const cashSales = salesTransactions.filter(t => t.paymentMethod === 'cash').length;
+    const transferSales = salesTransactions.filter(t => ['transfer', 'bank'].includes(t.paymentMethod)).length;
+    const posSales = salesTransactions.filter(t => t.paymentMethod === 'pos').length;
+
+    // Calculate Shop Cost & Worth locally (Only Active Products)
+    const shopCost = activeProducts.reduce((sum, p) => sum + safeCalculate(p.costPrice, p.currentStock), 0);
+    const shopWorth = activeProducts.reduce((sum, p) => sum + safeCalculate(p.sellingPrice, p.currentStock), 0);
+
+    // Calculate Daily Revenue locally
+    const today = new Date().toLocaleDateString('en-CA');
+    const dailyRevenue = safeSum(
+        salesTransactions.filter(t => {
+            const tDate = new Date(t.transactionDate).toLocaleDateString('en-CA');
+            return tDate === today;
+        }),
+        'totalAmount'
+    );
+
+    const expensesTotal = expenditures.reduce((sum, e) => e.flowType === 'out' ? sum + Math.abs(e.amount || 0) : sum, 0);
+    const incomeTotal = expenditures.reduce((sum, e) => e.flowType === 'in' ? sum + Math.abs(e.amount || 0) : sum, 0);
+    const expensesBalance = incomeTotal - expensesTotal;
+
+    const now = new Date();
+    const monthlySales = salesTransactions
+      .filter(t => {
+        const tDate = new Date(t.transactionDate);
+        return tDate.getMonth() === now.getMonth() && tDate.getFullYear() === now.getFullYear();
+      })
+      .reduce((sum, t) => sum + t.totalAmount, 0);
+
+    const yearlySales = salesTransactions
+      .filter(t => new Date(t.transactionDate).getFullYear() === now.getFullYear())
+      .reduce((sum, t) => sum + t.totalAmount, 0);
+
+    return { totalRevenue, totalProfit, totalSales: salesTransactions.length, cashSales, transferSales, posSales, totalDebt, shopCost, shopWorth, dailyRevenue, expensesTotal, incomeTotal, expensesBalance, monthlySales, yearlySales };
+  }, [transactions, products, expenditures]);
+
+  // Hybrid Stats Logic: Merge remote and local
+  const stats = useMemo(() => {
+    const remote = remoteAnalytics?.stats;
+    if (!remote) return localStats;
+
+    return {
+      ...remote,
+      // Fallback to local if remote returns 0 (likely due to glitch or sync delay)
+      shopCost: remote.shopCost || localStats.shopCost,
+      shopWorth: remote.shopWorth || localStats.shopWorth,
+      dailyRevenue: remote.dailyRevenue || localStats.dailyRevenue,
+      monthlySales: remote.monthlySales || localStats.monthlySales,
+      yearlySales: remote.yearlySales || localStats.yearlySales
+    };
+  }, [remoteAnalytics, localStats]);
+
+  // Daily sales data for the chart
+  const chartData = useMemo(() => {
+    if (remoteAnalytics?.chartData) return remoteAnalytics.chartData;
+    const last7Days = Array.from({ length: 7 }, (_, i) => {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      return date.toLocaleDateString('en-CA');
+    }).reverse();
+
+    return last7Days.map(date => {
+      const daySales = transactions
+        .filter(t => {
+          if (t.isPreviousDebt) return false;
+          const tDate = new Date(t.transactionDate).toLocaleDateString('en-CA');
+          return tDate === date;
+        })
+        .reduce((sum, t) => sum + t.totalAmount, 0);
+      
+      const displayDate = new Date(date).toLocaleDateString('en-NG', { weekday: 'short' });
+      return { date: displayDate, amount: daySales };
+    });
+  }, [transactions, remoteAnalytics]);
+
+  // Top products
+  const topProducts = useMemo(() => {
+    // Top products should only calculate based on the transactions within the selected time range.
+    const now = new Date();
+    const rangeStart = new Date();
+    if (timeRange === '7d') rangeStart.setDate(now.getDate() - 7);
+    if (timeRange === '30d') rangeStart.setDate(now.getDate() - 30);
+    if (timeRange === '1y') rangeStart.setFullYear(now.getFullYear() - 1);
+
+    // Filter transactions by time range
+    const relevantTx = transactions.filter(tx => {
+       if (tx.isPreviousDebt) return false;
+       return new Date(tx.transactionDate) >= rangeStart;
+    });
+
+    const productSales: Record<string, { name: string, qty: number, category: string }> = {};
+    relevantTx.forEach(tx => {
+      tx.items.forEach(item => {
+        if (!productSales[item.productId]) {
+          const product = products.find(p => p.id === item.productId);
+          productSales[item.productId] = {
+             name: item.productName,
+             qty: 0,
+             category: product?.category || 'Uncategorized'
+          };
+        }
+        productSales[item.productId].qty += item.quantity;
+      });
+    });
+
+    return Object.values(productSales)
+      .sort((a, b) => b.qty - a.qty)
+      .slice(0, 5);
+  }, [transactions, products, timeRange]);
+
+  // Top Expense Categories
+  const topExpenseCategories = useMemo(() => {
+    const catMap: Record<string, number> = {};
+    expenditures.forEach(e => {
+      if (e.flowType === 'out') {
+        catMap[e.category] = (catMap[e.category] || 0) + Math.abs(e.amount || 0);
+      }
+    });
+
+    return Object.entries(catMap)
+      .map(([name, amount]) => ({ name, amount }))
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 3);
+  }, [expenditures]);
+
+  const salesCountStats = useMemo(() => {
+    const salesTransactions = transactions.filter((tx) => !tx.isPreviousDebt);
+    const now = new Date();
+    const today = now.toDateString();
+    const month = now.getMonth();
+    const year = now.getFullYear();
+
+    let daily = 0;
+    let monthly = 0;
+    let yearly = 0;
+
+    salesTransactions.forEach((tx) => {
+      const txDate = new Date(tx.transactionDate);
+      if (Number.isNaN(txDate.getTime())) return;
+      if (txDate.getFullYear() === year) {
+        yearly += 1;
+        if (txDate.getMonth() === month) monthly += 1;
+      }
+      if (txDate.toDateString() === today) daily += 1;
+    });
+
+    return { daily, monthly, yearly };
+  }, [transactions]);
+
+  const totalExpensesToday = useMemo(() => expenditures
+    .filter((e) => e.flowType === 'out' && new Date(e.date).toDateString() === new Date().toDateString())
+    .reduce((sum, e) => sum + Math.abs(e.amount || 0), 0), [expenditures]);
+
+  const totalExpensesThisMonth = useMemo(() => expenditures
+    .filter((e) => {
+      const d = new Date(e.date);
+      const now = new Date();
+      return e.flowType === 'out' && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    })
+    .reduce((sum, e) => sum + Math.abs(e.amount || 0), 0), [expenditures]);
+
+  const totalExpensesThisYear = useMemo(() => expenditures
+    .filter((e) => e.flowType === 'out' && new Date(e.date).getFullYear() === new Date().getFullYear())
+    .reduce((sum, e) => sum + Math.abs(e.amount || 0), 0), [expenditures]);
+
+  const rotateRangeLeft = (
+    setter: React.Dispatch<React.SetStateAction<'daily' | 'monthly' | 'yearly'>>
+  ) => setter((prev) => (prev === 'daily' ? 'yearly' : prev === 'monthly' ? 'daily' : 'monthly'));
+
+  const rotateRangeRight = (
+    setter: React.Dispatch<React.SetStateAction<'daily' | 'monthly' | 'yearly'>>
+  ) => setter((prev) => (prev === 'daily' ? 'monthly' : prev === 'monthly' ? 'yearly' : 'daily'));
+
+  return (
+    <div className="max-w-7xl mx-auto space-y-8">
+      <div>
+        <div className="flex justify-between items-start">
+           <div>
+              <h1 className="text-2xl font-bold text-gray-900">Owner Dashboard</h1>
+              <p className="text-gray-500">Real-time performance overview</p>
+           </div>
+
+           {business && !business.taxSettings?.isEnabled && (
+             <button
+               onClick={() => setShowShieldModal(true)}
+               className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-xl font-bold text-sm hover:bg-indigo-100 transition-colors"
+             >
+               <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></div>
+               Activate Compliance Shield
+             </button>
+           )}
+        </div>
+      </div>
+
+      {business && business.taxSettings?.isEnabled && (
+        <ComplianceShieldWidget
+           onClose={async () => {
+               if (confirm('Hide the Compliance Shield? You can re-enable it in Settings.')) {
+                  try {
+                    const updatedSettings = {
+                       taxSettings: {
+                          ...business.taxSettings,
+                          isEnabled: false
+                       }
+                    };
+                    await updateBusinessProfile(updatedSettings);
+                    if (onUpdateBusiness) onUpdateBusiness(updatedSettings);
+                  } catch (err) {
+                     console.error("Failed to disable shield", err);
+                     alert("Failed to disable. Please try again.");
+                  }
+               }
+           }}
+        />
+      )}
+      {showShieldModal && (
+        <ComplianceShieldModal
+           onConfirm={async () => {
+              try {
+                const updatedSettings = {
+                   taxSettings: {
+                      isEnabled: true,
+                      jurisdiction: 'NG',
+                      incorporationDate: new Date().toISOString()
+                   }
+                };
+                await updateBusinessProfile(updatedSettings);
+                if (onUpdateBusiness) onUpdateBusiness(updatedSettings);
+                setShowShieldModal(false);
+              } catch (err) {
+                 console.error("Failed to enable shield", err);
+                 alert("Failed to enable. Please try again.");
+              }
+           }}
+           onCancel={() => setShowShieldModal(false)}
+        />
+      )}
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          title="Total Sales"
+          value={`${CURRENCY}${stats.totalRevenue.toLocaleString()}`}
+          icon={<DollarSign className="text-blue-600" />}
+          trend={stats.revenueTrendText || '+12% from last month'}
+          color="bg-blue-50"
+        />
+        <StatCard
+          title="Total Profit"
+          value={`${CURRENCY}${stats.totalProfit.toLocaleString()}`}
+          icon={<TrendingUp className="text-green-600" />}
+          trend={stats.profitTrendText || '+8.4% from last month'}
+          color="bg-green-50"
+        />
+        <StatCard
+          title="Money Owed To You"
+          value={`${CURRENCY}${stats.totalDebt.toLocaleString()}`}
+          icon={<AlertCircle className="text-red-600" />}
+          trend="Total money owed to you"
+          color="bg-red-50"
+        />
+
+        <MetricCarouselCard
+          title="Sales Count"
+          icon={<ShoppingBag className="text-purple-600" />}
+          iconBg="bg-purple-50"
+          range={salesCountRange}
+          onPrev={() => rotateRangeLeft(setSalesCountRange)}
+          onNext={() => rotateRangeRight(setSalesCountRange)}
+          dailyLabel="Today"
+          dailyValue={`${salesCountStats.daily.toLocaleString()} sales`}
+          monthlyLabel="This Month"
+          monthlyValue={`${salesCountStats.monthly.toLocaleString()} sales`}
+          yearlyLabel="This Year"
+          yearlyValue={`${salesCountStats.yearly.toLocaleString()} sales`}
+          trend="Independent period control"
+        />
+
+        <MetricCarouselCard
+          title="Cash & Sales Value"
+          icon={<Wallet className="text-blue-600" />}
+          iconBg="bg-blue-50"
+          range={cashRange}
+          onPrev={() => rotateRangeLeft(setCashRange)}
+          onNext={() => rotateRangeRight(setCashRange)}
+          dailyLabel="Today's Cash"
+          dailyValue={`${CURRENCY}${(stats.cashCollectedToday || 0).toLocaleString()}`}
+          monthlyLabel="Monthly Sales"
+          monthlyValue={`${CURRENCY}${(stats.monthlySales || 0).toLocaleString()}`}
+          yearlyLabel="Yearly Sales"
+          yearlyValue={`${CURRENCY}${(stats.yearlySales || 0).toLocaleString()}`}
+          trend={cashRange === 'daily' ? `New Debt: ${CURRENCY}${(stats.newDebtToday || 0).toLocaleString()}` : 'Independent period control'}
+        />
+
+        <MetricCarouselCard
+          title="Expenses"
+          icon={<Wallet className="text-orange-600" />}
+          iconBg="bg-orange-50"
+          range={expenseRange}
+          onPrev={() => rotateRangeLeft(setExpenseRange)}
+          onNext={() => rotateRangeRight(setExpenseRange)}
+          dailyLabel="Today's Expenses"
+          dailyValue={`${CURRENCY}${totalExpensesToday.toLocaleString()}`}
+          monthlyLabel="Monthly Expenses"
+          monthlyValue={`${CURRENCY}${totalExpensesThisMonth.toLocaleString()}`}
+          yearlyLabel="Yearly Expenses"
+          yearlyValue={`${CURRENCY}${totalExpensesThisYear.toLocaleString()}`}
+          trend="Independent period control"
+        />
+
+        <StatCard
+          title="Cost of Stock"
+          value={`${CURRENCY}${(stats.shopCost || 0).toLocaleString()}`}
+          icon={<Coins className="text-orange-600" />}
+          trend="Money you spent buying goods"
+          color="bg-orange-50"
+        />
+        <StatCard
+          title="Value of Stock"
+          value={`${CURRENCY}${(stats.shopWorth || 0).toLocaleString()}`}
+          icon={<Gem className="text-purple-600" />}
+          trend="Money you will make"
+          color="bg-purple-50"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-8">
+        {/* Sales Chart */}
+        <div className="lg:col-span-2 space-y-4">
+          <div className="bg-white p-6 rounded-2xl shadow-sm border">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                <Calendar className="text-indigo-600" size={20} /> Sales Performance
+              </h3>
+              <div className="flex gap-2">
+                {['7d', '30d', '1y'].map(r => (
+                  <button
+                    key={r}
+                    onClick={() => setTimeRange(r as any)}
+                    className={`px-3 py-1 rounded-full text-xs font-bold ${timeRange === r ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600'}`}
+                  >
+                    {r === '7d' ? 'Weekly' : r === '30d' ? 'Monthly' : 'Yearly'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="h-[300px] min-h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData}>
+                  <defs>
+                    <linearGradient id="colorAmount" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.1}/>
+                      <stop offset="95%" stopColor="#4f46e5" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} tickFormatter={(val) => `₦${val/1000}k`} />
+                  <Tooltip
+                    contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}}
+                    formatter={(value: number) => [`${CURRENCY}${value.toLocaleString()}`, 'Revenue']}
+                  />
+                  <Area type="monotone" dataKey="amount" stroke="#4f46e5" strokeWidth={3} fillOpacity={1} fill="url(#colorAmount)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Money In/Out/Balance Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+             <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 flex flex-col justify-center">
+                <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1">Money In (Income)</p>
+                <p className="text-xl font-black text-emerald-700">
+                   {new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(localStats.incomeTotal || 0)}
+                </p>
+             </div>
+             <div className="bg-red-50 p-4 rounded-xl border border-red-100 flex flex-col justify-center">
+                <p className="text-xs font-bold text-red-600 uppercase tracking-wider mb-1">Money Out (Expense)</p>
+                <p className="text-xl font-black text-red-700">
+                   {new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(Math.abs(localStats.expensesTotal) || 0)}
+                </p>
+             </div>
+             <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex flex-col justify-center">
+                <p className="text-xs font-bold text-blue-500 uppercase tracking-wider mb-1">Net Balance</p>
+                <p className={`text-xl font-black ${localStats.expensesBalance >= 0 ? 'text-blue-700' : 'text-red-600'}`}>
+                   {new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(localStats.expensesBalance || 0)}
+                </p>
+             </div>
+          </div>
+        </div>
+
+        {/* Payment Methods & Top Items */}
+        <div className="space-y-8">
+          <div className="bg-white p-6 rounded-2xl shadow-sm border">
+            <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+              <Wallet className="text-indigo-600" size={20} /> Payment Methods
+            </h3>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center text-green-600">
+                    <Banknote size={18} />
+                  </div>
+                  <span className="text-sm font-medium text-gray-600">Cash</span>
+                </div>
+                <span className="font-bold">{stats.cashSales}</span>
+              </div>
+              <div className="w-full bg-gray-100 rounded-full h-2">
+                <div 
+                  className="bg-green-500 h-2 rounded-full" 
+                  style={{ width: `${(stats.cashSales / (stats.totalSales || 1)) * 100}%` }}
+                ></div>
+              </div>
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600">
+                    <CreditCard size={18} />
+                  </div>
+                  <span className="text-sm font-medium text-gray-600">Transfer</span>
+                </div>
+                <span className="font-bold">{stats.transferSales}</span>
+              </div>
+              <div className="w-full bg-gray-100 rounded-full h-2">
+                <div 
+                  className="bg-blue-500 h-2 rounded-full" 
+                  style={{ width: `${(stats.transferSales / (stats.totalSales || 1)) * 100}%` }}
+                ></div>
+              </div>
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center text-purple-600">
+                    <CreditCard size={18} />
+                  </div>
+                  <span className="text-sm font-medium text-gray-600">POS</span>
+                </div>
+                <span className="font-bold">{stats.posSales || 0}</span>
+              </div>
+              <div className="w-full bg-gray-100 rounded-full h-2">
+                <div
+                  className="bg-purple-500 h-2 rounded-full"
+                  style={{ width: `${((stats.posSales || 0) / (stats.totalSales || 1)) * 100}%` }}
+                ></div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-2xl shadow-sm border">
+            <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+              <Package className="text-indigo-600" size={20} /> Top Selling Items
+            </h3>
+            <div className="space-y-3">
+              {topProducts.length === 0 ? (
+                <p className="text-sm text-gray-400 italic">No sales data yet</p>
+              ) : (
+                topProducts.map((prod, idx) => (
+                  <div key={idx} className="flex justify-between items-center p-2 hover:bg-gray-50 rounded-xl transition-colors">
+                    <div className="flex flex-col">
+                        <span className="text-sm font-bold text-gray-800 truncate max-w-[150px]">{prod.name}</span>
+                        <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">{prod.category}</span>
+                    </div>
+                    <span className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-black">{prod.qty} units</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-2xl shadow-sm border">
+            <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+              <Wallet className="text-red-600" size={20} /> Top Expense Categories
+            </h3>
+            <div className="space-y-3">
+              {topExpenseCategories.length === 0 ? (
+                <p className="text-sm text-gray-400 italic">No expenses yet</p>
+              ) : (
+                topExpenseCategories.map((cat, idx) => (
+                  <div key={idx} className="flex justify-between items-center p-2 hover:bg-gray-50 rounded-xl transition-colors">
+                    <span className="text-sm font-bold text-gray-800 truncate max-w-[150px]">{cat.name}</span>
+                    <span className="px-2 py-1 bg-red-50 text-red-700 rounded-lg text-xs font-black">{CURRENCY}{cat.amount.toLocaleString()}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const MetricCarouselCard: React.FC<{
+  title: string;
+  icon: React.ReactNode;
+  iconBg: string;
+  range: 'daily' | 'monthly' | 'yearly';
+  onPrev: () => void;
+  onNext: () => void;
+  dailyLabel: string;
+  dailyValue: string;
+  monthlyLabel: string;
+  monthlyValue: string;
+  yearlyLabel: string;
+  yearlyValue: string;
+  trend?: string;
+}> = ({ title, icon, iconBg, range, onPrev, onNext, dailyLabel, dailyValue, monthlyLabel, monthlyValue, yearlyLabel, yearlyValue, trend }) => {
+  const active = range === 'daily'
+    ? { label: dailyLabel, value: dailyValue }
+    : range === 'monthly'
+      ? { label: monthlyLabel, value: monthlyValue }
+      : { label: yearlyLabel, value: yearlyValue };
+
+  return (
+    <div className="bg-white p-5 rounded-2xl shadow-sm border group hover:shadow-md transition-all relative overflow-hidden">
+      <div className="absolute inset-y-0 left-0 flex items-center pl-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        <button onClick={onPrev} className="p-1 bg-white/80 rounded-full shadow-md hover:bg-white">
+          <ChevronLeft size={16} className="text-gray-600" />
+        </button>
+      </div>
+      <div className="absolute inset-y-0 right-0 flex items-center pr-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        <button onClick={onNext} className="p-1 bg-white/80 rounded-full shadow-md hover:bg-white">
+          <ChevronRight size={16} className="text-gray-600" />
+        </button>
+      </div>
+
+      <div className="absolute top-2 right-2 flex gap-1">
+        <div className={`w-2 h-2 rounded-full ${range === 'daily' ? 'bg-blue-600' : 'bg-gray-200'}`} />
+        <div className={`w-2 h-2 rounded-full ${range === 'monthly' ? 'bg-blue-600' : 'bg-gray-200'}`} />
+        <div className={`w-2 h-2 rounded-full ${range === 'yearly' ? 'bg-blue-600' : 'bg-gray-200'}`} />
+      </div>
+
+      <div className="flex justify-between items-start mb-4">
+        <div className={`p-3 rounded-xl ${iconBg} transition-transform group-hover:scale-110`}>
+          {React.cloneElement(icon as React.ReactElement<any>, { size: 24 })}
+        </div>
+      </div>
+
+      <div className="space-y-1 animate-in fade-in slide-in-from-right duration-300">
+        <p className="text-sm font-medium text-gray-500">{title} - {active.label}</p>
+        <h4 className="text-2xl font-black text-gray-900">{active.value}</h4>
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{trend || ' '}</p>
+      </div>
+    </div>
+  );
+};
+
+const StatCard: React.FC<{ title: string, value: string, icon: React.ReactNode, trend: string, color: string }> = ({ title, value, icon, trend, color }) => (
+  <div className="bg-white p-5 rounded-2xl shadow-sm border group hover:shadow-md transition-all">
+    <div className="flex justify-between items-start mb-4">
+      <div className={`p-3 rounded-xl ${color} transition-transform group-hover:scale-110`}>
+        {React.cloneElement(icon as React.ReactElement<any>, { size: 24 })}
+      </div>
+    </div>
+    <div className="space-y-1">
+      <p className="text-sm font-medium text-gray-500">{title}</p>
+      <h4 className="text-2xl font-black text-gray-900">{value}</h4>
+      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{trend}</p>
+    </div>
+  </div>
+);
+
+export default DashboardScreen;

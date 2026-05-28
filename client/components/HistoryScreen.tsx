@@ -1,0 +1,1402 @@
+import React, { useState, useMemo, useEffect } from 'react';
+import { 
+  Search, 
+  Trash2, 
+  Edit3, 
+  Calendar,
+  Tag,
+  User, 
+  ArrowRight, 
+  Download, 
+  Eye, 
+  X, 
+  Save, 
+  FileText,
+  Users,
+  Receipt,
+  Phone,
+  AlertCircle,
+  CheckCircle2,
+  Loader2,
+  Plus,
+  Minus,
+  ShoppingBag,
+  Share2
+} from 'lucide-react';
+import { Transaction, BusinessProfile, Product, SaleItem, ProductUnit } from '../types';
+import { CURRENCY } from '../constants';
+import InvoicePreview from './InvoicePreview';
+import { useToast } from './ToastProvider';
+import api, { settleTransaction } from '../services/api';
+import { formatCurrency } from '../utils/currency';
+
+interface HistoryScreenProps {
+  transactions: Transaction[];
+  products: Product[];
+  business: BusinessProfile;
+  onDeleteTransaction: (id: string, restockItems: boolean) => void;
+  onUpdateTransaction: (transaction: Transaction, options?: { skipSync?: boolean }) => void;
+  onCreatePreviousDebt?: (transaction: Transaction) => void;
+  isSubscriptionExpired?: boolean;
+  onRenewSubscription?: () => void;
+  isReadOnly?: boolean;
+  isOnline: boolean;
+  initialParams?: { id?: string; filter?: string; search?: string };
+  onSelectedInvoiceChange?: (transaction: Transaction | null) => void;
+}
+
+type ViewMode = 'invoices' | 'debtors';
+
+const normalizeCustomerKey = (value: string) => (value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+const formatCustomerName = (value: string) => {
+  const clean = (value || '').trim().replace(/\s+/g, ' ');
+  if (!clean) return 'Walk-in Customer';
+  return clean
+    .split(' ')
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(' ');
+};
+
+
+const toMoneyNumber = (value: unknown): number => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  if (typeof value === 'string') {
+    const normalized = value.replace(/[^0-9.-]/g, '');
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  if (value && typeof (value as any).toString === 'function') {
+    const parsed = Number((value as any).toString());
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+};
+
+const buildSettledTransaction = (transaction: Transaction): Transaction => ({
+  ...transaction,
+  balance: 0,
+  amountPaid: transaction.totalAmount,
+  paymentStatus: 'paid'
+});
+
+const debtorKeyForTransactions = (transactions: Transaction[]) =>
+  transactions.map(tx => tx.id).sort().join('|');
+
+const isStockAdjustmentTransaction = (transaction: Transaction) => {
+  const normalizedCustomerName = (transaction.customerName || '').trim().toLowerCase();
+  const hasAdjustmentId =
+    transaction.id?.startsWith('adj-') ||
+    transaction.transactionId?.startsWith('adj-') ||
+    transaction.idempotencyKey?.startsWith('adj-');
+
+  return normalizedCustomerName === 'stock adjustment' || Boolean(hasAdjustmentId);
+};
+
+const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, business, onDeleteTransaction, onUpdateTransaction, onCreatePreviousDebt, isSubscriptionExpired, onRenewSubscription, isReadOnly, isOnline, initialParams, onSelectedInvoiceChange }) => {
+  const { addToast } = useToast();
+  const [viewMode, setViewMode] = useState<ViewMode>('invoices');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
+  // Edit State
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+
+  const [selectedInvoice, setSelectedInvoice] = useState<Transaction | null>(null);
+
+  useEffect(() => {
+    onSelectedInvoiceChange?.(selectedInvoice);
+  }, [selectedInvoice, onSelectedInvoiceChange]);
+
+  // Sync with URL Params
+  useEffect(() => {
+    if (initialParams?.filter === 'unpaid') {
+        setViewMode('debtors');
+    }
+
+    if (initialParams?.search) {
+        setSearchTerm(initialParams.search);
+    }
+
+    if (initialParams?.id) {
+       const tx = transactions.find(t => t.id === initialParams.id && !isStockAdjustmentTransaction(t));
+       if (tx) {
+         setSelectedInvoice(tx);
+       }
+    } else {
+        const currentPath = window.location.pathname;
+        const hasDeepLink = currentPath.split('/').length > 2;
+
+        if (selectedInvoice && !hasDeepLink) {
+             setSelectedInvoice(null);
+        }
+    }
+  }, [initialParams, transactions]);
+
+  const updateUrlForInvoice = (id: string | null) => {
+      if (id) {
+          window.history.pushState(null, '', `/history/${id}`);
+      } else {
+          window.history.pushState(null, '', `/history`);
+      }
+  };
+
+  // Modal State for Delete
+  const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deletingTransactionIds, setDeletingTransactionIds] = useState<Set<string>>(new Set());
+  const [shouldRestock, setShouldRestock] = useState(true);
+  const [settlingTransactionIds, setSettlingTransactionIds] = useState<Set<string>>(new Set());
+  const [settlingDebtorKeys, setSettlingDebtorKeys] = useState<Set<string>>(new Set());
+
+  const [expandedDebtor, setExpandedDebtor] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(50);
+
+  // Auto-Settle State
+  const [settleModalData, setSettleModalData] = useState<{
+    name: string;
+    transactions: Transaction[];
+    totalDebt: number;
+  } | null>(null);
+  const [autoPayAmount, setAutoPayAmount] = useState<number>(0);
+  const [isAutoSettling, setIsAutoSettling] = useState(false);
+  const [autoSettleResult, setAutoSettleResult] = useState<{ settledCount: number, remainingChange: number } | null>(null);
+
+  const [isPreviousDebtModalOpen, setIsPreviousDebtModalOpen] = useState(false);
+  const [previousDebtForm, setPreviousDebtForm] = useState({
+    customerName: '',
+    customerPhone: '',
+    amount: '',
+    date: new Date().toISOString().split('T')[0],
+    note: 'Previous Debt Balance'
+  });
+
+  const filteredInvoices = useMemo(() => transactions.filter(t => {
+    if (isStockAdjustmentTransaction(t)) return false;
+
+    const safeCustomerName = t.customerName || '';
+    const safeId = t.id || '';
+
+    const matchesSearch = safeCustomerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          safeId.toLowerCase().includes(searchTerm.toLowerCase());
+
+    let matchesDate = true;
+    const txDateStr = t.transactionDate || new Date().toISOString();
+    const txDate = new Date(txDateStr);
+
+    // Fallback if parsing fails
+    const isValidDate = !isNaN(txDate.getTime());
+    const finalDate = isValidDate ? txDate : new Date();
+
+    if (startDate) {
+        matchesDate = matchesDate && finalDate >= new Date(startDate);
+    }
+    if (endDate) {
+        // End of day
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        matchesDate = matchesDate && finalDate <= end;
+    }
+
+    return matchesSearch && matchesDate;
+  }), [transactions, searchTerm, startDate, endDate]);
+
+  const visibleInvoices = useMemo(() => filteredInvoices.slice(0, visibleCount), [filteredInvoices, visibleCount]);
+
+  useEffect(() => {
+      setVisibleCount(50);
+  }, [searchTerm, startDate, endDate]);
+
+  // Aggregated Debtors Ledger
+  const debtorsLedger = useMemo(() => {
+    const map = new Map<string, { name: string, totalOwed: number, invoiceCount: number, lastTxDate: string, transactions: Transaction[], phone?: string }>();
+    
+    transactions.forEach(t => {
+      if (isStockAdjustmentTransaction(t)) return;
+      if (toMoneyNumber(t.balance) > 0.01) {
+        const safeCustomerName = t.customerName || '';
+        const key = normalizeCustomerKey(safeCustomerName);
+        if (!key) return;
+
+        const txDateStr = t.transactionDate || new Date().toISOString();
+        const txDate = new Date(txDateStr);
+        const isValidDate = !isNaN(txDate.getTime());
+        const finalTxDateStr = isValidDate ? txDate.toISOString() : new Date().toISOString();
+
+        const existing = map.get(key) || {
+          name: formatCustomerName(safeCustomerName),
+          totalOwed: 0,
+          invoiceCount: 0,
+          lastTxDate: finalTxDateStr,
+          transactions: [],
+          phone: t.customerPhone
+        };
+
+        existing.totalOwed += toMoneyNumber(t.balance);
+        existing.invoiceCount += 1;
+
+        const existingDate = new Date(existing.lastTxDate);
+        if (new Date(finalTxDateStr) > existingDate) {
+          existing.lastTxDate = finalTxDateStr;
+          existing.name = formatCustomerName(safeCustomerName);
+        }
+        existing.transactions.push(t);
+        if (!existing.phone && t.customerPhone) existing.phone = t.customerPhone;
+        map.set(key, existing);
+      }
+    });
+
+    return Array.from(map.values())
+      .filter(d => d.name.toLowerCase().includes(searchTerm.toLowerCase()))
+      .sort((a, b) => b.totalOwed - a.totalOwed);
+  }, [transactions, searchTerm]);
+
+  const handleEditClick = (t: Transaction) => {
+    if (!isOnline) {
+      addToast('Please connect to the internet to perform this action.', 'error');
+      return;
+    }
+    setEditingTransaction(t);
+  };
+
+  const handleDeleteRequest = (t: Transaction) => {
+    if (deletingTransactionIds.has(t.id)) return;
+     if (!isOnline) {
+      addToast('Please connect to the internet to perform this action.', 'error');
+      return;
+    }
+    setTransactionToDelete(t);
+    setShouldRestock(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!transactionToDelete || isDeleting) return;
+
+    const txId = transactionToDelete.id;
+    setIsDeleting(true);
+    setDeletingTransactionIds(prev => new Set(prev).add(txId));
+    try {
+      // @ts-ignore
+      await api.delete(`/transactions/${txId}?restock=${shouldRestock}`);
+      onDeleteTransaction(txId, shouldRestock);
+      const msg = shouldRestock ? 'Transaction deleted and stock restored' : 'Transaction deleted (Stock NOT restored)';
+      addToast(msg, 'success');
+      setTransactionToDelete(null);
+    } catch (e) {
+      console.error(e);
+      addToast('Failed to delete. You might be offline.', 'error');
+    } finally {
+      setIsDeleting(false);
+      setDeletingTransactionIds(prev => {
+        const next = new Set(prev);
+        next.delete(txId);
+        return next;
+      });
+    }
+  };
+
+  const handleSaveEdit = async (updatedTx: Transaction) => {
+    // Optimistic Update handled by parent logic via onUpdateTransaction
+    // But we should probably call API here first?
+    // The parent onUpdateTransaction does: pushToBackend({ transactions: [t] })
+    // We should call the PUT endpoint specifically for the "Smart Edit" logic (restock/destock).
+    // The generic pushToBackend might simply overwrite.
+    // So we must use api.put directly.
+
+    try {
+       // @ts-ignore
+       const res = await api.put(`/transactions/${updatedTx.id}`, updatedTx);
+       // Result should be the updated transaction from backend (with recalculated totals)
+       if (res) {
+          onUpdateTransaction(res); // Update local state
+          addToast('Transaction updated successfully', 'success');
+          setEditingTransaction(null);
+       }
+    } catch (error) {
+       console.error("Edit failed", error);
+       addToast("Failed to update transaction", "error");
+    }
+  };
+
+  const handleSettle = async (t: Transaction) => {
+      if (settlingTransactionIds.has(t.id)) return;
+
+      const updatedTx = buildSettledTransaction(t);
+      if (!isOnline) {
+          onUpdateTransaction(updatedTx);
+          addToast('Debt marked as paid locally. Will sync when online.', 'success');
+          return;
+      }
+
+      setSettlingTransactionIds(prev => new Set(prev).add(t.id));
+      try {
+          const settledFromApi = await settleTransaction(t.id);
+          onUpdateTransaction(settledFromApi?.id ? settledFromApi : updatedTx, { skipSync: true });
+          addToast('Debt marked as paid!', 'success');
+      } catch (err) {
+          console.error(err);
+          addToast('Failed to mark debt as paid. Please try again.', 'error');
+      } finally {
+          setSettlingTransactionIds(prev => {
+            const next = new Set(prev);
+            next.delete(t.id);
+            return next;
+          });
+      }
+  };
+
+  const handleSettleDebtor = async (debtorTransactions: Transaction[]) => {
+      if (debtorTransactions.length === 0) return;
+      const debtorKey = debtorKeyForTransactions(debtorTransactions);
+      if (settlingDebtorKeys.has(debtorKey)) return;
+
+      if (!confirm(`Mark all debts for this customer as paid?`)) return;
+
+      if (!isOnline) {
+        debtorTransactions.forEach(t => {
+          onUpdateTransaction(buildSettledTransaction(t));
+        });
+        addToast('All debts marked as paid locally. Will sync when online.', 'success');
+        return;
+      }
+
+      setSettlingDebtorKeys(prev => new Set(prev).add(debtorKey));
+      try {
+          let successful = 0;
+          for (const tx of debtorTransactions) {
+            try {
+              const settledFromApi = await settleTransaction(tx.id);
+              onUpdateTransaction(settledFromApi?.id ? settledFromApi : buildSettledTransaction(tx), { skipSync: true });
+              successful += 1;
+            } catch (error) {
+              console.error('Settle failed for transaction:', tx.id, error);
+            }
+          }
+
+          if (successful === debtorTransactions.length) {
+            addToast('All debts marked as paid!', 'success');
+            return;
+          }
+
+          if (successful > 0) {
+            addToast(`${successful} invoice(s) marked paid. Some failed — please retry.`, 'error');
+            return;
+          }
+
+          addToast('Failed to mark debts as paid. Please try again.', 'error');
+      } catch (err) {
+          console.error(err);
+          addToast('Failed to mark debts as paid. Please try again.', 'error');
+      } finally {
+          setSettlingDebtorKeys(prev => {
+            const next = new Set(prev);
+            next.delete(debtorKey);
+            return next;
+          });
+      }
+  };
+
+
+  const resetPreviousDebtForm = () => {
+    setPreviousDebtForm({
+      customerName: '',
+      customerPhone: '',
+      amount: '',
+      date: new Date().toISOString().split('T')[0],
+      note: 'Previous Debt Balance'
+    });
+  };
+
+  const openPreviousDebtModal = () => {
+    if (isReadOnly) {
+      addToast('Read-only mode active. You cannot add previous debt now.', 'error');
+      return;
+    }
+    resetPreviousDebtForm();
+    setIsPreviousDebtModalOpen(true);
+  };
+
+  const handleCreatePreviousDebtor = () => {
+    const customerName = formatCustomerName(previousDebtForm.customerName);
+    const amount = Number(String(previousDebtForm.amount).replace(/[^0-9.-]/g, ''));
+
+    if (!customerName || customerName === 'Walk-in Customer') {
+      addToast('Please enter customer name.', 'error');
+      return;
+    }
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      addToast('Please enter a valid amount greater than zero.', 'error');
+      return;
+    }
+
+    const txDate = previousDebtForm.date
+      ? new Date(`${previousDebtForm.date}T00:00:00`).toISOString()
+      : new Date().toISOString();
+
+    const now = new Date().toISOString();
+    const note = (previousDebtForm.note || 'Previous Debt Balance').trim();
+
+    const tx: Transaction = {
+      id: crypto.randomUUID(),
+      transactionDate: txDate,
+      customerName,
+      customerPhone: previousDebtForm.customerPhone.trim() || undefined,
+      items: [{
+        cartId: crypto.randomUUID(),
+        productId: '',
+        productName: note || 'Previous Debt Balance',
+        quantity: 1,
+        unitPrice: amount,
+        discount: 0,
+        total: amount
+      }],
+      subtotal: amount,
+      globalDiscount: 0,
+      totalAmount: amount,
+      paymentMethod: 'credit',
+      amountPaid: 0,
+      balance: amount,
+      paymentStatus: 'credit',
+      staffId: 'owner',
+      createdByRole: 'owner',
+      isPreviousDebt: true,
+      updatedAt: now
+    };
+
+    onCreatePreviousDebt?.(tx);
+    addToast('Previous debtor added successfully.', 'success');
+    setIsPreviousDebtModalOpen(false);
+    resetPreviousDebtForm();
+    setViewMode('debtors');
+  };
+
+  const handleShareStatement = async (debtorName: string, debtorTotalOwed: number, transactions: Transaction[]) => {
+      const unpaidInvoices = transactions
+          .filter(t => toMoneyNumber(t.balance) > 0.01)
+          .sort((a, b) => new Date(a.transactionDate || new Date()).getTime() - new Date(b.transactionDate || new Date()).getTime());
+
+      if (unpaidInvoices.length === 0) {
+          addToast('No unpaid invoices to share.', 'info');
+          return;
+      }
+
+      const invoiceLines = unpaidInvoices
+        .map((tx) => `📅 ${new Date(tx.transactionDate || new Date()).toLocaleDateString()} - *${CURRENCY}${toMoneyNumber(tx.balance).toLocaleString()}*`)
+        .join('\n');
+      const defaultStatement = [
+        `*Customer:* ${debtorName}`,
+        `*Date:* ${new Date().toLocaleDateString()}`,
+        '',
+        'Here is your outstanding balance statement:',
+        '',
+        invoiceLines,
+        '',
+        `*TOTAL DUE: ${CURRENCY}${debtorTotalOwed.toLocaleString()}*`,
+        '',
+        'Please kindly arrange payment. Thank you!'
+      ].join('\n');
+
+      const customTemplate = (business.settings?.debtorShareTemplate || '').trim();
+      const text = customTemplate
+        ? customTemplate
+            .replace(/\{\{customerName\}\}/g, debtorName)
+            .replace(/\{\{date\}\}/g, new Date().toLocaleDateString())
+            .replace(/\{\{currency\}\}/g, CURRENCY)
+            .replace(/\{\{totalDue\}\}/g, debtorTotalOwed.toLocaleString())
+            .replace(/\{\{invoiceLines\}\}/g, invoiceLines)
+            .replace(/\{\{businessName\}\}/g, business.name || 'Our Business')
+        : defaultStatement;
+
+      if (navigator.share) {
+          try {
+              await navigator.share({
+                  title: `Statement for ${debtorName}`,
+                  text: text
+              });
+          } catch (err) {
+              console.error('Error sharing:', err);
+          }
+      } else {
+          try {
+              await navigator.clipboard.writeText(text);
+              addToast('Statement copied to clipboard!', 'success');
+          } catch (err) {
+              addToast('Failed to copy statement.', 'error');
+          }
+      }
+  };
+
+  const handleAutoSettle = async (customerName: string, amountPaid: number, customerTransactions: Transaction[]) => {
+      if (!amountPaid || amountPaid <= 0) return;
+
+      setIsAutoSettling(true);
+
+      try {
+        // 1. Sort debts: Oldest First (FIFO)
+        // We only want unpaid invoices for this customer
+        const unpaidInvoices = customerTransactions
+          .filter(t => toMoneyNumber(t.balance) > 0.01)
+          .sort((a, b) => new Date(a.transactionDate || new Date()).getTime() - new Date(b.transactionDate || new Date()).getTime());
+
+        let remainingMoney = toMoneyNumber(amountPaid);
+        let settledCount = 0;
+
+        if (!unpaidInvoices.length) {
+          setAutoSettleResult({ settledCount: 0, remainingChange: remainingMoney });
+          addToast('No unpaid invoices were found for this customer.', 'info');
+          return;
+        }
+
+        for (const tx of unpaidInvoices) {
+          if (remainingMoney <= 0) break;
+
+          // How much can we pay on THIS invoice?
+          // (Either the full debt OR whatever money we have left)
+          const currentDebt = toMoneyNumber(tx.balance);
+          const paymentForThisInvoice = Math.min(currentDebt, remainingMoney);
+
+          // Calculate new state
+          const newPaidAmount = toMoneyNumber(tx.amountPaid) + paymentForThisInvoice;
+          const newBalance = toMoneyNumber(tx.totalAmount) - newPaidAmount;
+
+          let newStatus: 'paid' | 'credit' = tx.paymentStatus || 'credit';
+          if (newBalance <= 0.01) { // Keep frontend tolerance in sync with backend
+             newStatus = 'paid';
+          } else {
+             newStatus = 'credit';
+          }
+
+          // Prepare Update
+          const updatedTx: Transaction = {
+            ...tx,
+            amountPaid: newPaidAmount,
+            balance: Math.max(0, newBalance),
+            paymentStatus: newStatus
+          };
+
+          // 2. Fire Update
+          // Note: The parent component's onUpdateTransaction handles syncing (via pushToBackend)
+          // We await a small delay to prevent overwhelming the network with rapid requests
+          // Persist to server (Use dedicated settle endpoint for safety)
+          // @ts-ignore
+          const res = await api.patch(`/transactions/${tx.id}/settle`, { amountPaid: newPaidAmount });
+          const finalTx = res || updatedTx; // Fallback if API doesn't return object
+
+          await onUpdateTransaction(finalTx);
+
+          // Simulate async operation for smoother UI feedback
+          await new Promise(resolve => setTimeout(resolve, 50));
+
+          remainingMoney -= paymentForThisInvoice;
+          const finalStatus = (finalTx?.paymentStatus as string | undefined) || newStatus;
+          if (finalStatus === 'paid') {
+            settledCount++;
+          }
+        }
+
+        setAutoSettleResult({ settledCount, remainingChange: remainingMoney });
+      } catch (err) {
+        console.error("Auto-settle error:", err);
+        addToast("An error occurred during auto-settlement.", "error");
+      } finally {
+        setIsAutoSettling(false);
+      }
+  };
+
+  return (
+    <div className="max-w-7xl mx-auto space-y-6">
+      {/* Header & View Toggle */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Sales & Debtors</h1>
+          <p className="text-gray-500">See past sales and who owes you money</p>
+          
+          <div className="flex p-1 bg-gray-100 rounded-xl mt-4 w-fit border shadow-inner">
+            <button 
+              onClick={() => setViewMode('invoices')}
+              className={`flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-bold transition-all ${
+                viewMode === 'invoices' ? 'bg-white shadow-md text-primary' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Receipt size={16} /> All Invoices
+            </button>
+            <button 
+              onClick={() => setViewMode('debtors')}
+              className={`flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-bold transition-all ${
+                viewMode === 'debtors' ? 'bg-white shadow-md text-red-600' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Users size={16} /> Debtors List
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 max-w-md flex flex-col gap-2">
+          {viewMode === 'debtors' && (
+            <button
+              onClick={openPreviousDebtModal}
+              disabled={!!isReadOnly}
+              className="self-end inline-flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              <Plus size={14} /> Add Previous Debtor
+            </button>
+          )}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            <input 
+              type="text"
+              placeholder={viewMode === 'invoices' ? "Search invoice or customer..." : "Search debtor name..."}
+              className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-2xl focus:ring-2 focus:ring-primary outline-none shadow-sm"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Date Filters */}
+      {viewMode === 'invoices' && (
+        <div className="flex gap-4 items-center bg-white p-3 rounded-xl border w-fit">
+            <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-gray-500 uppercase">From</span>
+                <input
+                    type="date"
+                    className="bg-gray-50 border rounded-lg px-2 py-1 text-sm font-bold text-gray-700"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                />
+            </div>
+            <ArrowRight size={16} className="text-gray-300" />
+            <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-gray-500 uppercase">To</span>
+                <input
+                    type="date"
+                    className="bg-gray-50 border rounded-lg px-2 py-1 text-sm font-bold text-gray-700"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                />
+            </div>
+            {(startDate || endDate) && (
+                <button onClick={() => { setStartDate(''); setEndDate(''); }} className="text-xs font-bold text-red-500 hover:underline ml-2">Clear</button>
+            )}
+        </div>
+      )}
+
+      {/* Main List */}
+      <div className="grid gap-4">
+        {viewMode === 'invoices' ? (
+          // Invoices View
+          filteredInvoices.length === 0 ? (
+            <div className="bg-white p-12 rounded-2xl border border-dashed flex flex-col items-center justify-center text-gray-400">
+              <Calendar size={48} className="mb-4 opacity-20" />
+              <p>No transactions found</p>
+            </div>
+          ) : (
+            <>
+            {visibleInvoices.map(t => (
+              <div key={t.id} className="bg-white p-6 rounded-2xl shadow-sm border group hover:shadow-md transition-all">
+                <div className="flex flex-col lg:flex-row justify-between gap-6">
+                  <div className="flex-1 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold">
+                          {(t.customerName && t.customerName.length > 0) ? t.customerName[0].toUpperCase() : '?'}
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-gray-900">{t.customerName || 'Unknown Customer'}</h3>
+                          <p className="text-xs text-gray-400">
+                            ID: {t.id} • {new Date(t.transactionDate || new Date()).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })} • {new Date(t.transactionDate || new Date()).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Discount Badge */}
+                      {(t.globalDiscount > 0 || t.items.some(i => i.discount > 0)) && (
+                          <div className="hidden sm:flex items-center gap-1 px-2 py-1 bg-yellow-50 text-yellow-700 rounded-lg border border-yellow-100 self-center">
+                              <Tag size={12} />
+                              <span className="text-[10px] font-bold uppercase">Discount Applied</span>
+                          </div>
+                      )}
+
+                      <div className="lg:hidden text-right">
+                         <p className="text-lg font-black">{CURRENCY}{t.totalAmount.toLocaleString()}</p>
+                         <p className={`text-[10px] font-bold uppercase ${t.balance > 0 ? 'text-red-500' : 'text-green-500'}`}>
+                           {t.balance > 0 ? 'Owe Balance' : 'Fully Paid'}
+                         </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      {t.items.map((item, idx) => (
+                        <span key={idx} className="px-2 py-1 bg-gray-50 border rounded-lg text-xs font-medium text-gray-600">
+                          {item.quantity}x {item.productName}
+                        </span>
+                      ))}
+                       {/* Mobile Discount Badge */}
+                       {(t.globalDiscount > 0 || t.items.some(i => i.discount > 0)) && (
+                          <div className="sm:hidden flex items-center gap-1 px-2 py-1 bg-yellow-50 text-yellow-700 rounded-lg border border-yellow-100">
+                              <Tag size={12} />
+                              <span className="text-[10px] font-bold uppercase">Discount</span>
+                          </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="hidden lg:flex flex-col items-end justify-center px-8 border-x space-y-1 min-w-[200px]">
+                    <p className="text-sm font-medium text-gray-500">Total Bill</p>
+                    <p className="text-2xl font-black text-gray-900">{CURRENCY}{t.totalAmount.toLocaleString()}</p>
+                  </div>
+
+                  <div className="flex flex-col justify-center space-y-4 min-w-[220px]">
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-500 font-medium">Paid:</span>
+                        <span className="font-bold text-green-600">{CURRENCY}{t.amountPaid.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-500 font-medium">Balance:</span>
+                        <span className={`font-black ${t.balance > 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                          {CURRENCY}{t.balance.toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2 justify-end">
+                      <button onClick={() => { setSelectedInvoice(t); updateUrlForInvoice(t.id); }} className="p-2 text-indigo-600 bg-indigo-50 rounded-lg"><FileText size={18} /></button>
+                      {!isReadOnly && (
+                        <>
+                          <button onClick={() => handleEditClick(t)} className="p-2 text-gray-400 hover:text-indigo-600 rounded-lg"><Edit3 size={18} /></button>
+                          <button
+                            onClick={() => handleDeleteRequest(t)}
+                            disabled={deletingTransactionIds.has(t.id)}
+                            className="p-2 text-gray-400 hover:text-red-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                            title={deletingTransactionIds.has(t.id) ? 'Deleting...' : 'Delete'}
+                          >
+                            {deletingTransactionIds.has(t.id) ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {filteredInvoices.length > visibleCount && (
+                <button
+                  onClick={() => setVisibleCount(prev => prev + 50)}
+                  className="w-full py-4 bg-gray-50 text-gray-600 font-bold rounded-2xl border border-dashed hover:bg-gray-100 transition-colors"
+                >
+                    Load More Invoices ({filteredInvoices.length - visibleCount} remaining)
+                </button>
+            )}
+            </>
+          )
+        ) : (
+          // Debtors Ledger View
+          debtorsLedger.length === 0 ? (
+            <div className="bg-white p-12 rounded-2xl border border-dashed flex flex-col items-center justify-center text-gray-400 text-center">
+              <CheckCircle2 size={48} className="mb-4 text-emerald-300" />
+              <h3 className="font-bold text-gray-900 text-lg">No Debts Recorded</h3>
+              <p>Excellent! All your customers are currently up to date.</p>
+            </div>
+          ) : (
+            debtorsLedger.map(debtor => {
+                const debtorKey = debtorKeyForTransactions(debtor.transactions);
+                const isSettlingDebtor = settlingDebtorKeys.has(debtorKey);
+                return (
+              <div key={debtor.name} className="bg-white rounded-2xl shadow-sm border-l-8 border-l-red-500 border group hover:shadow-lg transition-all overflow-hidden">
+                <div
+                  className="p-6 flex flex-col md:flex-row justify-between gap-6 items-center cursor-pointer"
+                  onClick={() => setExpandedDebtor(expandedDebtor === debtor.name ? null : debtor.name)}
+                >
+                  <div className="flex items-center gap-4 flex-1 w-full">
+                    <div className="w-14 h-14 rounded-2xl bg-red-50 flex items-center justify-center text-red-600 font-black text-xl">
+                      {(debtor.name && debtor.name.length > 0) ? debtor.name[0].toUpperCase() : '?'}
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-xl font-black text-gray-900 flex items-center gap-2">
+                        {debtor.name}
+                        <span className="text-gray-400 text-xs">{expandedDebtor === debtor.name ? '▲' : '▼'}</span>
+                      </h3>
+                      <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
+                        <span className="flex items-center gap-1 font-medium"><Receipt size={14} /> {debtor.invoiceCount} Pending Bills</span>
+                        <span className="w-1 h-1 bg-gray-300 rounded-full"></span>
+                        <span className="flex items-center gap-1 font-medium"><Calendar size={14} /> Last Activity: {new Date(debtor.lastTxDate).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col items-end px-6 md:border-x border-gray-100 min-w-[200px]">
+                    <div className="flex items-center gap-2 text-red-600 mb-1">
+                      <AlertCircle size={14} />
+                      <span className="text-[10px] font-black uppercase tracking-widest">Total Debt</span>
+                    </div>
+                    <p className="text-3xl font-black text-red-600">{CURRENCY}{debtor.totalOwed.toLocaleString()}</p>
+                  </div>
+
+                   <div className="flex gap-2 w-full md:w-auto">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleShareStatement(debtor.name, debtor.totalOwed, debtor.transactions);
+                      }}
+                      className="ml-auto px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-sm font-bold rounded-lg shadow-sm hover:bg-gray-50 active:scale-95 flex items-center gap-2"
+                    >
+                      <Share2 size={16} /> <span className="hidden sm:inline">Share Statement</span>
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSettleModalData({
+                           name: debtor.name,
+                           transactions: debtor.transactions,
+                           totalDebt: debtor.totalOwed
+                        });
+                      }}
+                      className="px-3 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-lg shadow-sm hover:bg-indigo-700 active:scale-95 flex items-center gap-2"
+                    >
+                      <span>Auto Pay</span>
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (debtor.phone) {
+                          window.location.href = `tel:${debtor.phone}`;
+                        } else {
+                          addToast('No phone number saved for this customer.', 'error');
+                        }
+                      }}
+                      className="p-3 text-emerald-600 bg-emerald-50 rounded-xl hover:bg-emerald-100 transition-all border border-emerald-100"
+                    >
+                      <Phone size={20} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* EXPANDED DRILL-DOWN VIEW */}
+                {expandedDebtor === debtor.name && (
+                   <div className="bg-gray-50 border-t p-4 space-y-3 animate-in slide-in-from-top-2">
+                       <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest px-2">Unpaid Invoices</h4>
+                       {debtor.transactions.map(tx => (
+                           <div key={tx.id} className="flex items-center justify-between bg-white p-3 rounded-xl border shadow-sm">
+                               <div className="flex items-center gap-3">
+                                   <div className="bg-gray-100 p-2 rounded-lg text-gray-500 font-mono text-xs font-bold">
+                                       #{tx.id.slice(-4)}
+                                   </div>
+                                   <div>
+                                       <p className="text-sm font-bold text-gray-900">
+                                            {new Date(tx.transactionDate || new Date()).toLocaleDateString()}
+                                       </p>
+                                       <p className="text-xs text-gray-500">
+                                           {tx.items.length} items • Total: {CURRENCY}{tx.totalAmount.toLocaleString()}
+                                       </p>
+                                   </div>
+                               </div>
+                               <div className="flex items-center gap-4">
+                                   <div className="text-right">
+                                       <p className="text-xs font-bold text-gray-400 uppercase">Owed</p>
+                                       <p className="text-sm font-black text-red-600">{CURRENCY}{tx.balance.toLocaleString()}</p>
+                                   </div>
+                                   <div className="flex gap-2">
+                                       <button
+                                          onClick={() => { setSelectedInvoice(tx); updateUrlForInvoice(tx.id); }}
+                                          className="p-2 bg-indigo-50 text-indigo-600 rounded-lg border border-indigo-200 hover:bg-indigo-100"
+                                          title="View Bill"
+                                       >
+                                           <Eye size={18} />
+                                       </button>
+                                       {!isReadOnly && (
+                                           <button
+                                              onClick={() => handleSettle(tx)}
+                                              disabled={settlingTransactionIds.has(tx.id) || isSettlingDebtor}
+                                              className="p-2 bg-green-50 text-green-600 rounded-lg border border-green-200 hover:bg-green-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                                              title={(settlingTransactionIds.has(tx.id) || isSettlingDebtor) ? 'Marking Paid...' : 'Mark Paid'}
+                                           >
+                                               {(settlingTransactionIds.has(tx.id) || isSettlingDebtor) ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
+                                           </button>
+                                       )}
+                                   </div>
+                               </div>
+                           </div>
+                       ))}
+
+                       <div className="flex justify-end pt-2">
+                           {!isReadOnly && (
+                               <button
+                                  onClick={() => handleSettleDebtor(debtor.transactions)}
+                                  disabled={isSettlingDebtor}
+                                  className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg font-bold text-xs hover:bg-black transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                               >
+                                  {isSettlingDebtor ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} {isSettlingDebtor ? 'Settling...' : `Settle All (${debtor.transactions.length})`}
+                               </button>
+                           )}
+                       </div>
+                   </div>
+                )}
+              </div>
+                );
+              })
+          )
+        )}
+      </div>
+
+      {selectedInvoice && (
+        <InvoicePreview 
+          transaction={selectedInvoice} 
+          business={business} 
+          products={products}
+          onClose={() => { setSelectedInvoice(null); updateUrlForInvoice(null); }}
+        />
+      )}
+
+
+      {/* Previous Debtor Modal */}
+      {isPreviousDebtModalOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-900">Add Previous Debtor</h3>
+              <button onClick={() => setIsPreviousDebtModalOpen(false)} className="text-gray-400 hover:text-gray-600"><X size={20}/></button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">Customer Name</label>
+                <input
+                  type="text"
+                  value={previousDebtForm.customerName}
+                  onChange={(e) => setPreviousDebtForm(prev => ({ ...prev, customerName: e.target.value }))}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                  placeholder="e.g. John Doe"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1">Phone (Optional)</label>
+                  <input
+                    type="text"
+                    value={previousDebtForm.customerPhone}
+                    onChange={(e) => setPreviousDebtForm(prev => ({ ...prev, customerPhone: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                    placeholder="080..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1">Debt Date</label>
+                  <input
+                    type="date"
+                    value={previousDebtForm.date}
+                    onChange={(e) => setPreviousDebtForm(prev => ({ ...prev, date: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">Amount</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={previousDebtForm.amount}
+                  onChange={(e) => setPreviousDebtForm(prev => ({ ...prev, amount: e.target.value }))}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                  placeholder="0.00"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">Description</label>
+                <input
+                  type="text"
+                  value={previousDebtForm.note}
+                  onChange={(e) => setPreviousDebtForm(prev => ({ ...prev, note: e.target.value }))}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                  placeholder="Previous Debt Balance"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setIsPreviousDebtModalOpen(false)}
+                className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreatePreviousDebtor}
+                className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700"
+              >
+                Save Debtor
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {transactionToDelete && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+            <div className="flex justify-between items-start mb-4">
+               <div className="bg-red-50 p-3 rounded-full">
+                  <AlertCircle size={24} className="text-red-600" />
+               </div>
+               <button onClick={() => setTransactionToDelete(null)} className="text-gray-400 hover:text-gray-600"><X size={20}/></button>
+            </div>
+
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Delete Transaction?</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              This action cannot be undone.
+            </p>
+
+             <div className="flex items-center gap-3 bg-gray-50 p-3 rounded-xl mb-6">
+                <input
+                  type="checkbox"
+                  id="restock"
+                  className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
+                  checked={shouldRestock}
+                  onChange={(e) => setShouldRestock(e.target.checked)}
+                />
+                <label htmlFor="restock" className="text-sm font-bold text-gray-700 cursor-pointer select-none">
+                  Return items to stock?
+                </label>
+             </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setTransactionToDelete(null)}
+                className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={isDeleting}
+                className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-colors shadow-lg shadow-red-200 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {isDeleting ? <><Loader2 size={16} className="animate-spin" /> Deleting...</> : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT MODAL */}
+      {editingTransaction && (
+         <EditTransactionModal
+            transaction={editingTransaction}
+            products={products}
+            onClose={() => setEditingTransaction(null)}
+            onSave={handleSaveEdit}
+         />
+      )}
+
+      {/* AUTO SETTLE MODAL */}
+      {settleModalData && (
+        <div className="fixed inset-0 bg-black/50 z-[80] flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-gray-100">
+              <h3 className="text-lg font-bold text-gray-800">Auto-Settle Debt</h3>
+              <p className="text-sm text-gray-500">For {settleModalData.name}</p>
+            </div>
+
+            {autoSettleResult ? (
+              // SUCCESS VIEW
+              <div className="p-6 flex flex-col items-center text-center animate-in fade-in">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center text-green-600 mb-4">
+                   <CheckCircle2 size={32} />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">Settlement Complete!</h3>
+                <p className="text-gray-500 mb-6">
+                  Successfully paid off <strong className="text-gray-900">{autoSettleResult.settledCount}</strong> invoice(s).
+                </p>
+
+                <div className="bg-gray-50 p-4 rounded-xl border border-dashed w-full mb-6">
+                   <p className="text-xs font-bold text-gray-500 uppercase">Change to Return</p>
+                   <p className="text-2xl font-black text-gray-900">{formatCurrency(autoSettleResult.remainingChange)}</p>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setSettleModalData(null);
+                    setAutoSettleResult(null);
+                    setAutoPayAmount(0);
+                  }}
+                  className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold hover:bg-black transition-all"
+                >
+                  Done
+                </button>
+              </div>
+            ) : (
+              // INPUT VIEW
+              <>
+                <div className="p-6 space-y-4">
+                  <div className="bg-red-50 p-3 rounded-lg border border-red-100 flex justify-between items-center">
+                    <span className="text-red-600 text-sm font-medium">Total Owing</span>
+                    <span className="text-xl font-bold text-red-700">
+                      {formatCurrency(settleModalData.totalDebt)}
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Amount Received ({CURRENCY})
+                    </label>
+                    <input
+                      type="number"
+                      autoFocus
+                      disabled={isAutoSettling}
+                      className="w-full text-lg p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none disabled:bg-gray-100"
+                      placeholder="0.00"
+                      onChange={(e) => setAutoPayAmount(Number(e.target.value) || 0)}
+                    />
+                    <p className="text-xs text-gray-400 mt-2">
+                      System will clear oldest invoices first.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-gray-50 flex justify-end gap-3">
+                  <button
+                    onClick={() => setSettleModalData(null)}
+                    disabled={isAutoSettling}
+                    className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-lg font-medium disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleAutoSettle(settleModalData.name, autoPayAmount, settleModalData.transactions);
+                    }}
+                    disabled={isAutoSettling || !autoPayAmount || autoPayAmount <= 0}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {isAutoSettling && <Loader2 size={18} className="animate-spin" />}
+                    {isAutoSettling ? 'Processing...' : 'Confirm & Settle'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+};
+
+// --- Subcomponent: Edit Modal ---
+interface EditModalProps {
+   transaction: Transaction;
+   products: Product[];
+   onClose: () => void;
+   onSave: (t: Transaction) => void;
+}
+
+const EditTransactionModal: React.FC<EditModalProps> = ({ transaction, products, onClose, onSave }) => {
+   const [items, setItems] = useState<SaleItem[]>([...transaction.items]);
+   const [customerName, setCustomerName] = useState(transaction.customerName);
+   const [amountPaid, setAmountPaid] = useState(transaction.amountPaid);
+   const [globalDiscount, setGlobalDiscount] = useState(transaction.globalDiscount || 0);
+   const [isSubmitting, setIsSubmitting] = useState(false);
+
+   // Product Search State
+   const [isAddingItem, setIsAddingItem] = useState(false);
+   const [searchTerm, setSearchTerm] = useState('');
+
+   // Recalculate Totals
+   const subtotal = items.reduce((sum, item) => sum + item.total, 0);
+   const totalAmount = Math.max(0, subtotal - globalDiscount);
+   const balance = Math.max(0, totalAmount - amountPaid);
+
+   const updateQuantity = (index: number, delta: number) => {
+      setItems(prev => {
+         const newItems = [...prev];
+         const item = newItems[index];
+         const newQty = Math.max(1, item.quantity + delta);
+         newItems[index] = { ...item, quantity: newQty, total: (newQty * item.unitPrice) - item.discount };
+         return newItems;
+      });
+   };
+
+   const removeItem = (index: number) => {
+      setItems(prev => prev.filter((_, i) => i !== index));
+   };
+
+   const addItem = (p: Product) => {
+      const newItem: SaleItem = {
+         cartId: crypto.randomUUID(),
+         productId: p.id,
+         productName: p.name,
+         quantity: 1,
+         unitPrice: p.sellingPrice,
+         discount: 0,
+         total: p.sellingPrice
+      };
+      setItems(prev => [...prev, newItem]);
+      setIsAddingItem(false);
+      setSearchTerm('');
+   };
+
+   const handleSave = () => {
+      setIsSubmitting(true);
+      const updated: Transaction = {
+         ...transaction,
+         items,
+         customerName,
+         amountPaid,
+         globalDiscount,
+         subtotal,
+         totalAmount,
+         balance
+      };
+      onSave(updated);
+   };
+
+   const filteredProducts = products.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase())).slice(0, 10);
+
+   return (
+      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+         <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="p-4 border-b bg-gray-50 flex justify-between items-center shrink-0">
+               <h2 className="text-lg font-black flex items-center gap-2">
+                  <Edit3 size={18} className="text-primary"/> Edit Sale #{transaction.id.slice(-4)}
+               </h2>
+               <button onClick={onClose} className="p-2 text-gray-400 hover:bg-gray-200 rounded-full"><X size={20}/></button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+               {/* Customer Info */}
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                     <label className="text-xs font-bold text-gray-500 uppercase">Customer Name</label>
+                     <input
+                        type="text"
+                        value={customerName}
+                        onChange={(e) => setCustomerName(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl font-bold focus:ring-2 focus:ring-primary outline-none"
+                     />
+                  </div>
+                  <div className="space-y-1">
+                     <label className="text-xs font-bold text-gray-500 uppercase">Amount Paid</label>
+                     <input
+                        type="number"
+                        value={amountPaid || ''}
+                        onChange={(e) => setAmountPaid(Number(e.target.value))}
+                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl font-bold focus:ring-2 focus:ring-primary outline-none"
+                     />
+                  </div>
+               </div>
+
+               {/* Items List */}
+               <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                     <label className="text-xs font-bold text-gray-500 uppercase">Items Purchased</label>
+                     <button
+                        onClick={() => setIsAddingItem(true)}
+                        className="text-xs font-bold text-primary flex items-center gap-1 bg-indigo-50 px-2 py-1 rounded-lg hover:bg-indigo-100"
+                     >
+                        <Plus size={12}/> Add Item
+                     </button>
+                  </div>
+
+                  {isAddingItem && (
+                     <div className="mb-4 bg-gray-50 p-3 rounded-xl border animate-in slide-in-from-top-2">
+                        <div className="relative mb-2">
+                           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16}/>
+                           <input
+                              type="text"
+                              autoFocus
+                              placeholder="Search product to add..."
+                              className="w-full pl-9 pr-3 py-2 rounded-lg border focus:ring-2 focus:ring-primary outline-none text-sm"
+                              value={searchTerm}
+                              onChange={e => setSearchTerm(e.target.value)}
+                           />
+                           <button onClick={() => setIsAddingItem(false)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400"><X size={16}/></button>
+                        </div>
+                        <div className="max-h-40 overflow-y-auto space-y-1">
+                           {filteredProducts.map(p => (
+                              <button
+                                 key={p.id}
+                                 onClick={() => addItem(p)}
+                                 className="w-full flex justify-between items-center p-2 hover:bg-white rounded-lg text-sm text-left group"
+                              >
+                                 <span className="font-bold text-gray-700">{p.name}</span>
+                                 <span className="text-primary font-bold">{CURRENCY}{p.sellingPrice.toLocaleString()}</span>
+                              </button>
+                           ))}
+                           {filteredProducts.length === 0 && <p className="text-xs text-center text-gray-400 py-2">No products found</p>}
+                        </div>
+                     </div>
+                  )}
+
+                  <div className="space-y-2">
+                     {items.map((item, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-3 bg-white border border-gray-100 rounded-xl shadow-sm">
+                           <div className="flex-1 min-w-0">
+                              <p className="font-bold text-gray-800 truncate">{item.productName}</p>
+                              <p className="text-[10px] text-gray-400">{CURRENCY}{item.unitPrice.toLocaleString()} / unit</p>
+                           </div>
+                           <div className="flex items-center gap-3">
+                              <div className="flex items-center gap-2 bg-gray-50 rounded-lg p-1">
+                                 <button onClick={() => updateQuantity(idx, -1)} className="w-6 h-6 flex items-center justify-center bg-white rounded shadow-sm text-gray-600 hover:text-primary"><Minus size={12}/></button>
+                                 <span className="text-xs font-black w-4 text-center">{item.quantity}</span>
+                                 <button onClick={() => updateQuantity(idx, 1)} className="w-6 h-6 flex items-center justify-center bg-white rounded shadow-sm text-gray-600 hover:text-primary"><Plus size={12}/></button>
+                              </div>
+                              <div className="text-right w-16">
+                                 <p className="font-bold text-sm">{CURRENCY}{item.total.toLocaleString()}</p>
+                              </div>
+                              <button onClick={() => removeItem(idx)} className="text-gray-300 hover:text-red-500"><Trash2 size={16}/></button>
+                           </div>
+                        </div>
+                     ))}
+                  </div>
+               </div>
+
+               {/* Summary */}
+               <div className="bg-gray-50 p-4 rounded-xl space-y-2 text-sm">
+                  <div className="flex justify-between text-gray-500">
+                     <span>Subtotal</span>
+                     <span className="font-bold">{CURRENCY}{subtotal.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-500 items-center">
+                     <span>Global Discount</span>
+                     <input
+                        type="number"
+                        value={globalDiscount}
+                        onChange={e => setGlobalDiscount(Number(e.target.value))}
+                        className="w-20 px-2 py-1 text-right border rounded font-bold outline-none focus:border-primary"
+                     />
+                  </div>
+                  <div className="flex justify-between text-gray-900 pt-2 border-t border-gray-200">
+                     <span className="font-black">Total Amount</span>
+                     <span className="font-black text-lg">{CURRENCY}{totalAmount.toLocaleString()}</span>
+                  </div>
+                   <div className="flex justify-between text-gray-500 pt-1">
+                     <span>Balance Due</span>
+                     <span className={`font-black ${balance > 0 ? 'text-red-500' : 'text-emerald-500'}`}>{CURRENCY}{balance.toLocaleString()}</span>
+                  </div>
+               </div>
+
+            </div>
+
+            <div className="p-4 border-t bg-white shrink-0 flex gap-3">
+               <button onClick={onClose} className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200">Cancel</button>
+               <button
+                  onClick={handleSave}
+                  disabled={isSubmitting}
+                  className="flex-1 py-3 bg-primary text-white rounded-xl font-bold hover:bg-indigo-700 disabled:opacity-50"
+               >
+                  {isSubmitting ? 'Saving...' : 'Save Changes'}
+               </button>
+            </div>
+         </div>
+      </div>
+   );
+};
+
+export default HistoryScreen;
