@@ -737,10 +737,14 @@ export const updateProduct = async (product: Product) => {
   });
 };
 
+const formatUrl = (url: string) => {
+  return url.startsWith('/api') ? url : `/api${url.startsWith('/') ? '' : '/'}${url}`;
+};
+
 const api = {
   get: async (url: string) => {
     const token = loadAuthToken();
-    return request(`/api${url}`, {
+    return request(formatUrl(url), {
       method: 'GET',
       headers: { Authorization: `Bearer ${token}` }
     });
@@ -748,7 +752,7 @@ const api = {
 
   post: async (url: string, body: any) => {
     const token = loadAuthToken();
-    return request(`/api${url}`, {
+    return request(formatUrl(url), {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
       body: JSON.stringify(body)
@@ -757,7 +761,7 @@ const api = {
 
   put: async (url: string, body: any) => {
     const token = loadAuthToken();
-    return request(`/api${url}`, {
+    return request(formatUrl(url), {
       method: 'PUT',
       headers: { Authorization: `Bearer ${token}` },
       body: JSON.stringify(body)
@@ -766,7 +770,7 @@ const api = {
 
   patch: async (url: string, body: any) => {
     const token = loadAuthToken();
-    return request(`/api${url}`, {
+    return request(formatUrl(url), {
       method: 'PATCH',
       headers: { Authorization: `Bearer ${token}` },
       body: JSON.stringify(body)
@@ -775,7 +779,7 @@ const api = {
 
   delete: async (url: string) => {
     const token = loadAuthToken();
-    return request(`/api${url}`, {
+    return request(formatUrl(url), {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` }
     });
