@@ -783,8 +783,8 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onRegister, onLogin }) =>
               <div className="flex gap-8 text-sm font-semibold">
                  <a href="#features" className="hover:text-white transition-colors">Features</a>
                  <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
-                 <a href="#privacy" className="hover:text-white transition-colors">Privacy</a>
-                 <a href="#terms" className="hover:text-white transition-colors">Terms</a>
+                 <a href="/privacy.html" className="hover:text-white transition-colors">Privacy</a>
+                 <a href="/terms.html" className="hover:text-white transition-colors">Terms</a>
               </div>
               <p className="text-sm">© {new Date().getFullYear()} Ginvoice Inc.</p>
            </div>
