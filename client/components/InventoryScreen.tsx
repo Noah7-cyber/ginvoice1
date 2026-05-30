@@ -18,9 +18,10 @@ interface InventoryScreenProps {
   isReadOnly?: boolean;
   isOnline: boolean;
   initialParams?: { id?: string; search?: string; filter?: string };
+  refreshData: () => Promise<void>;
 }
 
-const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdateProducts, isOwner, isReadOnly, isOnline, initialParams }) => {
+const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdateProducts, isOwner, isReadOnly, isOnline, initialParams, refreshData }) => {
   // Ensure safeReadOnly respects the passed prop (for subscription lock), falling back to permissions logic if needed
   // App.tsx handles the permission logic in the passed isReadOnly prop.
   const safeReadOnly = isReadOnly;

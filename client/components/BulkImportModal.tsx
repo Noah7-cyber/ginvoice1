@@ -166,12 +166,20 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({ onClose, onSuc
                 <h3 className="text-lg font-bold text-gray-900 mb-2">Step 1: Download the Template</h3>
                 <p className="text-gray-600">Start by downloading our formatted CSV template. It includes dummy data to show you exactly how to format your products.</p>
               </div>
-              <button
-                onClick={downloadTemplate}
-                className="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
-              >
-                Download Template
-              </button>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                <button
+                  onClick={downloadTemplate}
+                  className="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+                >
+                  Download Template
+                </button>
+                <button
+                  onClick={() => setStep(2)}
+                  className="w-full sm:w-auto px-6 py-3 bg-white text-gray-600 border border-gray-300 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                >
+                  Skip this step
+                </button>
+              </div>
             </div>
           )}
 
