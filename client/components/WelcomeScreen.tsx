@@ -11,21 +11,21 @@ import { useTranslation } from 'react-i18next';
 // --- DATA ---
 const TESTIMONIALS = [
   {
-    text: "Before Ginvoice, my sales girl would tell me stories. Now I check everything from my house. It is very easy to use.",
+    text: "Before Ginvoice Market OS, my sales girl would tell me stories. Now I check everything from my house. It is very easy to use.",
     author: "Madam Grace",
     role: "Provision Store Owner",
     initials: "MG",
     color: "bg-indigo-100 text-indigo-700"
   },
   {
-    text: "Selling tailoring materials has many small items. Ginvoice helps me track every button and thread. No more loss.",
+    text: "Selling tailoring materials has many small items. Ginvoice Market OS helps me track every button and thread. No more loss.",
     author: "Teknod Ventures",
     role: "Tailoring Materials",
     initials: "TV",
     color: "bg-emerald-100 text-emerald-700"
   },
   {
-     text: "As a fashion designer, I need to know my profit on every cloth I sew. Ginvoice makes it simple.",
+     text: "As a fashion designer, I need to know my profit on every cloth I sew. Ginvoice Market OS makes it simple.",
      author: "Zia Royalle",
      role: "Fashion Designer",
      initials: "ZR",
@@ -36,11 +36,11 @@ const TESTIMONIALS = [
 const FAQS = [
   {
      question: "Do I need internet to use it?",
-     answer: "No! Ginvoice works offline. You can sell and record everything without data. You only need internet to sync (backup) your data to our secure cloud."
+     answer: "No! Ginvoice Market OS works offline. You can sell and record everything without data. You only need internet to sync (backup) your data to our secure cloud."
   },
   {
      question: "Can my staff steal money or stock?",
-     answer: "It becomes very hard. Ginvoice tracks every single item in real-time. If stock is missing, the system will show you exactly what is gone and when."
+     answer: "It becomes very hard. Ginvoice Market OS tracks every single item in real-time. If stock is missing, the system will show you exactly what is gone and when."
   },
   {
      question: "Can I print receipts?",
@@ -77,7 +77,9 @@ const FEATURES = [
             </motion.div>
 
             <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 1.0 }} className="flex gap-3 items-end">
-               <div className="w-10 h-10 rounded-full bg-purple-900/80 flex flex-shrink-0 items-center justify-center border border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.4)]"><Bot size={18} className="text-purple-300" /></div>
+               <div className="w-10 h-10 rounded-full bg-purple-900/80 flex flex-shrink-0 items-center justify-center border border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.4)] overflow-hidden">
+                   <img src="/gbot.png" alt="gBot" className="w-full h-full object-cover" />
+               </div>
                <div className="bg-purple-900/30 border border-purple-500/30 p-4 md:p-5 rounded-2xl rounded-bl-sm text-purple-100 shadow-sm max-w-[90%] space-y-4">
                  <p>Yesterday's revenue was <strong>₦245,000</strong> (+12% vs last Tuesday).</p>
                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} transition={{ delay: 2.0 }} className="bg-purple-950/50 p-3 rounded-xl border border-purple-800/50 overflow-hidden">
@@ -388,7 +390,7 @@ interface WelcomeScreenProps {
 
 const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onRegister, onLogin }) => {
   const { t, i18n } = useTranslation();
-  const BOT_BRAND_IMAGE = '/gbot.png';
+
   const [businessCount, setBusinessCount] = useState<number | null>(null);
   const [dashboardLoaded, setDashboardLoaded] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -416,7 +418,11 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onRegister, onLogin }) =>
     window.addEventListener('scroll', handleScroll);
 
     // Cookie consent initialization
-    const cookieTimer = setTimeout(() => setShowCookieConsent(true), 1500);
+    const cookieTimer = setTimeout(() => {
+        if (!localStorage.getItem('ginvoice_cookie_consent')) {
+            setShowCookieConsent(true);
+        }
+    }, 1500);
 
     return () => {
         clearTimeout(dashboardTimer);
@@ -446,10 +452,8 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onRegister, onLogin }) =>
       <nav className="fixed top-0 left-0 right-0 bg-white/70 backdrop-blur-xl z-50 border-b border-slate-200/50">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-inner shadow-white/20">
-              G
-            </div>
-            <span className="text-xl font-bold tracking-tight text-slate-900">Ginvoice</span>
+            <img src="/ginvoice.png" alt="Ginvoice Logo" className="w-8 h-8 object-contain" />
+            <span className="text-xl font-bold tracking-tight text-slate-900">Ginvoice Market OS</span>
           </div>
           <div className="flex items-center gap-4">
             <select
@@ -775,18 +779,16 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onRegister, onLogin }) =>
         <footer className="bg-slate-950 text-slate-400 py-12 px-6 border-t border-slate-900">
            <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
               <div className="flex items-center gap-3">
-                <div className="w-6 h-6 rounded bg-slate-800 flex items-center justify-center text-white font-bold text-xs">
-                  G
-                </div>
+                <img src="/ginvoice.png" alt="Ginvoice Logo" className="w-6 h-6 object-contain grayscale hover:grayscale-0 transition-all duration-300" />
                 <span className="font-bold text-slate-300">Ginvoice Market OS</span>
               </div>
               <div className="flex gap-8 text-sm font-semibold">
                  <a href="#features" className="hover:text-white transition-colors">Features</a>
                  <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
-                 <a href="#privacy" className="hover:text-white transition-colors">Privacy</a>
-                 <a href="#terms" className="hover:text-white transition-colors">Terms</a>
+                 <a href="/privacy.html" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Privacy</a>
+                 <a href="/terms.html" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Terms</a>
               </div>
-              <p className="text-sm">© {new Date().getFullYear()} Ginvoice Inc.</p>
+              <p className="text-sm">© {new Date().getFullYear()} Ginvoice Market OS Inc.</p>
            </div>
         </footer>
       </main>
@@ -807,15 +809,17 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onRegister, onLogin }) =>
          )}
       </AnimatePresence>
 
-      {/* Floating gBot Support Button */}
+      {/* Floating Support Button */}
       <a
         href="https://wa.me/2348051763431"
         target="_blank"
         rel="noopener noreferrer"
-        className="fixed bottom-6 right-6 z-50 bg-white rounded-full p-1.5 shadow-xl ring-2 ring-indigo-200 hover:ring-indigo-400 transition-all hover:scale-110"
-        aria-label="Chat with gBot support"
+        className="fixed bottom-6 right-6 z-50 bg-[#25D366] rounded-full p-3 shadow-xl ring-2 ring-emerald-200 hover:ring-emerald-400 transition-all hover:scale-110 flex items-center justify-center"
+        aria-label="Chat with support on WhatsApp"
       >
-        <img src={BOT_BRAND_IMAGE} alt="gBot support" className="w-12 h-12 rounded-full" />
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" className="w-8 h-8 fill-white">
+           <path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"/>
+        </svg>
       </a>
 
       {/* Cookie Consent Banner */}
@@ -833,13 +837,19 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onRegister, onLogin }) =>
                </div>
                <div className="flex items-center gap-3">
                   <button
-                     onClick={() => setShowCookieConsent(false)}
+                     onClick={() => {
+                         localStorage.setItem('ginvoice_cookie_consent', 'declined');
+                         setShowCookieConsent(false);
+                     }}
                      className="flex-1 px-4 py-2.5 bg-slate-100 text-slate-700 font-semibold rounded-xl hover:bg-slate-200 transition-colors text-sm"
                   >
                      Decline
                   </button>
                   <button
-                     onClick={() => setShowCookieConsent(false)}
+                     onClick={() => {
+                         localStorage.setItem('ginvoice_cookie_consent', 'accepted');
+                         setShowCookieConsent(false);
+                     }}
                      className="flex-1 px-4 py-2.5 bg-slate-900 text-white font-semibold rounded-xl hover:bg-slate-800 transition-colors text-sm shadow-md"
                   >
                      Accept
