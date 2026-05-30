@@ -321,14 +321,44 @@ router.post('/verify', auth, async (req, res) => {
 const manageSubscription = async (business, action, reason = '') => {
     const { secretKey } = getPaystackConfig();
     const subCode = business.paystackSubscriptionCode;
-    const subToken = business.paystackEmailToken;
+    let subToken = business.paystackEmailToken;
 
-    if (!subCode || !subToken || !secretKey) {
-        return { success: false, message: 'No active payment gateway subscription found to manage.' };
+    if (!secretKey) {
+        return { success: false, message: 'Payment gateway is not configured.' };
+    }
+
+    if (!subCode) {
+        return { success: false, message: 'This subscription was either gifted or created offline and cannot be managed via the payment gateway.' };
     }
 
     // Call Paystack API
     try {
+        // If we are missing the email token, fetch it from Paystack first
+        if (!subToken) {
+            const fetchResponse = await fetch(`https://api.paystack.co/subscription/${subCode}`, {
+                method: 'GET',
+                headers: {
+                    Authorization: `Bearer ${secretKey}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            const fetchData = await fetchResponse.json();
+
+            if (!fetchResponse.ok || !fetchData.status) {
+                console.warn(`Failed to retrieve missing subscription token for ${subCode}:`, fetchData.message);
+                return { success: false, message: 'Could not fetch subscription details from the gateway to perform this action.' };
+            }
+
+            subToken = fetchData.data?.email_token;
+            if (!subToken) {
+                return { success: false, message: 'Invalid subscription state in payment gateway.' };
+            }
+
+            // Save the newly retrieved token for future operations
+            business.paystackEmailToken = subToken;
+            await business.save();
+        }
+
         const endpoint = action === 'resume' ? 'enable' : 'disable'; // pause and cancel both disable
         const response = await fetch(`https://api.paystack.co/subscription/${endpoint}`, {
             method: 'POST',
