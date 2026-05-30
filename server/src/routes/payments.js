@@ -134,7 +134,13 @@ const verifyReference = async (reference, secretKey) => {
     }
   });
   const data = await response.json();
-  if (!response.ok) throw new Error('Paystack verify failed');
+  if (!response.ok) {
+     if (response.status === 400 || response.status === 404) {
+       // Typically means transaction not found or abandoned. Prevent retry spam.
+       return { status: 'failed', data };
+     }
+     throw new Error('Paystack verify failed');
+  }
   return data?.data;
 };
 
@@ -151,6 +157,12 @@ const reconcilePending = async () => {
     try {
       await markAttemptStatus(attempt.reference, 'pending');
       const details = await verifyReference(attempt.reference, secretKey);
+
+      if (details?.status === 'failed') {
+        await markAttemptStatus(attempt.reference, 'failed');
+        continue;
+      }
+
       if (details?.status !== 'success') continue;
 
       // Validation
@@ -366,7 +378,7 @@ router.post('/subscription/cancel', auth, async (req, res) => {
       const { reason } = req.body;
       if (!reason) return res.status(400).json({ message: 'Cancellation reason required' });
 
-      const business = await Business.findById(req.user.businessId);
+      const business = await Business.findById(req.businessId);
       if (!business) return res.status(404).json({ message: 'Business not found' });
 
       const result = await manageSubscription(business, 'cancel', reason);
@@ -383,7 +395,7 @@ router.post('/subscription/cancel', auth, async (req, res) => {
 // Route: POST /subscription/pause
 router.post('/subscription/pause', auth, async (req, res) => {
   try {
-      const business = await Business.findById(req.user.businessId);
+      const business = await Business.findById(req.businessId);
       if (!business) return res.status(404).json({ message: 'Business not found' });
 
       const result = await manageSubscription(business, 'pause');
@@ -399,7 +411,7 @@ router.post('/subscription/pause', auth, async (req, res) => {
 // Route: POST /subscription/resume
 router.post('/subscription/resume', auth, async (req, res) => {
   try {
-      const business = await Business.findById(req.user.businessId);
+      const business = await Business.findById(req.businessId);
       if (!business) return res.status(404).json({ message: 'Business not found' });
 
       const result = await manageSubscription(business, 'resume');
@@ -481,9 +493,10 @@ router.post('/webhook', async (req, res) => {
 
       // Actually, relying on charge.success is better for extension.
       // But to maintain backward compatibility with existing flow if that was the intent:
-      const business = await Business.findById(businessId);
+      const business = businessId ? await Business.findById(businessId) : await resolveBusinessForWebhook(event.data);
       if (business) {
            await updatePaystackCodes(business, event.data);
+           await business.save();
            // We do NOT extend here to avoid double crediting (charge.success also fires)
            // unless we track them separately.
            // If the previous code had double crediting, this might be why!
