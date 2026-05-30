@@ -133,8 +133,8 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate, uiCo
         {/* Header */}
         <div className="bg-indigo-600 p-4 text-white flex justify-between items-center shrink-0">
             <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-sm border border-white/30">
-                     <Bot size={20} className="text-white" />
+                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-sm border border-white/30 overflow-hidden">
+                     <img src={BOT_BRAND_IMAGE} alt="gBot avatar" className="w-full h-full object-cover" />
                 </div>
                 <div>
                     <h3 className="font-bold text-base">gBot Assistant</h3>
@@ -153,8 +153,8 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate, uiCo
         <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50" ref={scrollRef}>
             {messages.map((msg, i) => (
                 <div key={i} className={`flex gap-3 ${msg.from === 'user' ? 'flex-row-reverse' : ''}`}>
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${msg.from === 'user' ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-200 text-gray-600'}`}>
-                        {msg.from === 'user' ? <User size={14} /> : <Bot size={14} />}
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 overflow-hidden ${msg.from === 'user' ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-200'}`}>
+                        {msg.from === 'user' ? <User size={14} /> : <img src={BOT_BRAND_IMAGE} alt="bot" className="w-full h-full object-cover" />}
                     </div>
                     <div className={`max-w-[80%] p-3 text-sm shadow-sm whitespace-pre-wrap ${
                         msg.from === 'user'
@@ -167,8 +167,8 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate, uiCo
             ))}
             {isSending && (
                  <div className="flex gap-3">
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-gray-200 text-gray-600">
-                        <Bot size={14} />
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-gray-200 overflow-hidden">
+                        <img src={BOT_BRAND_IMAGE} alt="bot" className="w-full h-full object-cover" />
                     </div>
                     <div className="bg-white text-gray-500 rounded-2xl rounded-tl-none border border-gray-100 p-4 flex items-center gap-1.5 w-fit">
                       <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
