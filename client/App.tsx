@@ -1601,6 +1601,7 @@ const App: React.FC = () => {
                   isReadOnly={!canManageStock || subscriptionLocked}
                   isOnline={isOnline}
                   initialParams={deepLinkParams}
+                  refreshData={refreshData}
                 />
             </div>
           )}
