@@ -6,6 +6,7 @@ const { v4: uuidv4 } = require('uuid');
 const requireAuth = require('../middleware/auth');
 const requireActiveSubscription = require('../middleware/subscription');
 const Product = require('../models/Product');
+const Business = require('../models/Business');
 const { Decimal128 } = mongoose.Types;
 
 const toDecimal = (value) => {
@@ -26,7 +27,7 @@ router.post('/', requireAuth, requireActiveSubscription, async (req, res) => {
       return res.status(400).json({ error: 'Maximum limit of 1000 products per import exceeded.' });
     }
 
-    const businessId = req.business.id;
+    const businessId = req.businessId;
 
     const bulkOps = products.map((prod) => {
       // Create new UUID for insertions
@@ -64,6 +65,14 @@ router.post('/', requireAuth, requireActiveSubscription, async (req, res) => {
 
     if (bulkOps.length > 0) {
       await Product.bulkWrite(bulkOps);
+
+      // Increment sync versions so clients fetch the updated list
+      await Business.findByIdAndUpdate(businessId, {
+        $inc: {
+          dataVersion: 0.001,
+          'syncVersions.products': 0.001
+        }
+      });
     }
 
     res.json({ success: true, message: 'Products imported successfully.' });
