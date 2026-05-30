@@ -114,7 +114,6 @@ router.get('/version', auth, async (req, res) => {
 router.get('/', auth, async (req, res) => {
   try {
     const businessId = String(req.businessId).trim();
-    console.log(`[SYNC] 🚀 STARTING FETCH for Business ID: "${businessId}"`);
 
     const requestedDomains = parseDomainsParam(req.query.domains);
     const shouldInclude = (domain) => !requestedDomains || requestedDomains.has(domain);
