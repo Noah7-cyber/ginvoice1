@@ -320,19 +320,63 @@ router.post('/verify', auth, async (req, res) => {
 
 const manageSubscription = async (business, action, reason = '') => {
     const { secretKey } = getPaystackConfig();
-    const subCode = business.paystackSubscriptionCode;
+    let subCode = business.paystackSubscriptionCode;
     let subToken = business.paystackEmailToken;
+    const customerCode = business.paystackCustomerCode;
 
     if (!secretKey) {
         return { success: false, message: 'Payment gateway is not configured.' };
     }
 
-    if (!subCode) {
-        return { success: false, message: 'This subscription was either gifted or created offline and cannot be managed via the payment gateway.' };
-    }
-
     // Call Paystack API
     try {
+        // RECOVERY LOGIC: If we don't have the subscription code, but we do have a customer code,
+        // there is a high chance the webhook failed to save the codes previously. Let's recover them from Paystack.
+        if (!subCode && customerCode) {
+             const recoverRes = await fetch(`https://api.paystack.co/subscription?customer=${customerCode}`, {
+                 method: 'GET',
+                 headers: {
+                     Authorization: `Bearer ${secretKey}`,
+                     'Content-Type': 'application/json'
+                 }
+             });
+             const recoverData = await recoverRes.json();
+
+             if (recoverRes.ok && recoverData.status && Array.isArray(recoverData.data) && recoverData.data.length > 0) {
+                 // Try to find an active subscription, or just default to the most recent one returned
+                 const activeSub = recoverData.data.find(s => s.status === 'active') || recoverData.data[0];
+
+                 subCode = activeSub.subscription_code;
+                 subToken = activeSub.email_token;
+
+                 if (subCode) {
+                     business.paystackSubscriptionCode = subCode;
+                     business.paystackEmailToken = subToken || undefined;
+                     await business.save();
+                     console.log(`Successfully recovered missing subscription code for business ${business._id}`);
+                 }
+             }
+        }
+
+        if (!subCode) {
+            // True fallback for gifted/offline subscriptions
+            if (action === 'cancel') {
+                business.autoRenew = false;
+                business.subscriptionStatus = 'cancelled';
+                business.cancelledAt = new Date();
+                business.cancelledReason = reason;
+                business.cancelledBy = 'user';
+            } else if (action === 'pause') {
+                business.autoRenew = false;
+                business.subscriptionStatus = 'non-renewing';
+            } else if (action === 'resume') {
+                business.autoRenew = true;
+                business.subscriptionStatus = 'active';
+            }
+            await business.save();
+            return { success: true, message: 'Local subscription state updated successfully (Offline/Gifted mode).' };
+        }
+
         // If we are missing the email token, fetch it from Paystack first
         if (!subToken) {
             const fetchResponse = await fetch(`https://api.paystack.co/subscription/${subCode}`, {
