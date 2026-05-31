@@ -28,7 +28,7 @@ import {
   sendUserEmailAdmin,
   clearAdminToken,
   purgeDeletedProducts,
-  purgeInactiveShops
+  syncPaystackSubscriptions
 } from '../services/api';
 import { useToast } from './ToastProvider';
 
@@ -190,13 +190,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     }
   };
 
-  const handlePurgeShops = async () => {
+  const handleSyncSubscriptions = async () => {
     try {
-      const res: any = await purgeInactiveShops();
-      addToast(`Purged ${res.deletedCount || 0} inactive shops`, 'success');
-      setIsPurgeShopsModalOpen(false);
+      setIsLoading(true);
+      const res: any = await syncPaystackSubscriptions();
+      addToast(
+        `Synced successfully! Updated: ${res?.stats?.usersUpdated || 0}, Not found: ${res?.stats?.usersNotFound || 0}`,
+        'success'
+      );
+      setIsPurgeShopsModalOpen(false); // Using this existing modal for convenience or reuse the state
     } catch (err) {
-      addToast('Inactive shops purge failed', 'error');
+      addToast('Failed to sync Paystack subscriptions', 'error');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -280,10 +286,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           </button>
           <button
              onClick={() => setIsPurgeShopsModalOpen(true)}
-             className="flex items-center gap-2 px-4 py-2 bg-orange-50 text-orange-700 font-bold rounded-lg border border-orange-100 hover:bg-orange-100 transition-colors"
+             className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 font-bold rounded-lg border border-indigo-100 hover:bg-indigo-100 transition-colors"
           >
-              <Trash2 size={18} />
-              Purge Inactive Shops
+              <CreditCard size={18} />
+              Sync Subscriptions
           </button>
         </div>
       </div>
@@ -573,17 +579,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
             <div className="p-6">
-              <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center text-orange-600 mb-4">
-                <Trash2 size={24} />
+              <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 mb-4">
+                <CreditCard size={24} />
               </div>
-              <h3 className="font-bold text-xl mb-2 text-orange-700">Purge Inactive Shops?</h3>
+              <h3 className="font-bold text-xl mb-2 text-indigo-700">Sync Paystack Subscriptions?</h3>
               <p className="text-gray-500 text-sm mb-6">
-                This will permanently remove all <span className="font-bold text-orange-700">inactive (soft-deleted) shops</span> and related stale shop records.
+                This will query Paystack for all active subscriptions and match their codes to local users. This fixes accounts with missing API tokens.
               </p>
 
               <div className="flex gap-3">
-                <button onClick={() => setIsPurgeShopsModalOpen(false)} className="flex-1 py-3 font-bold text-gray-500 bg-gray-100 rounded-xl hover:bg-gray-200">Cancel</button>
-                <button onClick={handlePurgeShops} className="flex-1 py-3 font-bold text-white bg-orange-600 rounded-xl hover:bg-orange-700">Yes, Purge Shops</button>
+                <button onClick={() => setIsPurgeShopsModalOpen(false)} className="flex-1 py-3 font-bold text-gray-500 bg-gray-100 rounded-xl hover:bg-gray-200" disabled={isLoading}>Cancel</button>
+                <button onClick={handleSyncSubscriptions} className="flex-1 py-3 font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 disabled:opacity-50" disabled={isLoading}>
+                  {isLoading ? 'Syncing...' : 'Yes, Sync Now'}
+                </button>
               </div>
             </div>
           </div>

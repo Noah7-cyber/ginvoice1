@@ -627,11 +627,11 @@ export const purgeDeletedProducts = async () => {
   });
 };
 
-export const purgeInactiveShops = async () => {
+export const syncPaystackSubscriptions = async () => {
   const token = loadAdminToken();
   if (!token) throw new Error('Missing admin token');
-  return request('/api/admin/purge-inactive-shops', {
-    method: 'DELETE',
+  return request('/api/admin/sync-paystack-subscriptions', {
+    method: 'POST',
     headers: { Authorization: `Bearer ${token}` }
   });
 };
