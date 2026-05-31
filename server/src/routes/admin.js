@@ -37,6 +37,117 @@ router.post('/login', (req, res) => {
 // Apply adminAuth to ALL subsequent routes
 router.use(adminAuth);
 
+// POST /sync-paystack-subscriptions
+// Sync missing subscription tokens/codes from Paystack to local database
+router.post('/sync-paystack-subscriptions', async (req, res) => {
+  try {
+    const secretKey = process.env.PAYSTACK_SECRET_KEY;
+    if (!secretKey) {
+      return res.status(400).json({ message: 'Paystack Secret Key is not configured' });
+    }
+
+    // 1. Fetch all active subscriptions from Paystack
+    // We only need to fetch standard status "active" or "non-renewing" (paused). Let's just fetch everything active for now,
+    // or all of them and filter. Paystack pagination might be needed if there are more than 50.
+    const perPage = 100;
+    let page = 1;
+    let allSubscriptions = [];
+    let hasMore = true;
+
+    while (hasMore) {
+      const response = await fetch(`https://api.paystack.co/subscription?perPage=${perPage}&page=${page}`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${secretKey}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      const result = await response.json();
+
+      if (!response.ok || !result.status) {
+        throw new Error(result.message || 'Failed to fetch from Paystack API');
+      }
+
+      if (result.data && result.data.length > 0) {
+        allSubscriptions = allSubscriptions.concat(result.data);
+        page++;
+      } else {
+        hasMore = false;
+      }
+    }
+
+    let updatedCount = 0;
+    let notFoundCount = 0;
+
+    // 2. Loop through subscriptions and update the corresponding Business DB
+    for (const sub of allSubscriptions) {
+      // Focus on active and non-renewing (paused) subscriptions
+      if (sub.status !== 'active' && sub.status !== 'non-renewing') {
+        continue;
+      }
+
+      const email = sub.customer?.email;
+      const customerCode = sub.customer?.customer_code;
+      const subCode = sub.subscription_code;
+      const emailToken = sub.email_token;
+
+      if (!subCode || !emailToken) continue;
+
+      let business = null;
+
+      // Try mapping by exact email first
+      if (email) {
+        business = await Business.findOne({ email });
+      }
+
+      // Fallback: try mapping by customer code
+      if (!business && customerCode) {
+        business = await Business.findOne({ paystackCustomerCode: customerCode });
+      }
+
+      if (business) {
+        let changed = false;
+
+        if (business.paystackSubscriptionCode !== subCode) {
+          business.paystackSubscriptionCode = subCode;
+          changed = true;
+        }
+
+        if (business.paystackEmailToken !== emailToken) {
+          business.paystackEmailToken = emailToken;
+          changed = true;
+        }
+
+        if (customerCode && business.paystackCustomerCode !== customerCode) {
+           business.paystackCustomerCode = customerCode;
+           changed = true;
+        }
+
+        if (changed) {
+          await business.save();
+          updatedCount++;
+        }
+      } else {
+        notFoundCount++;
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Paystack subscriptions synchronized successfully',
+      stats: {
+        totalPaystackSubscriptionsFetched: allSubscriptions.length,
+        usersUpdated: updatedCount,
+        usersNotFound: notFoundCount
+      }
+    });
+
+  } catch (err) {
+    console.error('Sync Subscriptions Error:', err);
+    res.status(500).json({ message: 'Failed to sync subscriptions' });
+  }
+});
+
 // GET /stats
 router.get('/stats', async (req, res) => {
   try {

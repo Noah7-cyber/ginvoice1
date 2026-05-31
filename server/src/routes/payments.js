@@ -92,6 +92,9 @@ const updatePaystackCodes = async (business, data) => {
   if (planCode && business.paystackPlanCode !== planCode) {
     business.paystackPlanCode = planCode;
   }
+
+  // Ensure codes are saved immediately whenever they are updated from Paystack
+  await business.save();
 };
 
 
@@ -120,6 +123,12 @@ const resolveBusinessForWebhook = async (eventData = {}) => {
 
   if (customerCode) {
     const business = await Business.findOne({ paystackCustomerCode: customerCode });
+    if (business) return business;
+  }
+
+  const customerEmail = eventData?.customer?.email || eventData?.email;
+  if (customerEmail) {
+    const business = await Business.findOne({ email: customerEmail });
     if (business) return business;
   }
 
@@ -526,7 +535,6 @@ router.post('/webhook', async (req, res) => {
       const business = businessId ? await Business.findById(businessId) : await resolveBusinessForWebhook(event.data);
       if (business) {
            await updatePaystackCodes(business, event.data);
-           await business.save();
            // We do NOT extend here to avoid double crediting (charge.success also fires)
            // unless we track them separately.
            // If the previous code had double crediting, this might be why!
