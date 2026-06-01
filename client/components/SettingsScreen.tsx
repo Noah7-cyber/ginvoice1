@@ -68,7 +68,13 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                 addToast("Welcome to Pro! Subscription active.", "success");
 
                 // Update local business state to reflect change immediately
-                const newBusiness = { ...business, isSubscribed: true, subscriptionExpiresAt: data.subscriptionExpiresAt };
+                const newBusiness = {
+                    ...business,
+                    isSubscribed: true,
+                    subscriptionExpiresAt: data.subscriptionExpiresAt,
+                    autoRenew: data.autoRenew,
+                    subscriptionStatus: data.subscriptionStatus
+                };
                 onUpdateBusiness(newBusiness);
                 setFormData(prev => ({ ...prev, ...newBusiness }));
             }
