@@ -381,7 +381,15 @@ const manageSubscription = async (business, action, reason = '') => {
 
         if (!data.status) {
              console.warn(`Paystack ${action} failed:`, data.message);
-             return { success: false, message: data.message || 'Failed to sync with payment gateway' };
+
+             // Check if Paystack indicates the subscription is already in the requested state
+             const msg = (data.message || '').toLowerCase();
+             const alreadyActive = action === 'resume' && (msg.includes('already active') || msg.includes('not found'));
+             const alreadyInactive = (action === 'pause' || action === 'cancel') && (msg.includes('already inactive') || msg.includes('already disabled') || msg.includes('not found'));
+
+             if (!alreadyActive && !alreadyInactive) {
+                 return { success: false, message: data.message || 'Failed to sync with payment gateway' };
+             }
         }
     } catch (e) {
         console.error(`Paystack ${action} error:`, e.message);
