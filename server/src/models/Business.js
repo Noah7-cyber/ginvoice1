@@ -21,6 +21,7 @@ const BusinessSchema = new mongoose.Schema({
   cancelledAt: { type: Date },
   cancelledReason: { type: String },
   cancelledBy: { type: String },
+  gracePeriodNotified: { type: Boolean, default: false },
   recoveryCode: { type: String },
   recoveryCodeExpires: { type: Date },
   emailVerified: { type: Boolean, default: false },

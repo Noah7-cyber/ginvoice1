@@ -8,7 +8,13 @@ const requireActiveSubscription = async (req, res, next) => {
     const now = new Date();
     const trialEndsAt = business.trialEndsAt ? new Date(business.trialEndsAt) : null;
     const subscriptionEndsAt = business.subscriptionExpiresAt ? new Date(business.subscriptionExpiresAt) : null;
-    const hasAccess = (subscriptionEndsAt && subscriptionEndsAt >= now) || (trialEndsAt && trialEndsAt >= now);
+
+    // Add a 3-day grace period
+    const gracePeriodEnd = subscriptionEndsAt
+      ? new Date(subscriptionEndsAt.getTime() + (3 * 24 * 60 * 60 * 1000))
+      : null;
+
+    const hasAccess = (gracePeriodEnd && gracePeriodEnd >= now) || (trialEndsAt && trialEndsAt >= now);
 
     if (!hasAccess && req.method !== 'GET') {
       return res.status(402).json({ message: 'Subscription required', trialEndsAt: business.trialEndsAt, isSubscribed: business.isSubscribed, subscriptionExpiresAt: business.subscriptionExpiresAt });
