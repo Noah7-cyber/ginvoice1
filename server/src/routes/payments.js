@@ -63,6 +63,7 @@ const extendSubscription = async (business, days) => {
   business.cancelledAt = undefined;
   business.cancelledReason = undefined;
   business.cancelledBy = undefined;
+  business.gracePeriodNotified = false;
 
   await business.save();
 };
