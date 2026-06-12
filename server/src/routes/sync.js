@@ -37,7 +37,12 @@ const withAtomic = async (work) => {
 const toDecimal = (value) => {
   if (value === null || value === undefined || value === '') return mongoose.Types.Decimal128.fromString('0');
   if (value instanceof Decimal128) return value;
-  return mongoose.Types.Decimal128.fromString(String(value));
+
+  const strVal = String(value).replace(/,/g, '');
+  if (strVal === 'NaN' || strVal === 'undefined' || strVal === 'null' || isNaN(Number(strVal))) {
+    return mongoose.Types.Decimal128.fromString('0');
+  }
+  return mongoose.Types.Decimal128.fromString(strVal);
 };
 
 const parseDecimal = (val) => {
@@ -323,37 +328,42 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
           continue;
         }
 
-        const safeTransactionDate = parseDateOrFallback(t.transactionDate, new Date());
-        const incomingUpdatedAt = t.updatedAt ? new Date(t.updatedAt) : safeTransactionDate;
+        try {
+          const safeTransactionDate = parseDateOrFallback(t.transactionDate, new Date());
+          const incomingUpdatedAt = t.updatedAt ? new Date(t.updatedAt) : safeTransactionDate;
 
-        const idempotencyKey = String(t.idempotencyKey || txId).trim();
-        const existingById = existingByIdMap.get(txId) || null;
-        const existingByKey = idempotencyKey
-          ? await Transaction.findOne({ businessId, idempotencyKey }).lean()
-          : null;
-        const existing = existingById || existingByKey;
+          const idempotencyKey = String(t.idempotencyKey || txId).trim();
+          const existingById = existingByIdMap.get(txId) || null;
+          const existingByKey = idempotencyKey
+            ? await Transaction.findOne({ businessId, idempotencyKey }).lean()
+            : null;
+          const existing = existingById || existingByKey;
 
-        if (existing) {
-          const existingUpdatedAt = existing.clientUpdatedAt ? new Date(existing.clientUpdatedAt) : new Date(0);
-          if (!Number.isNaN(existingUpdatedAt.getTime()) && incomingUpdatedAt <= existingUpdatedAt) {
+          let shouldSkip = false;
+          if (existing) {
+            const existingUpdatedAt = existing.clientUpdatedAt ? new Date(existing.clientUpdatedAt) : new Date(0);
+            if (!Number.isNaN(existingUpdatedAt.getTime()) && incomingUpdatedAt <= existingUpdatedAt) {
+              shouldSkip = true;
+            }
+          }
+
+          if (shouldSkip) {
             continue;
           }
-        }
 
-        const normalizedItems = (t.items || []).map((item) => ({
-          productId: item.productId,
-          productName: item.productName || item.productId || 'Unknown Item',
-          quantity: Number(item.quantity || 0),
-          unit: item.selectedUnit ? item.selectedUnit.name : item.unit,
-          multiplier: item.selectedUnit ? item.selectedUnit.multiplier : (item.multiplier || 1),
-          unitPrice: toDecimal(item.unitPrice),
-          discount: toDecimal(item.discount),
-          total: toDecimal(item.total)
-        }));
+          const normalizedItems = (t.items || []).map((item) => ({
+            productId: item.productId,
+            productName: item.productName || item.productId || 'Unknown Item',
+            quantity: Number(item.quantity || 0),
+            unit: item.selectedUnit ? item.selectedUnit.name : item.unit,
+            multiplier: item.selectedUnit ? item.selectedUnit.multiplier : (item.multiplier || 1),
+            unitPrice: toDecimal(item.unitPrice),
+            discount: toDecimal(item.discount),
+            total: toDecimal(item.total)
+          }));
 
-        const inventoryEffect = t.inventoryEffect === 'restock' ? 'restock' : 'sale';
+          const inventoryEffect = t.inventoryEffect === 'restock' ? 'restock' : 'sale';
 
-        try {
           await withAtomic(async (session) => {
             if (existing) {
               const existingEffect = existing.inventoryEffect === 'restock' ? 'restock' : 'sale';
