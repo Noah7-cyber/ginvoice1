@@ -709,7 +709,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
           </GuideWrapper>
           {(!safeReadOnly || isGuideMode) && (
             <>
-              <GuideWrapper id="import-csv" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
+              <GuideWrapper id="import-csv" className="hidden md:block" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
                   <button
                     onClick={() => !safeReadOnly && setIsBulkImportOpen(true)}
                     disabled={safeReadOnly}
@@ -718,7 +718,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                     <Download size={20} /> <span className="hidden md:inline">Import CSV</span>
                   </button>
               </GuideWrapper>
-              <GuideWrapper id="add-product" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
+              <GuideWrapper id="add-product" className="hidden md:block" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
                   <button
                     onClick={() => !safeReadOnly && handleAddNew()}
                     disabled={safeReadOnly}
