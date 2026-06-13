@@ -43,54 +43,40 @@ const DUMMY_PRODUCTS: Product[] = [
   }
 ];
 
-interface Hotspot {
+export interface Hotspot {
   id: string;
-  top: string;
-  left: string;
   title: string;
   description: string;
 }
 
-const INVENTORY_HOTSPOTS: Hotspot[] = [
+export const INVENTORY_HOTSPOTS: Hotspot[] = [
   {
     id: 'search',
-    top: '25%',
-    left: '20%',
     title: 'Search & Filters',
     description: 'Use this bar to quickly find products by name or SKU. Click the sliders icon on mobile to access category and price filters.',
   },
   {
     id: 'add-product',
-    top: window.innerWidth < 768 ? '85%' : '15%',
-    left: window.innerWidth < 768 ? '85%' : '85%',
     title: 'Add New Products',
     description: 'Click here to register new items. You can set prices, stock levels, and alternative units (like selling by carton instead of piece). It helps you organize what you sell.',
   },
   {
     id: 'categories',
-    top: window.innerWidth < 768 ? '85%' : '15%',
-    left: window.innerWidth < 768 ? '15%' : '55%',
     title: 'Manage Categories',
     description: 'Categories help group similar items (like "Beverages" or "Equipment"). Create categories here to organize your products and make them easier to find and manage.',
   },
   {
     id: 'verify-stock',
-    top: window.innerWidth < 768 ? '15%' : '15%',
-    left: window.innerWidth < 768 ? '50%' : '70%',
     title: 'Verify Stock',
     description: 'Periodically check your physical items against your digital records. Click here to go through a guided physical count of your current inventory to prevent discrepancies.',
   },
   {
     id: 'stock-status',
-    top: '60%',
-    left: '50%',
     title: 'Stock Indicators',
     description: 'A green dot means you have healthy stock. A pulsing red dot indicates the item is running low and needs to be restocked.',
   },
   {
     id: 'quick-edit',
-    top: '60%',
-    left: '85%',
     title: 'Quick Actions',
     description: 'Click the pencil icon for a quick inline edit of price and stock, or the expand icon for a full edit.',
   }
@@ -126,38 +112,25 @@ const GuidesScreen: React.FC = () => {
         </div>
 
         {/* The "Dummy" App Area with the Hotspot Overlay */}
-        <div className="flex-1 relative overflow-hidden pointer-events-none select-none">
-            {/* We scale it slightly down and make it unclickable to simulate a sandbox */}
-            <div className="absolute inset-0 p-4 md:p-8 opacity-80 pointer-events-none">
+        <div className="flex-1 relative overflow-hidden select-none bg-gray-50/50">
+            {/* We enable pointer-events so clicks go to the child components to hit hotspots */}
+            <div className="absolute inset-0 p-4 md:p-8 opacity-90 overflow-auto">
+                {/* A protective overlay to stop clicks on actual inventory functionality, except for dots */}
+                <div className="absolute inset-0 z-10 pointer-events-auto cursor-default"></div>
                 <InventoryScreen
                     products={DUMMY_PRODUCTS}
                     onUpdateProducts={() => {}}
                     isOwner={true}
-                    isReadOnly={false}
+                    isReadOnly={true}
                     isOnline={false} // pass false to avoid triggering network logic in dummy mode if any
                     refreshData={async () => {}}
+                    isGuideMode={true}
+                    activeHotspotId={activeHotspot?.id}
+                    onHotspotClick={(id) => {
+                      const h = INVENTORY_HOTSPOTS.find((h) => h.id === id);
+                      if (h) setActiveHotspot(h);
+                    }}
                 />
-            </div>
-
-            {/* Hotspots Overlay - Pointer events must be auto here to catch clicks */}
-            <div className="absolute inset-0 z-20 pointer-events-auto">
-                {INVENTORY_HOTSPOTS.map((hotspot) => (
-                    <div
-                        key={hotspot.id}
-                        className="absolute"
-                        style={{ top: hotspot.top, left: hotspot.left, transform: 'translate(-50%, -50%)' }}
-                    >
-                        {/* The Pulsing Dot */}
-                        <button
-                            className="relative flex items-center justify-center w-8 h-8 group"
-                            onClick={() => setActiveHotspot(hotspot)}
-                            aria-label={`Learn about ${hotspot.title}`}
-                        >
-                            <span className="absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75 animate-ping"></span>
-                            <span className="relative inline-flex rounded-full h-4 w-4 bg-primary border-2 border-white shadow-lg group-hover:scale-125 transition-transform"></span>
-                        </button>
-                    </div>
-                ))}
             </div>
 
             {/* Hotspot Tooltip Modal */}
