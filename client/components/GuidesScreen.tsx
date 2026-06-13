@@ -64,7 +64,21 @@ const INVENTORY_HOTSPOTS: Hotspot[] = [
     top: '15%',
     left: '85%',
     title: 'Add New Products',
-    description: 'Click here to register new items. You can set prices, stock levels, and alternative units (like selling by carton instead of piece).',
+    description: 'Click here to register new items. You can set prices, stock levels, and alternative units (like selling by carton instead of piece). It helps you organize what you sell.',
+  },
+  {
+    id: 'categories',
+    top: '15%',
+    left: '55%',
+    title: 'Manage Categories',
+    description: 'Categories help group similar items (like "Beverages" or "Equipment"). Create categories here to organize your products and make them easier to find and manage.',
+  },
+  {
+    id: 'verify-stock',
+    top: '15%',
+    left: '70%',
+    title: 'Verify Stock',
+    description: 'Periodically check your physical items against your digital records. Click here to go through a guided physical count of your current inventory to prevent discrepancies.',
   },
   {
     id: 'stock-status',
@@ -119,8 +133,8 @@ const GuidesScreen: React.FC = () => {
                     products={DUMMY_PRODUCTS}
                     onUpdateProducts={() => {}}
                     isOwner={true}
-                    isReadOnly={true}
-                    isOnline={true}
+                    isReadOnly={false}
+                    isOnline={false} // pass false to avoid triggering network logic in dummy mode if any
                     refreshData={async () => {}}
                 />
             </div>
