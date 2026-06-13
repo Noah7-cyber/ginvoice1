@@ -6,6 +6,7 @@ import { CURRENCY } from '../constants';
 import { formatCurrency } from '../utils/currency';
 import SignaturePad from './SignaturePad';
 import { uploadFile, validateDiscountCode } from '../services/api';
+import { GuideWrapper } from './GuideWrapper';
 
 const normalizeCustomerName = (value: string) => {
   const clean = (value || '').trim().replace(/\s+/g, ' ');
@@ -43,13 +44,16 @@ interface CurrentOrderSidebarProps {
   pastCustomers?: string[];
   activeShopName?: string;
   staffDisplayName?: string;
+  isGuideMode?: boolean;
+  activeHotspotId?: string;
+  onHotspotClick?: (id: string) => void;
 }
 
 const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
   cart, setCart, customerName, setCustomerName, paymentMethod, setPaymentMethod,
   customerPhone, setCustomerPhone, amountPaid, setAmountPaid, globalDiscount, setGlobalDiscount, isGlobalDiscountPercent,
   setIsGlobalDiscountPercent, signature, setSignature, isLocked, setIsLocked,
-  onCompleteSale, onClose, products, permissions, isOwner = false, pastCustomers, activeShopName = 'Shop', staffDisplayName
+  onCompleteSale, onClose, products, permissions, isOwner = false, pastCustomers, activeShopName = 'Shop', staffDisplayName, isGuideMode, activeHotspotId, onHotspotClick
 }) => {
   const [activeDiscountEdit, setActiveDiscountEdit] = useState<string | null>(null);
   const [discountCode, setDiscountCode] = useState('');
@@ -170,20 +174,22 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
         {/* Customer Input */}
         <div className="space-y-2">
           <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Customer</label>
-          <div className="relative">
-            <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-            <input 
-              type="text"
-              list="customer-history"
-              placeholder="Guest Customer"
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 bg-white border border-gray-100 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none font-bold shadow-sm"
-            />
-            <datalist id="customer-history">
-              {pastCustomers?.map(name => <option key={name} value={name} />)}
-            </datalist>
-          </div>
+          <GuideWrapper id="customer-name" className="w-full" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick} dotPosition="top-1/2 right-2 -translate-y-1/2">
+            <div className="relative w-full">
+              <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+              <input
+                type="text"
+                list="customer-history"
+                placeholder="Guest Customer"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 bg-white border border-gray-100 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none font-bold shadow-sm"
+              />
+              <datalist id="customer-history">
+                {pastCustomers?.map(name => <option key={name} value={name} />)}
+              </datalist>
+            </div>
+          </GuideWrapper>
         </div>
 
         <div className="space-y-2">
@@ -220,8 +226,9 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
               <p className="text-sm font-bold">No items in bill</p>
             </div>
           ) : (
-            cart.map(item => (
-              <div key={item.cartId} className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm relative group">
+            cart.map((item, index) => (
+              <GuideWrapper key={item.cartId} id="cart-item" className="w-full" isGuideMode={isGuideMode && index === 0} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick} dotPosition="top-1/2 -left-2 -translate-y-1/2">
+              <div className="w-full bg-white p-3 rounded-2xl border border-gray-100 shadow-sm relative group">
                 <div className="flex justify-between items-start mb-2">
                   <div className="min-w-0 flex-1">
                     <p className="font-bold text-gray-900 text-sm truncate">{item.productName}</p>
@@ -263,6 +270,7 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
                   />
                 )}
               </div>
+              </GuideWrapper>
             ))
           )}
         </div>
@@ -270,7 +278,8 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
         {cart.length > 0 && (
           <div className="space-y-6 animate-in slide-in-from-bottom-2">
             {/* Global Discount & Codes */}
-            <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 space-y-3">
+            <GuideWrapper id="discount" className="w-full" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick} dotPosition="top-0 right-0 -mt-2 -mr-2">
+            <div className="w-full bg-indigo-50 p-4 rounded-2xl border border-indigo-100 space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-[10px] font-black text-indigo-700 uppercase tracking-widest">Global Cut</span>
                 <div className="flex bg-white rounded-lg p-0.5 border text-[9px] font-black">
@@ -325,6 +334,7 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
                 </div>
               )}
             </div>
+            </GuideWrapper>
 
             {/* Payment Section */}
             <div className="space-y-3">
@@ -384,16 +394,18 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
           </div>
         </div>
 
+        <GuideWrapper id="checkout" className="w-full" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick} dotPosition="top-0 right-0 -mt-2 -mr-2">
         <button
           onClick={handleCheckout}
           disabled={cart.length === 0}
           className={`
             w-full py-4 rounded-2xl flex items-center justify-center gap-3 font-black text-lg shadow-xl transition-all active:scale-95
-            ${cart.length === 0 ? 'bg-gray-100 text-gray-300 cursor-not-allowed shadow-none' : 'bg-primary text-white hover:opacity-90'}
+            ${cart.length === 0 && !isGuideMode ? 'bg-gray-100 text-gray-300 cursor-not-allowed shadow-none' : 'bg-primary text-white hover:opacity-90'}
           `}
         >
           <ReceiptText size={22} /> Confirm Bill
         </button>
+        </GuideWrapper>
       </div>
     </div>
   );
