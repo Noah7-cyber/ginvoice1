@@ -303,10 +303,10 @@ const GuidesScreen: React.FC = () => {
 
         {/* The "Dummy" App Area with the Hotspot Overlay */}
         <div className="flex-1 relative overflow-hidden select-none bg-gray-50/50 flex flex-col md:flex-row items-center justify-center p-4">
-            <div className="absolute inset-0 z-10 pointer-events-auto cursor-default"></div>
+            <div className="absolute inset-0 z-10 pointer-events-none cursor-default"></div>
 
             {/* Open Cart Sidebar Side */}
-            <div className="w-full max-w-md border shadow-2xl opacity-95 h-full max-h-[800px] rounded-2xl flex flex-col bg-white overflow-hidden relative pointer-events-none">
+            <div className="w-full max-w-md border shadow-2xl opacity-95 h-full max-h-[800px] rounded-2xl flex flex-col bg-white overflow-hidden relative pointer-events-auto">
               <CurrentOrderSidebar
                 cart={DUMMY_CART_ITEMS}
                 setCart={() => {}}
@@ -396,9 +396,9 @@ const GuidesScreen: React.FC = () => {
 
         {/* The "Dummy" App Area with the Hotspot Overlay */}
         <div className="flex-1 relative overflow-hidden select-none bg-gray-50/50 flex flex-col md:flex-row">
-            <div className="absolute inset-0 z-10 pointer-events-auto cursor-default"></div>
+            <div className="absolute inset-0 z-10 pointer-events-none cursor-default"></div>
             {/* Sales Screen Side */}
-            <div className="flex-1 overflow-auto p-4 md:p-8 opacity-90 relative pointer-events-none pb-32">
+            <div className="flex-1 overflow-auto p-4 md:p-8 opacity-90 relative pointer-events-auto pb-32">
               <SalesScreen
                  products={DUMMY_PRODUCTS}
                  onAddToCart={() => {}}
