@@ -1,0 +1,84 @@
+--- client/components/GuidesScreen.tsx
++++ client/components/GuidesScreen.tsx
+@@ -47,6 +47,61 @@
+ ];
+
+ const DUMMY_CART_ITEMS: SaleItem[] = [
+   {
+     cartId: 'c1',
+     productId: 'DUMMY-1',
+     productName: 'Premium Coffee Beans',
+     quantity: 2,
+     unitPrice: 25,
+     total: 50,
+     discount: 0,
+     originalStock: 120,
+     isDeleted: false
+-  }
++  },
++  {
++    cartId: 'c2',
++    productId: 'DUMMY-2',
++    productName: 'Espresso Machine',
++    quantity: 1,
++    unitPrice: 599,
++    total: 599,
++    discount: 50,
++    originalStock: 3,
++    isDeleted: false
++  },
++  {
++    cartId: 'c3',
++    productId: 'DUMMY-3',
++    productName: 'Ceramic Mugs (Set of 4)',
++    quantity: 4,
++    unitPrice: 20,
++    total: 80,
++    discount: 0,
++    originalStock: 45,
++    isDeleted: false
++  },
++  {
++    cartId: 'c4',
++    productId: 'DUMMY-4',
++    productName: 'Milk Pitcher',
++    quantity: 1,
++    unitPrice: 15,
++    total: 15,
++    discount: 0,
++    originalStock: 20,
++    isDeleted: false
++  },
++  {
++    cartId: 'c5',
++    productId: 'DUMMY-5',
++    productName: 'Tamper',
++    quantity: 1,
++    unitPrice: 35,
++    total: 35,
++    discount: 0,
++    originalStock: 15,
++    isDeleted: false
++  }
+ ];
+
+ export interface Hotspot {
+@@ -73,6 +128,10 @@
+     title: 'Add to Cart',
+     description: 'Tap on a product to instantly add it to the current customer\'s bill.'
+   },
++];
++
++export const CART_HOTSPOTS: Hotspot[] = [
+   {
+     id: 'customer-name',
+     title: 'Customer Details',
+@@ -194,7 +253,7 @@
+ ];
+
+ const GuidesScreen: React.FC = () => {
+-  const [activeGuide, setActiveGuide] = useState<'inventory' | 'sales' | null>(null);
++  const [activeGuide, setActiveGuide] = useState<'inventory' | 'sales' | 'cart' | null>(null);
+   const [activeHotspot, setActiveHotspot] = useState<Hotspot | null>(null);
+
+   if (activeGuide === 'inventory') {

@@ -57,6 +57,50 @@ const DUMMY_CART_ITEMS: SaleItem[] = [
     discount: 0,
     originalStock: 120,
     isDeleted: false
+  },
+  {
+    cartId: 'c2',
+    productId: 'DUMMY-2',
+    productName: 'Espresso Machine',
+    quantity: 1,
+    unitPrice: 599,
+    total: 599,
+    discount: 50,
+    originalStock: 3,
+    isDeleted: false
+  },
+  {
+    cartId: 'c3',
+    productId: 'DUMMY-3',
+    productName: 'Ceramic Mugs (Set of 4)',
+    quantity: 4,
+    unitPrice: 20,
+    total: 80,
+    discount: 0,
+    originalStock: 45,
+    isDeleted: false
+  },
+  {
+    cartId: 'c4',
+    productId: 'DUMMY-4',
+    productName: 'Milk Pitcher',
+    quantity: 1,
+    unitPrice: 15,
+    total: 15,
+    discount: 0,
+    originalStock: 20,
+    isDeleted: false
+  },
+  {
+    cartId: 'c5',
+    productId: 'DUMMY-5',
+    productName: 'Tamper',
+    quantity: 1,
+    unitPrice: 35,
+    total: 35,
+    discount: 0,
+    originalStock: 15,
+    isDeleted: false
   }
 ];
 
@@ -81,7 +125,10 @@ export const SALES_HOTSPOTS: Hotspot[] = [
     id: 'product-click',
     title: 'Add to Cart',
     description: 'Tap on a product to instantly add it to the current customer\'s bill.'
-  },
+  }
+];
+
+export const CART_HOTSPOTS: Hotspot[] = [
   {
     id: 'customer-name',
     title: 'Customer Details',
@@ -229,6 +276,99 @@ const GuidesScreen: React.FC = () => {
     );
   }
 
+  if (activeGuide === 'cart') {
+    return (
+      <div className="relative h-full flex flex-col bg-gray-50 overflow-hidden">
+        {/* Header for the Guide View */}
+        <div className="bg-white border-b px-4 py-3 flex items-center justify-between shrink-0 z-30 shadow-sm relative">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => { setActiveGuide(null); setActiveHotspot(null); }}
+              className="p-2 hover:bg-gray-100 rounded-lg text-gray-600 transition-colors"
+            >
+              <ArrowLeft size={20} />
+            </button>
+            <div>
+              <h2 className="font-bold text-gray-900 flex items-center gap-2">
+                <BookOpen size={18} className="text-primary" /> Cart & Checkout Guide
+              </h2>
+              <p className="text-xs text-gray-500">Interactive Walkthrough</p>
+            </div>
+          </div>
+          <div className="hidden md:flex items-center gap-2 text-sm text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg font-medium">
+            <Info size={16} />
+            Click the pulsing dots to learn more
+          </div>
+        </div>
+
+        {/* The "Dummy" App Area with the Hotspot Overlay */}
+        <div className="flex-1 relative overflow-hidden select-none bg-gray-50/50 flex flex-col md:flex-row items-center justify-center p-4">
+            <div className="absolute inset-0 z-10 pointer-events-auto cursor-default"></div>
+
+            {/* Open Cart Sidebar Side */}
+            <div className="w-full max-w-md border shadow-2xl opacity-95 h-full max-h-[800px] rounded-2xl flex flex-col bg-white overflow-hidden relative pointer-events-none">
+              <CurrentOrderSidebar
+                cart={DUMMY_CART_ITEMS}
+                setCart={() => {}}
+                customerName=""
+                setCustomerName={() => {}}
+                customerPhone=""
+                setCustomerPhone={() => {}}
+                paymentMethod="Cash"
+                setPaymentMethod={() => {}}
+                amountPaid={50}
+                setAmountPaid={() => {}}
+                globalDiscount={0}
+                setGlobalDiscount={() => {}}
+                isGlobalDiscountPercent={false}
+                setIsGlobalDiscountPercent={() => {}}
+                signature=""
+                setSignature={() => {}}
+                isLocked={true}
+                setIsLocked={() => {}}
+                onCompleteSale={() => {}}
+                onClose={() => {}}
+                products={DUMMY_PRODUCTS}
+                permissions={{ canGiveDiscount: true }}
+                isGuideMode={true}
+                activeHotspotId={activeHotspot?.id}
+                onHotspotClick={(id) => {
+                  const h = CART_HOTSPOTS.find((h) => h.id === id);
+                  if (h) setActiveHotspot(h);
+                }}
+              />
+            </div>
+
+            {/* Floating Back Button */}
+            <div className="absolute bottom-8 left-4 md:left-8 z-20 pointer-events-auto">
+                <button
+                  onClick={() => { setActiveGuide('sales'); setActiveHotspot(null); }}
+                  className="bg-white text-gray-900 border px-6 py-3 rounded-xl font-bold shadow-lg flex items-center gap-2 hover:bg-gray-50 transition-all"
+                >
+                  <ArrowLeft size={16} /> Back to Sales Guide
+                </button>
+            </div>
+
+            {/* Hotspot Tooltip Modal */}
+            {activeHotspot && (
+                <div className="absolute inset-0 z-40 flex items-center justify-center p-4 pointer-events-auto bg-black/20 backdrop-blur-[1px]" onClick={() => setActiveHotspot(null)}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+                        <div className="bg-primary p-4 flex justify-between items-center text-white">
+                            <h3 className="font-bold flex items-center gap-2"><Info size={18} /> {activeHotspot.title}</h3>
+                            <button onClick={() => setActiveHotspot(null)} className="text-white/70 hover:text-white transition-colors"><X size={20} /></button>
+                        </div>
+                        <div className="p-5">
+                            <p className="text-gray-600 leading-relaxed text-sm">{activeHotspot.description}</p>
+                            <div className="mt-6 flex justify-end"><button onClick={() => setActiveHotspot(null)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm font-bold transition-colors">Got it</button></div>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+      </div>
+    );
+  }
+
   if (activeGuide === 'sales') {
     return (
       <div className="relative h-full flex flex-col bg-gray-50 overflow-hidden">
@@ -258,7 +398,7 @@ const GuidesScreen: React.FC = () => {
         <div className="flex-1 relative overflow-hidden select-none bg-gray-50/50 flex flex-col md:flex-row">
             <div className="absolute inset-0 z-10 pointer-events-auto cursor-default"></div>
             {/* Sales Screen Side */}
-            <div className="flex-1 overflow-auto p-4 md:p-8 opacity-90 relative pointer-events-none">
+            <div className="flex-1 overflow-auto p-4 md:p-8 opacity-90 relative pointer-events-none pb-32">
               <SalesScreen
                  products={DUMMY_PRODUCTS}
                  onAddToCart={() => {}}
@@ -272,38 +412,14 @@ const GuidesScreen: React.FC = () => {
               />
             </div>
 
-            {/* Open Cart Sidebar Side */}
-            <div className="w-full md:w-80 lg:w-96 border-l shadow-2xl opacity-90 h-full flex flex-col bg-white overflow-hidden relative pointer-events-none">
-              <CurrentOrderSidebar
-                cart={DUMMY_CART_ITEMS}
-                setCart={() => {}}
-                customerName=""
-                setCustomerName={() => {}}
-                customerPhone=""
-                setCustomerPhone={() => {}}
-                paymentMethod="Cash"
-                setPaymentMethod={() => {}}
-                amountPaid={50}
-                setAmountPaid={() => {}}
-                globalDiscount={0}
-                setGlobalDiscount={() => {}}
-                isGlobalDiscountPercent={false}
-                setIsGlobalDiscountPercent={() => {}}
-                signature=""
-                setSignature={() => {}}
-                isLocked={true}
-                setIsLocked={() => {}}
-                onCompleteSale={() => {}}
-                onClose={() => {}}
-                products={DUMMY_PRODUCTS}
-                permissions={{ canGiveDiscount: true }}
-                isGuideMode={true}
-                activeHotspotId={activeHotspot?.id}
-                onHotspotClick={(id) => {
-                  const h = SALES_HOTSPOTS.find((h) => h.id === id);
-                  if (h) setActiveHotspot(h);
-                }}
-              />
+            {/* Floating Next Button */}
+            <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20 pointer-events-auto">
+                <button
+                  onClick={() => { setActiveGuide('cart'); setActiveHotspot(null); }}
+                  className="bg-gray-900 text-white px-8 py-4 rounded-full font-black shadow-2xl flex items-center gap-2 hover:bg-black hover:scale-105 transition-all"
+                >
+                  Next: Cart Walkthrough <ArrowLeft size={20} className="rotate-180" />
+                </button>
             </div>
 
             {/* Hotspot Tooltip Modal */}
