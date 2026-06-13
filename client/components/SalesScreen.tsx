@@ -6,15 +6,19 @@ import { formatCurrency } from '../utils/currency';
 import AlphabetScrubber from './AlphabetScrubber';
 import { useAlphabetIndexer } from '@/hooks/useAlphabetIndexer';
 import { useToast } from './ToastProvider';
+import { GuideWrapper } from './GuideWrapper';
 
 interface SalesScreenProps {
   products: Product[];
   onAddToCart: (product: Product, unit?: ProductUnit) => void;
   permissions?: any;
   isReadOnly?: boolean;
+  isGuideMode?: boolean;
+  activeHotspotId?: string;
+  onHotspotClick?: (id: string) => void;
 }
 
-const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permissions, isReadOnly }) => {
+const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permissions, isReadOnly, isGuideMode, activeHotspotId, onHotspotClick }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [visibleCount, setVisibleCount] = useState(50); // Performance Pagination
@@ -65,7 +69,8 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permis
         </div>
 
         <div className="flex flex-col sm:flex-row gap-2">
-          <div className="relative flex-1">
+          <GuideWrapper id="search" className="flex-1 w-full" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick} dotPosition="top-1/2 right-0 -translate-y-1/2 -mr-2">
+            <div className="relative flex-1 w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
             <input 
               type="text"
@@ -79,7 +84,9 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permis
               {products.map(p => <option key={p.id} value={p.name} />)}
             </datalist>
           </div>
-          <select 
+          </GuideWrapper>
+          <GuideWrapper id="filter" className="w-full sm:w-auto" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick} dotPosition="top-0 right-0 -mt-2 -mr-2">
+            <select
             className="px-4 py-3 bg-white border border-gray-100 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-primary outline-none shadow-sm"
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
@@ -87,6 +94,7 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permis
             <option value="All">All Categories</option>
             {[...categories].sort().map(c => <option key={c} value={c}>{c}</option>)}
           </select>
+          </GuideWrapper>
         </div>
       </div>
 
@@ -112,11 +120,13 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permis
                         {isAlpha ? firstChar : '#'}
                     </div>
                  )}
-                 <ProductItem
-                    p={p}
-                    isReadOnly={isReadOnly}
-                    onClick={handleProductClick}
-                 />
+                 <GuideWrapper id="product-click" className="w-full" isGuideMode={isGuideMode && index === 0} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick} dotPosition="top-1/2 right-4 -translate-y-1/2">
+                   <ProductItem
+                      p={p}
+                      isReadOnly={isReadOnly}
+                      onClick={handleProductClick}
+                   />
+                 </GuideWrapper>
               </React.Fragment>
             );
          })
