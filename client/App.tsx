@@ -18,7 +18,8 @@ import {
   Bell,
   AlertCircle,
   X,
-  CloudUpload
+  CloudUpload,
+  BookOpen
 } from 'lucide-react';
 import { InventoryState, UserRole, Product, ProductUnit, Transaction, BusinessProfile, TabId, SaleItem, PaymentMethod, Expenditure, ActivityLog, Shop } from './types';
 import useTabRouting from './hooks/useTabRouting';
@@ -47,6 +48,7 @@ import NotificationCenter from './components/NotificationCenter';
 import WelcomeScreen from './components/WelcomeScreen';
 import AdminDashboard from './components/AdminDashboard';
 import AdminLogin from './components/AdminLogin';
+import GuidesScreen from './components/GuidesScreen';
 import { loadAdminToken, clearAdminToken } from './services/api';
 
 // Helper to check for active alerts (duplicated from NotificationCenter to avoid circular deps or complex state lifting)
@@ -79,6 +81,7 @@ const TAB_LABELS: Record<string, string> = {
   history: 'Past Sales',
   dashboard: 'Dashboard',
   expenditure: 'Expenses',
+  guides: 'Guides',
   settings: 'Settings'
 };
 
@@ -1360,12 +1363,12 @@ const App: React.FC = () => {
     const trialEndDate = entitlementTrial || businessTrial;
     const trialActive = trialEndDate ? trialEndDate >= new Date() : false;
 
-    const PAGE_IDS: TabId[] = ['sales', 'inventory', 'history', 'expenditure', 'dashboard', 'settings'];
+    const PAGE_IDS: TabId[] = ['sales', 'inventory', 'history', 'expenditure', 'dashboard', 'guides', 'settings'];
     const ownerTabs = PAGE_IDS;
 
     if (state.role === 'owner') return ownerTabs;
 
-    const staffTabs: string[] = ['sales'];
+    const staffTabs: string[] = ['sales', 'guides'];
     const perms = (state.business.staffPermissions as any) || {};
     if (perms.canViewInventory || perms.canEditInventory) staffTabs.push('inventory');
     if (perms.canViewHistory || perms.canEditHistory) staffTabs.push('history');
@@ -1498,7 +1501,7 @@ const App: React.FC = () => {
           {allowedTabs.map(tab => (
             <SidebarLink key={tab} active={activeTab === tab} onClick={() => handleTabChange(tab)} icon={
               tab === 'sales' ? <ShoppingBag /> : tab === 'inventory' ? <Package /> : tab === 'history' ? <History /> : 
-              tab === 'dashboard' ? <BarChart3 /> : tab === 'expenditure' ? <Wallet /> : <Settings />
+              tab === 'dashboard' ? <BarChart3 /> : tab === 'expenditure' ? <Wallet /> : tab === 'guides' ? <BookOpen /> : <Settings />
             } label={TAB_LABELS[tab] || tab.charAt(0).toUpperCase() + tab.slice(1)} />
           ))}
         </nav>
@@ -1697,15 +1700,24 @@ const App: React.FC = () => {
             </div>
           )}
 
+          {visitedTabs.has('guides') && (
+             <div
+               className="absolute inset-0 overflow-y-auto p-0 md:p-0"
+               style={{ display: activeTab === 'guides' ? 'block' : 'none' }}
+            >
+               <GuidesScreen />
+            </div>
+          )}
+
 
         </div>
 
         {/* Mobile Bottom Nav */}
-        <nav className="md:hidden bg-white border-t flex justify-around p-2 shrink-0 z-50">
+        <nav className="md:hidden bg-white border-t flex justify-around p-2 shrink-0 z-50 overflow-x-auto hide-scrollbar">
           {allowedTabs.map(tab => (
             <MobileNavLink key={tab} active={activeTab === tab} onClick={() => handleTabChange(tab)} icon={
               tab === 'sales' ? <ShoppingBag /> : tab === 'inventory' ? <Package /> : tab === 'history' ? <History /> : 
-              tab === 'dashboard' ? <BarChart3 /> : tab === 'expenditure' ? <Wallet /> : <Settings />
+              tab === 'dashboard' ? <BarChart3 /> : tab === 'expenditure' ? <Wallet /> : tab === 'guides' ? <BookOpen /> : <Settings />
             } label={TAB_LABELS[tab] || tab.charAt(0).toUpperCase() + tab.slice(1)} />
           ))}
         </nav>
@@ -1884,7 +1896,7 @@ const App: React.FC = () => {
       </div>
 
       {/* Hide gBot on Inventory and Expenditure screens in mobile view so it doesn't block the Plus button */}
-      {!(['expenditure', 'inventory'].includes(activeTab) && isMobileView) && (
+      {!(['expenditure', 'inventory', 'guides'].includes(activeTab) && isMobileView) && (
         <SupportBot onNavigate={handleBotNavigate} uiContext={botUiContext} />
       )}
 
