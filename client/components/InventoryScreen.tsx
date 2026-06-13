@@ -82,8 +82,10 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
         console.error('Failed to fetch categories');
       }
     };
-    if (navigator.onLine) fetchCats();
-  }, []);
+    // Only attempt to fetch categories if we are online according to props.
+    // In dummy mode (GuidesScreen), isOnline will be passed as false to prevent fetching.
+    if (navigator.onLine && isOnline) fetchCats();
+  }, [isOnline]);
 
   // Sync with URL params
   useEffect(() => {
