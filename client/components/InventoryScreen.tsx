@@ -19,9 +19,12 @@ interface InventoryScreenProps {
   isOnline: boolean;
   initialParams?: { id?: string; search?: string; filter?: string };
   refreshData: () => Promise<void>;
+  isGuideMode?: boolean;
+  activeHotspotId?: string;
+  onHotspotClick?: (id: string) => void;
 }
 
-const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdateProducts, isOwner, isReadOnly, isOnline, initialParams, refreshData }) => {
+const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdateProducts, isOwner, isReadOnly, isOnline, initialParams, refreshData, isGuideMode, activeHotspotId, onHotspotClick }) => {
   // Ensure safeReadOnly respects the passed prop (for subscription lock), falling back to permissions logic if needed
   // App.tsx handles the permission logic in the passed isReadOnly prop.
   const safeReadOnly = isReadOnly;
@@ -502,6 +505,30 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     }
   };
 
+  // Guide Mode helper to wrap elements in a positioned container with a dot
+  const GuideWrapper = ({ id, children, className = '' }: { id: string, children: React.ReactNode, className?: string }) => {
+      if (!isGuideMode) return <>{children}</>;
+
+      return (
+          <div className={`relative ${className}`}>
+              {children}
+              <div className="absolute top-0 right-0 -mt-2 -mr-2 z-[60]">
+                  <button
+                      className="relative flex items-center justify-center w-8 h-8 group z-50 pointer-events-auto"
+                      onClick={(e) => {
+                          e.stopPropagation();
+                          if (onHotspotClick) onHotspotClick(id);
+                      }}
+                      aria-label={`Learn more`}
+                  >
+                      <span className={`absolute inline-flex h-full w-full rounded-full opacity-75 animate-ping ${activeHotspotId === id ? 'bg-indigo-600 scale-125' : 'bg-indigo-400'}`}></span>
+                      <span className={`relative inline-flex rounded-full h-4 w-4 border-2 border-white shadow-lg transition-transform ${activeHotspotId === id ? 'bg-indigo-700 scale-125' : 'bg-primary group-hover:scale-125'}`}></span>
+                  </button>
+              </div>
+          </div>
+      );
+  };
+
   const confirmDeleteProduct = async () => {
     if (!itemToDelete) return;
     setIsDeleting(true);
@@ -654,12 +681,14 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
         <div className={`flex gap-2 ${isSelectionMode ? 'hidden md:flex' : ''}`}>
            {!safeReadOnly && (
-             <button
-               onClick={() => setIsCategoryManagerOpen(true)}
-               className="bg-white text-gray-700 px-4 py-3 rounded-xl flex items-center gap-2 font-bold border hover:bg-gray-50 transition-all"
-             >
-               <Tag size={20} /> <span className="hidden md:inline">Manage Categories</span>
-             </button>
+             <GuideWrapper id="categories">
+                 <button
+                   onClick={() => setIsCategoryManagerOpen(true)}
+                   className="bg-white text-gray-700 px-4 py-3 rounded-xl flex items-center gap-2 font-bold border hover:bg-gray-50 transition-all"
+                 >
+                   <Tag size={20} /> <span className="hidden md:inline">Manage Categories</span>
+                 </button>
+             </GuideWrapper>
            )}
 
           {selectedIds.size > 0 && !safeReadOnly && (
@@ -672,9 +701,11 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
               <ListTodo size={20} /> Edit Many ({selectedIds.size})
             </button>
           )}
-          <button onClick={handleStartVerification} disabled={isLoadingVerification || isVerifying || !isOnline} className="bg-blue-50 text-blue-700 px-4 py-3 rounded-xl flex items-center gap-2 font-bold border border-blue-200 hover:bg-blue-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-            {(isLoadingVerification || isVerifying) ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />} <span className="hidden md:inline">Verify Stock</span>
-          </button>
+          <GuideWrapper id="verify-stock">
+              <button onClick={handleStartVerification} disabled={isLoadingVerification || isVerifying || !isOnline} className="bg-blue-50 text-blue-700 px-4 py-3 rounded-xl flex items-center gap-2 font-bold border border-blue-200 hover:bg-blue-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                {(isLoadingVerification || isVerifying) ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />} <span className="hidden md:inline">Verify Stock</span>
+              </button>
+          </GuideWrapper>
           {!safeReadOnly && (
             <>
               <button
@@ -683,12 +714,14 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
               >
                 <Download size={20} /> <span className="hidden md:inline">Import CSV</span>
               </button>
-              <button
-                onClick={handleAddNew}
-                className="hidden md:flex bg-primary text-white px-6 py-3 rounded-xl items-center gap-2 font-bold shadow-lg shadow-indigo-100 hover:opacity-90 transition-all active:scale-95"
-              >
-                <Plus size={20} /> <span className="hidden md:inline">Add New</span>
-              </button>
+              <GuideWrapper id="add-product">
+                  <button
+                    onClick={handleAddNew}
+                    className="hidden md:flex bg-primary text-white px-6 py-3 rounded-xl items-center gap-2 font-bold shadow-lg shadow-indigo-100 hover:opacity-90 transition-all active:scale-95"
+                  >
+                    <Plus size={20} /> <span className="hidden md:inline">Add New</span>
+                  </button>
+              </GuideWrapper>
             </>
           )}
         </div>
@@ -704,13 +737,15 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
           >
             <Download size={24} />
           </button>
-          <button
-            onClick={handleAddNew}
-            className="p-4 bg-primary text-white rounded-full shadow-xl hover:bg-indigo-700 active:scale-95 transition-all"
-            aria-label="Add New Product"
-          >
-            <Plus size={24} />
-          </button>
+          <GuideWrapper id="add-product">
+              <button
+                onClick={handleAddNew}
+                className="p-4 bg-primary text-white rounded-full shadow-xl hover:bg-indigo-700 active:scale-95 transition-all"
+                aria-label="Add New Product"
+              >
+                <Plus size={24} />
+              </button>
+          </GuideWrapper>
         </div>
       )}
 
@@ -719,20 +754,22 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
         {/* Row 1: Search + Toggle */}
         <div className="flex gap-2 items-center">
-             <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                <input
-                    type="text"
-                    list="inventory-suggestions"
-                    placeholder="Search products..."
-                    className="w-full pl-10 pr-4 py-2 bg-gray-50 border-none rounded-lg focus:ring-2 focus:ring-primary outline-none"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                />
-                <datalist id="inventory-suggestions">
-                {products.map(p => <option key={p.id} value={p.name} />)}
-                </datalist>
-            </div>
+             <GuideWrapper id="search" className="flex-1">
+                 <div className="relative flex-1 w-full">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                    <input
+                        type="text"
+                        list="inventory-suggestions"
+                        placeholder="Search products..."
+                        className="w-full pl-10 pr-4 py-2 bg-gray-50 border-none rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                    <datalist id="inventory-suggestions">
+                    {products.map(p => <option key={p.id} value={p.name} />)}
+                    </datalist>
+                </div>
+            </GuideWrapper>
             <button
                 onClick={() => setIsFiltersOpen(!isFiltersOpen)}
                 className={`md:hidden p-2 rounded-lg border ${isFiltersOpen ? 'bg-primary text-white' : 'bg-gray-50 text-gray-600'}`}
@@ -863,22 +900,24 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <span className={`w-2 h-2 rounded-full ${product.currentStock < 10 ? 'bg-red-500 animate-pulse' : 'bg-green-500'}`}></span>
-                      {(!safeReadOnly && inlineEditingId === product.id) ? (
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="number"
-                            className="w-20 px-2 py-1 border rounded font-bold text-gray-800"
-                            value={inlineEditData[product.id]?.currentStock ?? product.currentStock}
-                            onChange={(e) => handleInlineUpdateLocal(product.id, 'currentStock', e.target.value)}
-                          />
-                          <span className="text-xs text-gray-500">{product.baseUnit}</span>
+                    <GuideWrapper id="stock-status">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full ${product.currentStock < 10 ? 'bg-red-500 animate-pulse' : 'bg-green-500'}`}></span>
+                          {(!safeReadOnly && inlineEditingId === product.id) ? (
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="number"
+                                className="w-20 px-2 py-1 border rounded font-bold text-gray-800"
+                                value={inlineEditData[product.id]?.currentStock ?? product.currentStock}
+                                onChange={(e) => handleInlineUpdateLocal(product.id, 'currentStock', e.target.value)}
+                              />
+                              <span className="text-xs text-gray-500">{product.baseUnit}</span>
+                            </div>
+                          ) : (
+                            <span className="font-bold text-gray-800">{product.currentStock} {product.baseUnit}</span>
+                          )}
                         </div>
-                      ) : (
-                        <span className="font-bold text-gray-800">{product.currentStock} {product.baseUnit}</span>
-                      )}
-                    </div>
+                    </GuideWrapper>
                   </td>
                   <td className="px-6 py-4 font-black text-gray-900">
                     {(!safeReadOnly && inlineEditingId === product.id) ? (
@@ -897,58 +936,60 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                   </td>
                   <td className="px-6 py-4">
                     {!safeReadOnly && (
-                      <div className="flex gap-2">
-                        {inlineEditingId === product.id ? (
-                            <>
-                                <button
-                                    onClick={() => handleInlineSave(product.id)}
-                                    disabled={isInlineSaving === product.id}
-                                    className="p-2 text-green-500 hover:text-green-700 disabled:opacity-50"
-                                    title="Save"
-                                >
-                                    {isInlineSaving === product.id ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        setInlineEditingId(null);
-                                        setInlineEditData(prev => { const next = {...prev}; delete next[product.id]; return next; });
-                                    }}
-                                    disabled={isInlineSaving === product.id}
-                                    className="p-2 text-red-500 hover:text-red-700 disabled:opacity-50"
-                                    title="Cancel"
-                                >
-                                    <X size={18} />
-                                </button>
-                            </>
-                        ) : (
-                            <>
-                                <button
-                                    onClick={() => setInlineEditingId(product.id)}
-                                    className="p-2 text-gray-400 hover:text-primary"
-                                    title="Quick Edit"
-                                >
-                                    <Edit3 size={18} />
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        if (!isOnline) {
-                                            addToast('Please connect to the internet to perform this action.', 'error');
-                                            return;
-                                        }
-                                        setEditingProductId(product.id);
-                                        setNewProduct({ ...product });
-                                        setIsModalOpen(true);
-                                    updateUrlForProduct(product.id);
-                                    }}
-                                    className="p-2 text-gray-400 hover:text-primary"
-                                    title="Full Edit"
-                                >
-                                    <Maximize2 size={18} />
-                                </button>
-                                <button onClick={() => handleDeleteProduct(product.id)} className="p-2 text-gray-400 hover:text-red-500"><Trash2 size={18} /></button>
-                            </>
-                        )}
-                      </div>
+                      <GuideWrapper id="quick-edit">
+                          <div className="flex gap-2">
+                            {inlineEditingId === product.id ? (
+                                <>
+                                    <button
+                                        onClick={() => handleInlineSave(product.id)}
+                                        disabled={isInlineSaving === product.id}
+                                        className="p-2 text-green-500 hover:text-green-700 disabled:opacity-50"
+                                        title="Save"
+                                    >
+                                        {isInlineSaving === product.id ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setInlineEditingId(null);
+                                            setInlineEditData(prev => { const next = {...prev}; delete next[product.id]; return next; });
+                                        }}
+                                        disabled={isInlineSaving === product.id}
+                                        className="p-2 text-red-500 hover:text-red-700 disabled:opacity-50"
+                                        title="Cancel"
+                                    >
+                                        <X size={18} />
+                                    </button>
+                                </>
+                            ) : (
+                                <>
+                                    <button
+                                        onClick={() => setInlineEditingId(product.id)}
+                                        className="p-2 text-gray-400 hover:text-primary"
+                                        title="Quick Edit"
+                                    >
+                                        <Edit3 size={18} />
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            if (!isOnline) {
+                                                addToast('Please connect to the internet to perform this action.', 'error');
+                                                return;
+                                            }
+                                            setEditingProductId(product.id);
+                                            setNewProduct({ ...product });
+                                            setIsModalOpen(true);
+                                        updateUrlForProduct(product.id);
+                                        }}
+                                        className="p-2 text-gray-400 hover:text-primary"
+                                        title="Full Edit"
+                                    >
+                                        <Maximize2 size={18} />
+                                    </button>
+                                    <button onClick={() => handleDeleteProduct(product.id)} className="p-2 text-gray-400 hover:text-red-500"><Trash2 size={18} /></button>
+                                </>
+                            )}
+                          </div>
+                      </GuideWrapper>
                     )}
                   </td>
                 </tr>
@@ -1011,6 +1052,9 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                  }}
                  onDelete={(hard) => handleDeleteProduct(product.id, hard)}
                  addToast={addToast}
+                 isGuideMode={isGuideMode}
+                 activeHotspotId={activeHotspotId}
+                 onHotspotClick={onHotspotClick}
               />
             );
       })}
@@ -1400,7 +1444,30 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 };
 
 // Extracted Card Component to support hooks usage inside map
-const InventoryCard = React.memo(({ product, showHeader, headerId, firstChar, isSelectionMode, isSelected, onToggleSelection, onLongPressSelection, safeReadOnly, isOnline, onEdit, onDelete, addToast }: any) => {
+const InventoryCard = React.memo(({ product, showHeader, headerId, firstChar, isSelectionMode, isSelected, onToggleSelection, onLongPressSelection, safeReadOnly, isOnline, onEdit, onDelete, addToast, isGuideMode, activeHotspotId, onHotspotClick }: any) => {
+    const GuideWrapper = ({ id, children, className = '' }: { id: string, children: React.ReactNode, className?: string }) => {
+        if (!isGuideMode) return <>{children}</>;
+
+        return (
+            <div className={`relative ${className}`}>
+                {children}
+                <div className="absolute top-0 right-0 -mt-2 -mr-2 z-[60]">
+                    <button
+                        className="relative flex items-center justify-center w-8 h-8 group z-50 pointer-events-auto"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (onHotspotClick) onHotspotClick(id);
+                        }}
+                        aria-label={`Learn more`}
+                    >
+                        <span className={`absolute inline-flex h-full w-full rounded-full opacity-75 animate-ping ${activeHotspotId === id ? 'bg-indigo-600 scale-125' : 'bg-indigo-400'}`}></span>
+                        <span className={`relative inline-flex rounded-full h-4 w-4 border-2 border-white shadow-lg transition-transform ${activeHotspotId === id ? 'bg-indigo-700 scale-125' : 'bg-primary group-hover:scale-125'}`}></span>
+                    </button>
+                </div>
+            </div>
+        );
+    };
+
     const longPressProps = useLongPress(
         onLongPressSelection,
         (e) => {
@@ -1445,10 +1512,12 @@ const InventoryCard = React.memo(({ product, showHeader, headerId, firstChar, is
         </div>
 
         <div className="flex justify-between items-center bg-gray-50 p-3 rounded-xl">
-            <div className="flex flex-col">
-            <span className="text-[10px] uppercase font-bold text-gray-400">Stock</span>
-            <span className={`font-bold ${product.currentStock < 10 ? 'text-red-500' : 'text-gray-900'}`}>{product.currentStock} {product.baseUnit}</span>
-            </div>
+            <GuideWrapper id="stock-status">
+                <div className="flex flex-col">
+                <span className="text-[10px] uppercase font-bold text-gray-400">Stock</span>
+                <span className={`font-bold ${product.currentStock < 10 ? 'text-red-500' : 'text-gray-900'}`}>{product.currentStock} {product.baseUnit}</span>
+                </div>
+            </GuideWrapper>
             <div className="flex flex-col text-right">
             <span className="text-[10px] uppercase font-bold text-gray-400">Price</span>
             <span className="font-black text-gray-900">{formatCurrency(product.sellingPrice)}</span>
@@ -1456,7 +1525,8 @@ const InventoryCard = React.memo(({ product, showHeader, headerId, firstChar, is
         </div>
 
         {!safeReadOnly && !isSelectionMode && (
-        <div className="flex justify-end gap-2 border-t pt-3 mt-1">
+        <GuideWrapper id="quick-edit">
+            <div className="flex justify-end gap-2 border-t pt-3 mt-1">
             {product.isDeleted ? (
                 <>
                     <button
@@ -1499,7 +1569,8 @@ const InventoryCard = React.memo(({ product, showHeader, headerId, firstChar, is
                     </button>
                 </>
             )}
-        </div>
+            </div>
+        </GuideWrapper>
         )}
     </div>
     </React.Fragment>
