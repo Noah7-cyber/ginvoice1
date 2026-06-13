@@ -66,6 +66,11 @@ export const INVENTORY_HOTSPOTS: Hotspot[] = [
     description: 'Categories help group similar items (like "Beverages" or "Equipment"). Create categories here to organize your products and make them easier to find and manage.',
   },
   {
+    id: 'import-csv',
+    title: 'Bulk Import',
+    description: 'Save time by importing hundreds of products at once using a CSV file template.',
+  },
+  {
     id: 'verify-stock',
     title: 'Verify Stock',
     description: 'Periodically check your physical items against your digital records. Click here to go through a guided physical count of your current inventory to prevent discrepancies.',

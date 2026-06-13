@@ -680,22 +680,23 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
         </div>
 
         <div className={`flex gap-2 ${isSelectionMode ? 'hidden md:flex' : ''}`}>
-           {!safeReadOnly && (
+           {(!safeReadOnly || isGuideMode) && (
              <GuideWrapper id="categories" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
                  <button
-                   onClick={() => setIsCategoryManagerOpen(true)}
-                   className="bg-white text-gray-700 px-4 py-3 rounded-xl flex items-center gap-2 font-bold border hover:bg-gray-50 transition-all"
+                   onClick={() => !safeReadOnly && setIsCategoryManagerOpen(true)}
+                   disabled={safeReadOnly && !isGuideMode}
+                   className={`bg-white text-gray-700 px-4 py-3 rounded-xl flex items-center gap-2 font-bold border hover:bg-gray-50 transition-all ${safeReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
                  >
                    <Tag size={20} /> <span className="hidden md:inline">Manage Categories</span>
                  </button>
              </GuideWrapper>
            )}
 
-          {selectedIds.size > 0 && !safeReadOnly && (
+          {selectedIds.size > 0 && (!safeReadOnly || isGuideMode) && (
             <button 
-              onClick={() => setIsBulkEditOpen(true)}
-              disabled={!navigator.onLine}
-              className={`bg-indigo-50 text-indigo-700 px-6 py-3 rounded-xl flex items-center gap-2 font-bold border border-indigo-200 hover:bg-indigo-100 transition-all ${!navigator.onLine ? 'opacity-50 cursor-not-allowed' : ''}`}
+              onClick={() => !safeReadOnly && setIsBulkEditOpen(true)}
+              disabled={(!navigator.onLine && !isGuideMode) || safeReadOnly}
+              className={`bg-indigo-50 text-indigo-700 px-6 py-3 rounded-xl flex items-center gap-2 font-bold border border-indigo-200 hover:bg-indigo-100 transition-all ${(!navigator.onLine || safeReadOnly) ? 'opacity-50 cursor-not-allowed' : ''}`}
               title={!navigator.onLine ? "Internet connection required for bulk updates." : ""}
             >
               <ListTodo size={20} /> Edit Many ({selectedIds.size})
@@ -706,18 +707,22 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                 {(isLoadingVerification || isVerifying) ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />} <span className="hidden md:inline">Verify Stock</span>
               </button>
           </GuideWrapper>
-          {!safeReadOnly && (
+          {(!safeReadOnly || isGuideMode) && (
             <>
-              <button
-                onClick={() => setIsBulkImportOpen(true)}
-                className="hidden md:flex bg-white text-gray-700 border border-gray-200 px-6 py-3 rounded-xl items-center gap-2 font-bold hover:bg-gray-50 transition-all active:scale-95"
-              >
-                <Download size={20} /> <span className="hidden md:inline">Import CSV</span>
-              </button>
+              <GuideWrapper id="import-csv" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
+                  <button
+                    onClick={() => !safeReadOnly && setIsBulkImportOpen(true)}
+                    disabled={safeReadOnly}
+                    className={`hidden md:flex bg-white text-gray-700 border border-gray-200 px-6 py-3 rounded-xl items-center gap-2 font-bold hover:bg-gray-50 transition-all active:scale-95 ${safeReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    <Download size={20} /> <span className="hidden md:inline">Import CSV</span>
+                  </button>
+              </GuideWrapper>
               <GuideWrapper id="add-product" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
                   <button
-                    onClick={handleAddNew}
-                    className="hidden md:flex bg-primary text-white px-6 py-3 rounded-xl items-center gap-2 font-bold shadow-lg shadow-indigo-100 hover:opacity-90 transition-all active:scale-95"
+                    onClick={() => !safeReadOnly && handleAddNew()}
+                    disabled={safeReadOnly}
+                    className={`hidden md:flex bg-primary text-white px-6 py-3 rounded-xl items-center gap-2 font-bold shadow-lg shadow-indigo-100 hover:opacity-90 transition-all active:scale-95 ${safeReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     <Plus size={20} /> <span className="hidden md:inline">Add New</span>
                   </button>
@@ -728,19 +733,23 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
       </div>
 
       {/* Mobile Floating Action Button */}
-      {!safeReadOnly && (
+      {(!safeReadOnly || isGuideMode) && (
         <div className="md:hidden fixed bottom-24 right-4 z-50 flex flex-col gap-3">
-          <button
-            onClick={() => setIsBulkImportOpen(true)}
-            className="p-4 bg-white text-gray-700 border border-gray-200 rounded-full shadow-xl hover:bg-gray-50 active:scale-95 transition-all"
-            aria-label="Import CSV"
-          >
-            <Download size={24} />
-          </button>
+          <GuideWrapper id="import-csv" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick} dotPosition="top-0 right-0 -mt-1 -mr-1">
+              <button
+                onClick={() => !safeReadOnly && setIsBulkImportOpen(true)}
+                disabled={safeReadOnly}
+                className={`p-4 bg-white text-gray-700 border border-gray-200 rounded-full shadow-xl hover:bg-gray-50 active:scale-95 transition-all ${safeReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
+                aria-label="Import CSV"
+              >
+                <Download size={24} />
+              </button>
+          </GuideWrapper>
           <GuideWrapper id="add-product" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick} dotPosition="top-0 right-0 -mt-1 -mr-1">
               <button
-                onClick={handleAddNew}
-                className="p-4 bg-primary text-white rounded-full shadow-xl hover:bg-indigo-700 active:scale-95 transition-all"
+                onClick={() => !safeReadOnly && handleAddNew()}
+                disabled={safeReadOnly}
+                className={`p-4 bg-primary text-white rounded-full shadow-xl hover:bg-indigo-700 active:scale-95 transition-all ${safeReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
                 aria-label="Add New Product"
               >
                 <Plus size={24} />
@@ -935,9 +944,9 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                     )}
                   </td>
                   <td className="px-6 py-4">
-                    {!safeReadOnly && (
+                    {(!safeReadOnly || isGuideMode) && (
                       <GuideWrapper id="quick-edit" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
-                          <div className="flex gap-2">
+                          <div className={`flex gap-2 ${safeReadOnly ? 'opacity-50 pointer-events-none' : ''}`}>
                             {inlineEditingId === product.id ? (
                                 <>
                                     <button
@@ -1501,9 +1510,9 @@ const InventoryCard = React.memo(({ product, showHeader, headerId, firstChar, is
             </div>
         </div>
 
-        {!safeReadOnly && !isSelectionMode && (
+        {(!safeReadOnly || isGuideMode) && !isSelectionMode && (
         <GuideWrapper id="quick-edit" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
-            <div className="flex justify-end gap-2 border-t pt-3 mt-1">
+            <div className={`flex justify-end gap-2 border-t pt-3 mt-1 ${safeReadOnly ? 'opacity-50 pointer-events-none' : ''}`}>
             {product.isDeleted ? (
                 <>
                     <button
