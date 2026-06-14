@@ -193,9 +193,26 @@ const GuidesScreen: React.FC = () => {
   const [activeGuide, setActiveGuide] = useState<'inventory' | 'sales' | null>(null);
   const [activeHotspot, setActiveHotspot] = useState<Hotspot | null>(null);
 
+  // Global CSS to protect dummy app from interactions while allowing scrolling
+  const guideStyles = (
+    <style>{`
+      .guide-protected { pointer-events: auto; }
+      .guide-protected button:not(.guide-hotspot),
+      .guide-protected input,
+      .guide-protected select,
+      .guide-protected textarea {
+        pointer-events: none !important;
+      }
+      .guide-protected .guide-hotspot {
+        pointer-events: auto !important;
+      }
+    `}</style>
+  );
+
   if (activeGuide === 'inventory') {
     return (
       <div className="relative h-full flex flex-col bg-gray-50 overflow-hidden">
+        {guideStyles}
         {/* Header for the Guide View */}
         <div className="bg-white border-b px-4 py-3 flex items-center justify-between shrink-0 z-30 shadow-sm relative">
           <div className="flex items-center gap-3">
@@ -221,9 +238,7 @@ const GuidesScreen: React.FC = () => {
         {/* The "Dummy" App Area with the Hotspot Overlay */}
         <div className="flex-1 relative overflow-hidden select-none bg-gray-50/50">
             {/* We enable pointer-events so clicks go to the child components to hit hotspots */}
-            <div className="absolute inset-0 p-4 md:p-8 opacity-90 overflow-auto">
-                {/* A protective overlay to stop clicks on actual inventory functionality, except for dots */}
-                <div className="absolute inset-0 z-10 pointer-events-auto cursor-default"></div>
+            <div className="guide-protected absolute inset-0 p-4 md:p-8 opacity-90 overflow-auto">
                 <InventoryScreen
                     products={DUMMY_PRODUCTS}
                     onUpdateProducts={() => {}}
@@ -279,6 +294,7 @@ const GuidesScreen: React.FC = () => {
   if (activeGuide === 'cart') {
     return (
       <div className="relative h-full flex flex-col bg-gray-50 overflow-hidden">
+        {guideStyles}
         {/* Header for the Guide View */}
         <div className="bg-white border-b px-4 py-3 flex items-center justify-between shrink-0 z-30 shadow-sm relative">
           <div className="flex items-center gap-3">
@@ -303,10 +319,8 @@ const GuidesScreen: React.FC = () => {
 
         {/* The "Dummy" App Area with the Hotspot Overlay */}
         <div className="flex-1 relative overflow-hidden select-none bg-gray-50/50 flex flex-col md:flex-row items-center justify-center p-4">
-            <div className="absolute inset-0 z-10 pointer-events-auto cursor-default"></div>
-
             {/* Open Cart Sidebar Side */}
-            <div className="w-full max-w-md border shadow-2xl opacity-95 h-full max-h-[800px] rounded-2xl flex flex-col bg-white overflow-hidden relative pointer-events-none">
+            <div className="guide-protected w-full max-w-md border shadow-2xl opacity-95 h-full max-h-[800px] rounded-2xl flex flex-col bg-white overflow-hidden relative">
               <CurrentOrderSidebar
                 cart={DUMMY_CART_ITEMS}
                 setCart={() => {}}
@@ -372,6 +386,7 @@ const GuidesScreen: React.FC = () => {
   if (activeGuide === 'sales') {
     return (
       <div className="relative h-full flex flex-col bg-gray-50 overflow-hidden">
+        {guideStyles}
         {/* Header for the Guide View */}
         <div className="bg-white border-b px-4 py-3 flex items-center justify-between shrink-0 z-30 shadow-sm relative">
           <div className="flex items-center gap-3">
@@ -396,9 +411,8 @@ const GuidesScreen: React.FC = () => {
 
         {/* The "Dummy" App Area with the Hotspot Overlay */}
         <div className="flex-1 relative overflow-hidden select-none bg-gray-50/50 flex flex-col md:flex-row">
-            <div className="absolute inset-0 z-10 pointer-events-auto cursor-default"></div>
             {/* Sales Screen Side */}
-            <div className="flex-1 overflow-auto p-4 md:p-8 opacity-90 relative pointer-events-none pb-32">
+            <div className="guide-protected flex-1 overflow-auto p-4 md:p-8 opacity-90 relative pb-32">
               <SalesScreen
                  products={DUMMY_PRODUCTS}
                  onAddToCart={() => {}}

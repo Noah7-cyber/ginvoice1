@@ -7,7 +7,7 @@ export const GuideWrapper = ({ id, children, className = '', isGuideMode, active
             {children}
             <div className={`absolute ${dotPosition} z-[60]`}>
                 <button
-                    className="relative flex items-center justify-center w-8 h-8 group z-50 pointer-events-auto"
+                    className="guide-hotspot relative flex items-center justify-center w-8 h-8 group z-50 pointer-events-auto"
                     onClick={(e) => {
                         e.stopPropagation();
                         if (onHotspotClick) onHotspotClick(id);
