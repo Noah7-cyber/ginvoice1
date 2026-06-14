@@ -145,6 +145,11 @@ export const CART_HOTSPOTS: Hotspot[] = [
     description: 'Apply a flat amount or percentage discount to the entire bill.'
   },
   {
+    id: 'payment-methods',
+    title: 'Payment Options',
+    description: 'Select Cash, Transfer, POS, or Debt. If a customer owes a balance, they will automatically be added to your Debtors list.'
+  },
+  {
     id: 'checkout',
     title: 'Confirm & Pay',
     description: 'Complete the sale to process payment and print or share a receipt.'

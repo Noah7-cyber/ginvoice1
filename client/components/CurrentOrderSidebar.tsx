@@ -339,12 +339,14 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
             {/* Payment Section */}
             <div className="space-y-3">
               <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Payment Method</label>
-              <div className="grid grid-cols-4 gap-2">
+              <GuideWrapper id="payment-methods" className="w-full" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick} dotPosition="top-1/2 right-0 -translate-y-1/2 -mr-2">
+              <div className="grid grid-cols-4 gap-2 w-full">
                 <PaymentBtn active={paymentMethod === 'cash'} onClick={() => setPaymentMethod('cash')} icon={<Banknote size={14}/>} label="Cash" />
                 <PaymentBtn active={paymentMethod === 'transfer'} onClick={() => setPaymentMethod('transfer')} icon={<CreditCard size={14}/>} label="Transfer" />
                 <PaymentBtn active={paymentMethod === 'pos'} onClick={() => setPaymentMethod('pos')} icon={<CreditCard size={14}/>} label="POS" />
                 <PaymentBtn active={paymentMethod === 'credit'} onClick={() => setPaymentMethod('credit')} icon={<User size={14}/>} label="Debt" />
               </div>
+              </GuideWrapper>
 
               {paymentMethod !== 'cash' && paymentMethod !== 'transfer' && paymentMethod !== 'pos' && (
                 <div className="flex items-center gap-2 p-3 bg-red-50 text-red-600 rounded-xl text-[10px] font-bold">
