@@ -41,6 +41,7 @@ export interface BusinessProfile {
     printReceipts: boolean;
     footerText: string;
     debtorShareTemplate?: string;
+    onlineOnlyMode?: boolean;
     stockVerification?: {
       enabled?: boolean;
       maxQueuePerDay?: number;

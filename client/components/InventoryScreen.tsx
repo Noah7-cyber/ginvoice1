@@ -11,6 +11,7 @@ import AlphabetScrubber from './AlphabetScrubber';
 import { useAlphabetIndexer } from '@/hooks/useAlphabetIndexer';
 import useLongPress from '../hooks/useLongPress';
 import { GuideWrapper } from './GuideWrapper';
+import { getPendingStockDeductions } from '../services/syncQueue';
 
 interface InventoryScreenProps {
   products: Product[];
@@ -58,6 +59,20 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   const [verifyNotes, setVerifyNotes] = useState('');
   const [isLoadingVerification, setIsLoadingVerification] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
+
+  const [pendingDeductions, setPendingDeductions] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    const fetchDeductions = async () => {
+      try {
+        const deductions = await getPendingStockDeductions();
+        setPendingDeductions(deductions);
+      } catch (err) {
+        console.error('Failed to fetch pending stock deductions', err);
+      }
+    };
+    fetchDeductions();
+  }, [products]);
 
   // Category Management
   const [categories, setCategories] = useState<Category[]>([]);
@@ -150,7 +165,20 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
   const [newProduct, setNewProduct] = useState<Partial<Product>>(initialProductState);
 
-  const filteredProducts = useMemo(() => products.filter(p => {
+  const deductedProducts = useMemo(() => {
+    return products.map(p => {
+      const deduction = pendingDeductions[p.id || ''] || 0;
+      if (deduction > 0) {
+        return {
+          ...p,
+          currentStock: Math.max(0, p.currentStock - deduction)
+        };
+      }
+      return p;
+    });
+  }, [products, pendingDeductions]);
+
+  const filteredProducts = useMemo(() => deductedProducts.filter(p => {
     if (p.isDeleted) return false; // Hide deleted items
     const term = searchTerm.toLowerCase();
     const safeName = p.name || '';
@@ -161,7 +189,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     const matchesMaxPrice = maxPrice === '' || p.sellingPrice <= maxPrice;
 
     return matchesSearch && matchesCategory && matchesLowStock && matchesMinPrice && matchesMaxPrice;
-  }).sort((a, b) => (a.name || '').localeCompare(b.name || '')), [products, searchTerm, selectedCategory, filterLowStock, lowStockThreshold, minPrice, maxPrice]);
+  }).sort((a, b) => (a.name || '').localeCompare(b.name || '')), [deductedProducts, searchTerm, selectedCategory, filterLowStock, lowStockThreshold, minPrice, maxPrice]);
 
   // Reset pagination on filter change
   useEffect(() => {

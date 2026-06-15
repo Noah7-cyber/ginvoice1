@@ -7,6 +7,7 @@ import { formatCurrency } from '../utils/currency';
 import SignaturePad from './SignaturePad';
 import { uploadFile, validateDiscountCode } from '../services/api';
 import { GuideWrapper } from './GuideWrapper';
+import { useToast } from './ToastProvider';
 
 const normalizeCustomerName = (value: string) => {
   const clean = (value || '').trim().replace(/\s+/g, ' ');
@@ -47,14 +48,16 @@ interface CurrentOrderSidebarProps {
   isGuideMode?: boolean;
   activeHotspotId?: string;
   onHotspotClick?: (id: string) => void;
+  business?: any;
 }
 
 const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
   cart, setCart, customerName, setCustomerName, paymentMethod, setPaymentMethod,
   customerPhone, setCustomerPhone, amountPaid, setAmountPaid, globalDiscount, setGlobalDiscount, isGlobalDiscountPercent,
   setIsGlobalDiscountPercent, signature, setSignature, isLocked, setIsLocked,
-  onCompleteSale, onClose, products, permissions, isOwner = false, pastCustomers, activeShopName = 'Shop', staffDisplayName, isGuideMode, activeHotspotId, onHotspotClick
+  onCompleteSale, onClose, products, permissions, isOwner = false, pastCustomers, activeShopName = 'Shop', staffDisplayName, isGuideMode, activeHotspotId, onHotspotClick, business
 }) => {
+  const { addToast } = useToast();
   const [activeDiscountEdit, setActiveDiscountEdit] = useState<string | null>(null);
   const [discountCode, setDiscountCode] = useState('');
   const [isValidatingCode, setIsValidatingCode] = useState(false);
@@ -99,6 +102,11 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
 
   const handleCheckout = async () => {
     if (cart.length === 0) return;
+
+    if (!navigator.onLine && business?.settings?.onlineOnlyMode) {
+      addToast("Offline sales have been disabled by the owner. Please connect to the internet.", "error");
+      return;
+    }
 
     let finalSignature = signature;
 

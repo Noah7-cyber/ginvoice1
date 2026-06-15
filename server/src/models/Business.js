@@ -52,6 +52,7 @@ const BusinessSchema = new mongoose.Schema({
     printReceipts: { type: Boolean, default: true },
     footerText: { type: String, default: 'Thank you for your patronage!' },
     debtorShareTemplate: { type: String, default: '' },
+    onlineOnlyMode: { type: Boolean, default: false },
     stockVerification: {
       enabled: { type: Boolean, default: true },
       maxQueuePerDay: { type: Number, default: 5 },
