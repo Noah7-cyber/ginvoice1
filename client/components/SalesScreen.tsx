@@ -13,12 +13,14 @@ interface SalesScreenProps {
   onAddToCart: (product: Product, unit?: ProductUnit) => void;
   permissions?: any;
   isReadOnly?: boolean;
+  isOnline?: boolean;
+  strictOnlineMode?: boolean;
   isGuideMode?: boolean;
   activeHotspotId?: string;
   onHotspotClick?: (id: string) => void;
 }
 
-const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permissions, isReadOnly, isGuideMode, activeHotspotId, onHotspotClick }) => {
+const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permissions, isReadOnly, isOnline, strictOnlineMode, isGuideMode, activeHotspotId, onHotspotClick }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [visibleCount, setVisibleCount] = useState(50); // Performance Pagination
@@ -51,6 +53,10 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permis
   const handleProductClick = (p: Product) => {
     if (isReadOnly) {
         addToast("Subscription Expired. Cannot record sales.", "error");
+        return;
+    }
+    if (isOnline === false && strictOnlineMode) {
+        addToast("Network unavailable. Online-only mode is active.", "error");
         return;
     }
     if (p.units && p.units.length > 0) {
@@ -124,6 +130,7 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permis
                    <ProductItem
                       p={p}
                       isReadOnly={isReadOnly}
+                      isOfflineDisabled={isOnline === false && strictOnlineMode}
                       onClick={handleProductClick}
                    />
                  </GuideWrapper>
@@ -187,7 +194,7 @@ const SalesScreen: React.FC<SalesScreenProps> = ({ products, onAddToCart, permis
   );
 };
 
-const ProductItem = React.memo(({ p, isReadOnly, onClick }: { p: Product, isReadOnly?: boolean, onClick: (p: Product) => void }) => {
+const ProductItem = React.memo(({ p, isReadOnly, isOfflineDisabled, onClick }: { p: Product, isReadOnly?: boolean, isOfflineDisabled?: boolean, onClick: (p: Product) => void }) => {
     return (
         <button
             onClick={() => onClick(p)}
@@ -195,7 +202,7 @@ const ProductItem = React.memo(({ p, isReadOnly, onClick }: { p: Product, isRead
             className={`
             group flex items-center gap-4 p-4 bg-white border border-gray-50 rounded-2xl shadow-sm transition-all text-left
             ${p.currentStock <= 0 ? 'opacity-50 grayscale cursor-not-allowed' :
-                isReadOnly ? 'opacity-60 grayscale cursor-not-allowed' :
+                isReadOnly || isOfflineDisabled ? 'opacity-60 grayscale cursor-not-allowed' :
                 'hover:border-primary hover:shadow-md active:scale-[0.98]'}
             `}
         >
