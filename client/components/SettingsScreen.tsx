@@ -611,6 +611,26 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                       </div>
                   </div>
 
+                  {/* Strict Online Mode Toggle */}
+                  <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
+                      <h2 className="text-lg font-bold flex items-center gap-2"><CloudCheck className="text-primary" /> Network Settings</h2>
+                      <div className="flex items-center justify-between p-4 rounded-2xl border bg-gray-50">
+                          <div>
+                              <p className="font-bold text-sm text-gray-900">Strict Online Mode</p>
+                              <p className="text-[10px] text-gray-500 mt-0.5">Disable sales when internet is disconnected</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                                updateSettingField('onlineOnlyMode', !formData.settings?.onlineOnlyMode);
+                            }}
+                            className={`transition-colors ${formData.settings?.onlineOnlyMode ? 'text-primary' : 'text-gray-300'}`}
+                          >
+                              {formData.settings?.onlineOnlyMode ? <ToggleRight size={32} /> : <ToggleLeft size={32} />}
+                          </button>
+                      </div>
+                  </div>
+
                   {/* Tax Compliance Toggle */}
                   <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
                       <h2 className="text-lg font-bold flex items-center gap-2"><ShieldCheck className="text-primary" /> Tax Compliance</h2>

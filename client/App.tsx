@@ -1542,7 +1542,7 @@ const App: React.FC = () => {
                 setIsOfflinePanelOpen(true);
                 await refreshPendingJobs();
               }}
-              className="relative p-2 rounded-xl text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition-all"
+              className="hidden relative p-2 rounded-xl text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition-all"
               title="Pending Sync"
             >
               <CloudUpload size={22} />
@@ -1891,7 +1891,7 @@ const App: React.FC = () => {
       <div className={`fixed inset-y-0 right-0 z-[60] transition-all duration-300 ease-in-out md:relative md:inset-auto md:z-auto ${isCartOpen ? 'translate-x-0 w-full max-w-sm md:w-80 lg:w-96 border-l shadow-2xl md:shadow-none' : 'translate-x-full w-0 overflow-hidden'}`}>
         {isCartOpen && window.innerWidth < 768 && <div className="fixed inset-0 bg-black/40 backdrop-blur-sm -z-10" onClick={() => setIsCartOpen(false)} />}
         <div className="h-full bg-white flex flex-col">
-          <CurrentOrderSidebar cart={cart} setCart={setCart} customerName={customerName} setCustomerName={setCustomerName} customerPhone={customerPhone} setCustomerPhone={setCustomerPhone} paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod} amountPaid={amountPaid} setAmountPaid={setAmountPaid} globalDiscount={globalDiscount} setGlobalDiscount={setGlobalDiscount} isGlobalDiscountPercent={isGlobalDiscountPercent} setIsGlobalDiscountPercent={setIsGlobalDiscountPercent} signature={signature} setSignature={setSignature} isLocked={isLocked} setIsLocked={setIsLocked} onCompleteSale={handleCompleteSale} onClose={() => setIsCartOpen(false)} products={state.products} permissions={state.business.staffPermissions} isOwner={state.role === 'owner'} pastCustomers={pastCustomers} activeShopName={(state.shops || []).find((s) => s.id === state.activeShopId)?.name || state.business.staffContext?.assignedShopName || 'Shop'} staffDisplayName={state.business.staffContext?.staffName || undefined} />
+          <CurrentOrderSidebar cart={cart} setCart={setCart} customerName={customerName} setCustomerName={setCustomerName} customerPhone={customerPhone} setCustomerPhone={setCustomerPhone} paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod} amountPaid={amountPaid} setAmountPaid={setAmountPaid} globalDiscount={globalDiscount} setGlobalDiscount={setGlobalDiscount} isGlobalDiscountPercent={isGlobalDiscountPercent} setIsGlobalDiscountPercent={setIsGlobalDiscountPercent} signature={signature} setSignature={setSignature} isLocked={isLocked} setIsLocked={setIsLocked} onCompleteSale={handleCompleteSale} onClose={() => setIsCartOpen(false)} products={state.products} permissions={state.business.staffPermissions} isOwner={state.role === 'owner'} pastCustomers={pastCustomers} activeShopName={(state.shops || []).find((s) => s.id === state.activeShopId)?.name || state.business.staffContext?.assignedShopName || 'Shop'} staffDisplayName={state.business.staffContext?.staffName || undefined} business={state.business} />
         </div>
       </div>
 

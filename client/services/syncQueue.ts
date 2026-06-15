@@ -65,6 +65,35 @@ export const getSyncJobs = async (): Promise<SyncJob[]> => {
   });
 };
 
+export const getPendingStockDeductions = async (): Promise<Record<string, number>> => {
+  const jobs = await getSyncJobs();
+  const deductions: Record<string, number> = {};
+
+  for (const job of jobs) {
+    if (job.payload?.transactions && Array.isArray(job.payload.transactions)) {
+      for (const tx of job.payload.transactions) {
+        if (tx.items && Array.isArray(tx.items)) {
+          for (const item of tx.items) {
+            if (item.productId && item.quantity) {
+              const qty = Number(item.quantity) || 0;
+              const multiplier = item.selectedUnit?.multiplier ? Number(item.selectedUnit.multiplier) : 1;
+              const totalQty = qty * multiplier;
+
+              if (deductions[item.productId]) {
+                deductions[item.productId] += totalQty;
+              } else {
+                deductions[item.productId] = totalQty;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return deductions;
+};
+
 export const removeSyncJob = async (id: number) => {
   return withStore('readwrite', async (store) => {
     await requestToPromise(store.delete(id));
