@@ -1588,7 +1588,13 @@ const App: React.FC = () => {
                className="absolute inset-0 overflow-y-auto p-4 md:p-8"
                style={{ display: activeTab === 'sales' ? 'block' : 'none' }}
             >
-               <SalesScreen products={state.products} onAddToCart={addToCart} isReadOnly={subscriptionLocked} />
+               <SalesScreen
+                  products={state.products}
+                  onAddToCart={addToCart}
+                  isReadOnly={subscriptionLocked}
+                  isOnline={isOnline}
+                  strictOnlineMode={state.business?.settings?.onlineOnlyMode}
+               />
             </div>
           )}
 
