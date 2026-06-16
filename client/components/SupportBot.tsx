@@ -18,7 +18,7 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate, uiCo
   const inputRef = useRef<HTMLInputElement>(null);
 
   // State
-  const [messages, setMessages] = useState<{ from: 'bot' | 'user'; text: string; isAction?: boolean }[]>([
+  const [messages, setMessages] = useState<{ from: 'bot' | 'user'; text: string; isAction?: boolean; prediction?: { text: string; actionText: string } | null }[]>([
     { from: 'bot', text: 'Hello! I am your Ginvoice Market OS Assistant. I can help with business questions, math, or navigating the app.' }
   ]);
   const [inputText, setInputText] = useState('');
@@ -47,9 +47,9 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate, uiCo
       }
   }, [open]);
 
-  const addMessage = (from: 'bot' | 'user', text: string, isAction = false) => {
+  const addMessage = (from: 'bot' | 'user', text: string, isAction = false, prediction: { text: string; actionText: string } | null = null) => {
     setMessages(prev => {
-      const next = [...prev, { from, text, isAction }];
+      const next = [...prev, { from, text, isAction, prediction }];
       return next.slice(-40);
     });
   };
