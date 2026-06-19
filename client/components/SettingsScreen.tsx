@@ -8,6 +8,7 @@ import SupportBot from './SupportBot';
 import { useToast } from './ToastProvider';
 import { loadState } from '../services/storage';
 import { useTranslation } from 'react-i18next';
+import { GuideWrapper } from './GuideWrapper';
 
 interface SettingsScreenProps {
   business: BusinessProfile;
@@ -19,9 +20,12 @@ interface SettingsScreenProps {
   onDeleteAccount?: () => void;
   isOnline: boolean;
   onSubscribe?: () => void;
+  isGuideMode?: boolean;
+  activeHotspotId?: string;
+  onHotspotClick?: (id: string) => void;
 }
 
-const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusiness, onManualSync, lastSyncedAt, isSyncing, onLogout, onDeleteAccount, isOnline, onSubscribe }) => {
+const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusiness, onManualSync, lastSyncedAt, isSyncing, onLogout, onDeleteAccount, isOnline, onSubscribe, isGuideMode, activeHotspotId, onHotspotClick }) => {
   const { t, i18n } = useTranslation();
   const { addToast } = useToast();
   const [formData, setFormData] = useState<BusinessProfile>(business);
@@ -420,7 +424,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`flex items-center gap-2 px-4 py-3 rounded-xl font-bold text-sm whitespace-nowrap transition-all ${
+                className={`guide-hotspot flex items-center gap-2 px-4 py-3 rounded-xl font-bold text-sm whitespace-nowrap transition-all ${
                     activeTab === tab.id
                     ? 'bg-primary text-white shadow-md'
                     : 'bg-white text-gray-500 hover:bg-gray-50 border border-transparent'
@@ -571,6 +575,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                   </div>
 
                   {/* Receipt Settings */}
+                  <GuideWrapper id="receipt-settings" className="w-full" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
                   <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
                       <h2 className="text-lg font-bold flex items-center gap-2"><Printer className="text-primary" /> Receipt Settings</h2>
                       <div className="flex items-center justify-between p-4 rounded-2xl border bg-gray-50">
@@ -610,6 +615,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                           <p className="text-[11px] text-gray-500">Leave blank to use the default statement format.</p>
                       </div>
                   </div>
+                  </GuideWrapper>
 
                   {/* Strict Online Mode Toggle */}
                   <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
@@ -673,6 +679,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                   </div>
 
                   {/* Staff Permissions */}
+                  <GuideWrapper id="staff-management" className="w-full" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
                   <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
                     <h2 className="text-lg font-bold flex items-center gap-2"><ShieldCheck className="text-primary" /> Staff Permissions</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -692,6 +699,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                         })}
                     </div>
                   </div>
+                  </GuideWrapper>
 
                    {/* Discount Codes */}
                     <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-4">

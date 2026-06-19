@@ -4,6 +4,7 @@ import { useToast } from '../components/ToastProvider';
 import { getCategories } from '../services/api';
 import { Category } from '../types';
 import CategoryManager from './CategoryManager';
+import { GuideWrapper } from './GuideWrapper';
 
 // Update Interface to match your types.ts
 interface Expenditure {
@@ -25,9 +26,12 @@ interface ExpenditureScreenProps {
   onEditExpenditure: (item: Expenditure) => void;
   isOnline: boolean;
   isReadOnly?: boolean;
+  isGuideMode?: boolean;
+  activeHotspotId?: string;
+  onHotspotClick?: (id: string) => void;
 }
 
-const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onAddExpenditure, onDeleteExpenditure, onEditExpenditure, isOnline, isReadOnly }) => {
+const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onAddExpenditure, onDeleteExpenditure, onEditExpenditure, isOnline, isReadOnly, isGuideMode, activeHotspotId, onHotspotClick }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const { addToast } = useToast();
@@ -236,18 +240,20 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
              <>
                 <button
                     onClick={() => setIsCategoryManagerOpen(true)}
-                    className="flex items-center justify-center px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-bold shadow-sm"
+                    className="guide-hotspot flex items-center justify-center px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-bold shadow-sm"
                 >
                     <Layers className="w-5 h-5 mr-2" />
                     <span className="hidden md:inline">Categories</span>
                 </button>
+                <GuideWrapper id="add-expense" className="hidden md:block" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick} dotPosition="top-0 right-0 -mt-2 -mr-2">
                 <button
                     onClick={() => setShowAddModal(true)}
-                    className="hidden md:flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-bold shadow-lg shadow-blue-100"
+                    className="guide-hotspot flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-bold shadow-lg shadow-blue-100"
                 >
                     <Plus className="w-5 h-5 mr-2" />
                     Add Expense
                 </button>
+                </GuideWrapper>
              </>
            )}
         </div>

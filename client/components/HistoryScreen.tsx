@@ -26,6 +26,7 @@ import {
 import { Transaction, BusinessProfile, Product, SaleItem, ProductUnit } from '../types';
 import { CURRENCY } from '../constants';
 import InvoicePreview from './InvoicePreview';
+import { GuideWrapper } from './GuideWrapper';
 import { useToast } from './ToastProvider';
 import api, { settleTransaction } from '../services/api';
 import { formatCurrency } from '../utils/currency';
@@ -43,6 +44,9 @@ interface HistoryScreenProps {
   isOnline: boolean;
   initialParams?: { id?: string; filter?: string; search?: string };
   onSelectedInvoiceChange?: (transaction: Transaction | null) => void;
+  isGuideMode?: boolean;
+  activeHotspotId?: string;
+  onHotspotClick?: (id: string) => void;
 }
 
 type ViewMode = 'invoices' | 'debtors';
@@ -92,7 +96,7 @@ const isStockAdjustmentTransaction = (transaction: Transaction) => {
   return normalizedCustomerName === 'stock adjustment' || Boolean(hasAdjustmentId);
 };
 
-const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, business, onDeleteTransaction, onUpdateTransaction, onCreatePreviousDebt, isSubscriptionExpired, onRenewSubscription, isReadOnly, isOnline, initialParams, onSelectedInvoiceChange }) => {
+const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, business, onDeleteTransaction, onUpdateTransaction, onCreatePreviousDebt, isSubscriptionExpired, onRenewSubscription, isReadOnly, isOnline, initialParams, onSelectedInvoiceChange, isGuideMode, activeHotspotId, onHotspotClick }) => {
   const { addToast } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>('invoices');
   const [searchTerm, setSearchTerm] = useState('');
@@ -615,7 +619,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
           <div className="flex p-1 bg-gray-100 rounded-xl mt-4 w-fit border shadow-inner">
             <button 
               onClick={() => setViewMode('invoices')}
-              className={`flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-bold transition-all ${
+              className={`guide-hotspot flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-bold transition-all ${
                 viewMode === 'invoices' ? 'bg-white shadow-md text-primary' : 'text-gray-500 hover:text-gray-700'
               }`}
             >
@@ -623,7 +627,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
             </button>
             <button 
               onClick={() => setViewMode('debtors')}
-              className={`flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-bold transition-all ${
+              className={`guide-hotspot flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-bold transition-all ${
                 viewMode === 'debtors' ? 'bg-white shadow-md text-red-600' : 'text-gray-500 hover:text-gray-700'
               }`}
             >
@@ -643,14 +647,16 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
             </button>
           )}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-            <input 
-              type="text"
-              placeholder={viewMode === 'invoices' ? "Search invoice or customer..." : "Search debtor name..."}
-              className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-2xl focus:ring-2 focus:ring-primary outline-none shadow-sm"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+            <GuideWrapper id="search" className="w-full relative" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick} dotPosition="top-1/2 right-0 -translate-y-1/2 -mr-2">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 z-10" size={18} />
+              <input 
+                type="text"
+                placeholder={viewMode === 'invoices' ? "Search invoice or customer..." : "Search debtor name..."}
+                className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-2xl focus:ring-2 focus:ring-primary outline-none shadow-sm"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </GuideWrapper>
           </div>
         </div>
       </div>
@@ -694,8 +700,9 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
             </div>
           ) : (
             <>
-            {visibleInvoices.map(t => (
-              <div key={t.id} className="bg-white p-6 rounded-2xl shadow-sm border group hover:shadow-md transition-all">
+            {visibleInvoices.map((t, index) => (
+              <GuideWrapper key={t.id} id="transaction-card" className="w-full" isGuideMode={isGuideMode && index === 0} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick} dotPosition="top-1/2 -left-2 -translate-y-1/2 -ml-2">
+              <div className="bg-white p-6 rounded-2xl shadow-sm border group hover:shadow-md transition-all">
                 <div className="flex flex-col lg:flex-row justify-between gap-6">
                   <div className="flex-1 space-y-4">
                     <div className="flex items-center justify-between">
@@ -781,6 +788,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
                   </div>
                 </div>
               </div>
+              </GuideWrapper>
             ))}
             {filteredInvoices.length > visibleCount && (
                 <button

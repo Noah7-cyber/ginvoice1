@@ -1498,7 +1498,7 @@ const App: React.FC = () => {
           </div>
         </div>
         <nav className="flex-1 px-4 py-4 space-y-1">
-          {allowedTabs.map(tab => (
+          {allowedTabs.filter(tab => tab !== 'guides').map(tab => (
             <SidebarLink key={tab} active={activeTab === tab} onClick={() => handleTabChange(tab)} icon={
               tab === 'sales' ? <ShoppingBag /> : tab === 'inventory' ? <Package /> : tab === 'history' ? <History /> : 
               tab === 'dashboard' ? <BarChart3 /> : tab === 'expenditure' ? <Wallet /> : tab === 'guides' ? <BookOpen /> : <Settings />
@@ -1561,6 +1561,13 @@ const App: React.FC = () => {
                {hasActiveAlerts(state.products, state.business, state.business.settings?.lowStockThreshold || 10) && (
                  <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 rounded-full border border-white"></span>
                )}
+            </button>
+            <button
+              onClick={() => handleTabChange('guides')}
+              className={`relative p-2 rounded-xl transition-all ${activeTab === 'guides' ? 'bg-primary text-white' : 'text-primary bg-indigo-50 hover:bg-indigo-100'}`}
+              title="Guides"
+            >
+              <BookOpen size={24} />
             </button>
             <button onClick={() => setIsCartOpen(!isCartOpen)} className={`relative p-2 rounded-xl transition-all ${isCartOpen ? 'bg-primary text-white' : 'text-primary bg-indigo-50'}`}>
               <ShoppingCart size={24} />
@@ -1720,7 +1727,7 @@ const App: React.FC = () => {
 
         {/* Mobile Bottom Nav */}
         <nav className="md:hidden bg-white border-t flex justify-around p-2 shrink-0 z-50 overflow-x-auto hide-scrollbar">
-          {allowedTabs.map(tab => (
+          {allowedTabs.filter(tab => tab !== 'guides').map(tab => (
             <MobileNavLink key={tab} active={activeTab === tab} onClick={() => handleTabChange(tab)} icon={
               tab === 'sales' ? <ShoppingBag /> : tab === 'inventory' ? <Package /> : tab === 'history' ? <History /> : 
               tab === 'dashboard' ? <BarChart3 /> : tab === 'expenditure' ? <Wallet /> : tab === 'guides' ? <BookOpen /> : <Settings />
