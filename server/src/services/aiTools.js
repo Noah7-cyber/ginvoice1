@@ -244,6 +244,24 @@ const tools = [
                 additionalProperties: false
             }
         }
+    },
+    {
+        type: "function",
+        function: {
+            name: "check_stock_count",
+            description: "Check real-time live stock count for a specific product name from the database.",
+            parameters: {
+                type: "object",
+                properties: {
+                    productName: {
+                        type: "string",
+                        description: "The name of the product to check stock for."
+                    }
+                },
+                required: ["productName"],
+                additionalProperties: false
+            }
+        }
     }
 ];
 
@@ -875,6 +893,34 @@ const get_stock_verification_queue = async ({}, { businessId }) => {
     };
 };
 
+const check_stock_count = async ({ productName }, { businessId }) => {
+    if (!businessId) return { error: "Login required." };
+    if (!productName || !String(productName).trim()) return { error: "Product name is required." };
+
+    const query = String(productName).trim();
+    const criteria = {
+        businessId,
+        name: { $regex: query, $options: 'i' }
+    };
+
+    const results = await Product.find(criteria).limit(5);
+
+    if (results.length === 0) {
+        return { message: `No products found matching "${query}".` };
+    }
+
+    const cleanItems = sanitizeData(results).map(item => ({
+        name: item.name,
+        category: item.category || 'Uncategorized',
+        stockCount: Number(item.currentStock ?? item.stock ?? 0)
+    }));
+
+    return {
+        message: `Found real-time stock counts for "${query}".`,
+        items: cleanItems
+    };
+};
+
 // --- Executor ---
 const executeTool = async ({ name, args }, businessId, userRole = 'staff') => {
     try {
@@ -902,6 +948,8 @@ const executeTool = async ({ name, args }, businessId, userRole = 'staff') => {
                 return await get_recent_transaction(args, context);
             case 'get_stock_verification_queue':
                 return await get_stock_verification_queue(args, context);
+            case 'check_stock_count':
+                return await check_stock_count(args, context);
             default:
                 return { error: `Unknown tool: ${name}` };
         }
