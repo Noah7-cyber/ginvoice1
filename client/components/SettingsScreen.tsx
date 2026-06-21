@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Store, Save, RefreshCw, CloudCheck, Upload, Trash2, Image as ImageIcon, MessageSquare, HeadphonesIcon, HelpCircle, Lock, AlertTriangle, X, Ticket, ToggleLeft, ToggleRight, Loader2, CreditCard, ShieldCheck, CheckCircle2, Palette, Database, Download, Printer } from 'lucide-react';
 import { BusinessProfile, DiscountCode, Shop } from '../types';
 import { THEME_COLORS, FONTS } from '../constants';
-import { deleteAccount, uploadFile, updateSettings, generateDiscountCode, verifyPayment, getEntitlements, cancelSubscription, pauseSubscription, resumeSubscription, exportBusinessData, updateStaffPin } from '../services/api';
+import { deleteAccount, uploadFile, updateSettings, generateDiscountCode, verifyPayment, getEntitlements, cancelSubscription, pauseSubscription, exportBusinessData, updateStaffPin } from '../services/api';
 import api from '../services/api';
 import SupportBot from './SupportBot';
 import { useToast } from './ToastProvider';
@@ -120,19 +120,6 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
        await fetchAndSyncEntitlements();
     } catch(e) {
        addToast("Failed to pause.", "error");
-    } finally {
-       setIsManagingSub(false);
-    }
-  };
-
-  const handleResume = async () => {
-    setIsManagingSub(true);
-    try {
-       await resumeSubscription();
-       addToast("Auto-renewal resumed!", "success");
-       await fetchAndSyncEntitlements();
-    } catch(e) {
-       addToast("Failed to resume.", "error");
     } finally {
        setIsManagingSub(false);
     }
@@ -831,11 +818,10 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                                           <span>Auto-renewal is <strong>OFF</strong>. Access expires on {business.subscriptionExpiresAt ? new Date(business.subscriptionExpiresAt).toDateString() : 'expiry date'}.</span>
                                       </div>
                                       <button
-                                          onClick={handleResume}
-                                          disabled={isManagingSub}
+                                          onClick={handleSubscribe}
                                           className="w-full py-3 bg-gray-900 text-white font-bold rounded-xl hover:bg-black disabled:opacity-50"
                                       >
-                                          {isManagingSub ? <Loader2 className="animate-spin mx-auto"/> : 'Resume Auto-Renewal'}
+                                          {isPollingSubscription ? <span className="flex items-center justify-center gap-2"><Loader2 className="animate-spin" size={18}/> Checking Payment...</span> : 'Renew Plan Now'}
                                       </button>
                                   </div>
                               )}
