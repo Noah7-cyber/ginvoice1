@@ -29,7 +29,8 @@ import { CURRENCY, INITIAL_PRODUCTS } from './constants';
 import { safeCalculate } from './utils/math';
 import { saveState, loadState, pushToBackend, getDataVersion, saveDataVersion, getDomainVersions, saveDomainVersions, getLastSync, saveLastSync, clearLocalData, flushPendingSyncQueue, hasPendingSyncJobs, listPendingSyncJobs, syncPendingJobsWithProgress, getPendingTransactionIds } from './services/storage';
 import type { PendingSyncJobView } from './services/storage';
-import { login, registerBusiness, saveAuthToken, clearAuthToken, getEntitlements, initializePayment, fetchRemoteState, deleteExpenditure, snoozeStockVerification, dismissNotification, checkServerVersion, fetchPermissions } from './services/api';
+import { login, registerBusiness, saveAuthToken, clearAuthToken, loadAuthToken, buildUrl, getEntitlements, initializePayment, fetchRemoteState, deleteExpenditure, snoozeStockVerification, dismissNotification, checkServerVersion, fetchPermissions } from './services/api';
+import { subscribeUserToPush } from './services/pushNotifications';
 import { useToast } from './components/ToastProvider';
 import SalesScreen from './components/SalesScreen';
 import InventoryScreen from './components/InventoryScreen';
@@ -770,33 +771,27 @@ const App: React.FC = () => {
     refreshPendingJobs().catch(() => undefined);
   }, [state.isLoggedIn, refreshPendingJobs]);
 
-  // SMART SYNC HEARTBEAT (Every 10s)
+  // SMART SYNC SSE LISTENER
   useEffect(() => {
       if (!isOnline || !state.isLoggedIn) return;
 
-      const interval = setInterval(async () => {
-         try {
-             const hasQueueBacklog = await hasPendingSyncJobs();
-             if (hasQueueBacklog) return;
+      const token = loadAuthToken();
+      if (!token) return;
 
-             const serverVersionData = checkServerVersion ? await checkServerVersion() : { version: 0, versions: { transactions: 0, products: 0, expenditures: 0, categories: 0 } };
-             const localVersion = getDataVersion();
-             const localDomainVersions = getDomainVersions();
-             const safeServerVersion = Number.isFinite(serverVersionData.version) ? Number(serverVersionData.version.toFixed(3)) : 0;
-             const safeLocalVersion = Number.isFinite(localVersion) ? Number(localVersion.toFixed(3)) : 0;
+      const url = buildUrl('/api/sync/stream?token=' + encodeURIComponent(token));
+      const eventSource = new EventSource(url);
 
-             const changedDomains: Array<'transactions' | 'products' | 'expenditures' | 'categories'> = [];
-             if (Number(serverVersionData.versions.transactions || 0) > Number(localDomainVersions.transactions || 0)) changedDomains.push('transactions');
-             if (Number(serverVersionData.versions.products || 0) > Number(localDomainVersions.products || 0)) changedDomains.push('products');
-             if (Number(serverVersionData.versions.expenditures || 0) > Number(localDomainVersions.expenditures || 0)) changedDomains.push('expenditures');
-             if (Number(serverVersionData.versions.categories || 0) > Number(localDomainVersions.categories || 0)) changedDomains.push('categories');
+      eventSource.onmessage = async (event) => {
+          try {
+              const data = JSON.parse(event.data);
+              if (data.type === 'INVALIDATE' && data.domains) {
+                  const hasQueueBacklog = await hasPendingSyncJobs();
+                  if (hasQueueBacklog) return;
 
-             if (safeServerVersion > safeLocalVersion || changedDomains.length > 0) {
-                 if (changedDomains.length > 0) {
-                   const response = await fetchRemoteState(true, {
-                     domains: changedDomains
-                   });
-                   if (response.status === 200 && response.data) {
+                  const changedDomains = data.domains;
+                  const response = await fetchRemoteState(true, { domains: changedDomains });
+                  
+                  if (response.status === 200 && response.data) {
                      let { transactions, expenditures } = response.data;
                      const pendingTxIds = await getPendingTransactionIds();
 
@@ -821,19 +816,21 @@ const App: React.FC = () => {
                        }
                      }
                      saveLastSync(new Date());
-                   }
-                 } else {
-                   await safeSyncWithServer('heartbeat');
-                 }
-                 saveDataVersion(safeServerVersion);
-             }
-         } catch (err) {
-             console.warn('Smart Sync check failed', err);
-         }
-      }, 10000);
+                  }
+              }
+          } catch (e) {
+              console.warn('SSE message error', e);
+          }
+      };
 
-      return () => clearInterval(interval);
-  }, [isOnline, state.isLoggedIn, safeSyncWithServer]);
+      eventSource.onerror = () => {
+          console.warn('SSE connection error. Retrying naturally via EventSource...');
+      };
+
+      return () => {
+          eventSource.close();
+      };
+  }, [isOnline, state.isLoggedIn]);
 
   const openPaymentLink = useCallback(async () => {
     if (!navigator.onLine) {
@@ -973,6 +970,7 @@ const App: React.FC = () => {
 
       // Pass the new state directly to refreshData
       await refreshData(newState);
+      subscribeUserToPush();
 
       setIsLoading(false);
 
@@ -1017,6 +1015,7 @@ const App: React.FC = () => {
 
         // Pass the new state directly to refreshData
         refreshData(newState);
+        subscribeUserToPush();
 
         return true;
       }
@@ -1386,6 +1385,53 @@ const App: React.FC = () => {
     }
   }, [allowedTabs, activeTab]);
 
+  // Swipe Gestures for Mobile View
+  const [touchStart, setTouchStart] = useState<{ x: number, y: number } | null>(null);
+  const [touchEnd, setTouchEnd] = useState<{ x: number, y: number } | null>(null);
+  const minSwipeDistance = 50;
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart({
+      x: e.targetTouches[0].clientX,
+      y: e.targetTouches[0].clientY
+    });
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd({
+      x: e.targetTouches[0].clientX,
+      y: e.targetTouches[0].clientY
+    });
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    
+    const distanceX = touchStart.x - touchEnd.x;
+    const distanceY = Math.abs(touchStart.y - touchEnd.y);
+    
+    // Check if the swipe is mostly horizontal (ignore vertical scrolls)
+    if (distanceY > 40) return;
+
+    const isLeftSwipe = distanceX > minSwipeDistance;
+    const isRightSwipe = distanceX < -minSwipeDistance;
+
+    if (isLeftSwipe || isRightSwipe) {
+      if (isMobileView && !isCartOpen && !isNotificationOpen) {
+        const currentIndex = allowedTabs.indexOf(activeTab);
+        if (currentIndex === -1) return;
+
+        if (isLeftSwipe && currentIndex < allowedTabs.length - 1) {
+          handleTabChange(allowedTabs[currentIndex + 1]);
+        }
+        if (isRightSwipe && currentIndex > 0) {
+          handleTabChange(allowedTabs[currentIndex - 1]);
+        }
+      }
+    }
+  };
+
   // Call hooks BEFORE any conditional returns to prevent "Rendered fewer hooks than expected"
   const {
     startStockVerification,
@@ -1513,7 +1559,12 @@ const App: React.FC = () => {
       </aside>
 
       {/* Main Workspace */}
-      <main className="flex-1 flex flex-col overflow-hidden relative">
+      <main 
+        className="flex-1 flex flex-col overflow-hidden relative"
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+      >
         <header className="bg-white border-b p-4 flex justify-between items-center shrink-0">
           <div className="md:hidden flex items-center gap-2 overflow-hidden">
              {state.business.logo && <img src={state.business.logo} alt="Logo" className="w-8 h-8 rounded-lg bg-white p-0.5 border shrink-0" />}

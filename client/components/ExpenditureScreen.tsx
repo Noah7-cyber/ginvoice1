@@ -237,24 +237,24 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
            </div>
 
            {!isReadOnly && (
-             <>
+             <div className="flex gap-2 w-full md:w-auto">
                 <button
                     onClick={() => setIsCategoryManagerOpen(true)}
-                    className="guide-hotspot flex items-center justify-center px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-bold shadow-sm"
+                    className="guide-hotspot flex-1 md:flex-none flex items-center justify-center px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-bold shadow-sm"
                 >
-                    <Layers className="w-5 h-5 mr-2" />
+                    <Layers className="w-5 h-5 md:mr-2" />
                     <span className="hidden md:inline">Categories</span>
                 </button>
-                <GuideWrapper id="add-expense" className="hidden md:block" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick} dotPosition="top-0 right-0 -mt-2 -mr-2">
+                <GuideWrapper id="add-expense" className="flex-1 md:flex-none" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick} dotPosition="top-0 right-0 -mt-2 -mr-2">
                 <button
                     onClick={() => setShowAddModal(true)}
-                    className="guide-hotspot flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-bold shadow-lg shadow-blue-100"
+                    className="guide-hotspot w-full flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-bold shadow-lg shadow-blue-100"
                 >
-                    <Plus className="w-5 h-5 mr-2" />
-                    Add Expense
+                    <Plus className="w-5 h-5 mr-1 md:mr-2" />
+                    <span className="inline">Add Expense</span>
                 </button>
                 </GuideWrapper>
-             </>
+             </div>
            )}
         </div>
       </div>
@@ -508,15 +508,7 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
         </div>
       )}
 
-      {/* Floating Action Button (Mobile) */}
-      {!isReadOnly && (
-          <button
-              onClick={() => setShowAddModal(true)}
-              className="md:hidden fixed bottom-24 right-6 z-[60] w-14 h-14 bg-blue-600 rounded-full shadow-lg flex items-center justify-center text-white hover:bg-blue-700 transition-all active:scale-95 border-2 border-white"
-          >
-              <Plus size={24} />
-          </button>
-      )}
+
 
       <CategoryManager
         isOpen={isCategoryManagerOpen}

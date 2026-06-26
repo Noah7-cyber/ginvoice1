@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
 const { sendSupportEmail } = require('../services/mail');
-const { client, MODEL_NAME, tools, executeTool, sanitizeData } = require('../services/aiTools');
+const { aiProvider, tools, executeTool, sanitizeData } = require('../services/aiTools');
 const Business = require('../models/Business');
 const Product = require('../models/Product');
 const Transaction = require('../models/Transaction');
@@ -438,7 +438,7 @@ FINANCIAL REPORTING STANDARDS:
 CURRENT UI CONTEXT: ${contextSummary || 'No specific in-app context was provided for this message.'}
 Use this UI context to answer directly when possible. If the question requires data outside this context, use available tools.
 
-RESPONSE STYLE: Plain text only. Do NOT use markdown bolding (like **text**) or headers (###). Use CAPITAL LETTERS for section headers and simple dashes (-) for lists. Keep it short, practical, numbers-first, and owner-focused. If asked strategy, provide 2-4 actionable financial steps tied to their data.`
+RESPONSE STYLE: Do NOT use markdown bolding (like **text**) or headers (###). You MUST use markdown tables whenever presenting data, comparisons, or lists of 3+ items. Use emoji indicators (🟢 for positive financial metrics, 🔴 for alerts) to convey semantic meaning. Keep it short, practical, numbers-first, and owner-focused. If asked strategy, provide 2-4 actionable financial steps tied to their data.`
     };
 
     // B. Construct Messages Array
@@ -458,7 +458,19 @@ RESPONSE STYLE: Plain text only. Do NOT use markdown bolding (like **text**) or 
         messages.push({ role: "user", content: userMessage });
     }
 
-
+    // Context Hydration
+    try {
+        const products = await Product.find({ businessId }).select('name category stock expectedAbsoluteStock currentStock').limit(1000).lean();
+        if (products.length > 0) {
+            const inventoryContext = "Current Inventory State:\n" + products.map(p => `${p.name} (${p.category}): ${p.stock ?? p.currentStock ?? 0} in stock`).join('\n');
+            messages.push({
+                role: "system",
+                content: `Real-time Business State:\n${inventoryContext}\nUse this context to answer stock-related questions comprehensively without necessarily calling tools.`
+            });
+        }
+    } catch (err) {
+        console.error("Context hydration failed", err);
+    }
     // E. Critical API Key Check for full AI path
     if (!process.env.DEEPSEEK_API_KEY) {
       console.error("CRITICAL: DEEPSEEK_API_KEY is missing.");
@@ -471,13 +483,7 @@ RESPONSE STYLE: Plain text only. Do NOT use markdown bolding (like **text**) or 
         const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
         try {
-            const completion = await client.chat.completions.create({
-                model: MODEL_NAME,
-                messages: msgs,
-                tools: tools,
-                tool_choice: "auto",
-            }, { signal: controller.signal });
-
+            const completion = await aiProvider.generateChat(msgs, tools, controller.signal);
             clearTimeout(timeoutId);
             return completion;
         } catch (error) {

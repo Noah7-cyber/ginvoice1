@@ -685,15 +685,16 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
           <p className="text-gray-500">Add or edit items in your shop</p>
         </div>
 
-        <div className={`flex gap-2 ${isSelectionMode ? 'hidden md:flex' : ''}`}>
+        {/* Desktop Header Buttons (Original Layout) */}
+        <div className={`hidden md:flex gap-2 ${isSelectionMode ? 'hidden md:flex' : ''}`}>
            {(!safeReadOnly || isGuideMode) && (
-             <GuideWrapper id="categories" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
+             <GuideWrapper id="categories-desktop" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
                  <button
                    onClick={() => !safeReadOnly && setIsCategoryManagerOpen(true)}
                    disabled={safeReadOnly && !isGuideMode}
                    className={`bg-white text-gray-700 px-4 py-3 rounded-xl flex items-center gap-2 font-bold border hover:bg-gray-50 transition-all ${safeReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
                  >
-                   <Tag size={20} /> <span className="hidden md:inline">Manage Categories</span>
+                   <Tag size={20} /> <span>Manage Categories</span>
                  </button>
              </GuideWrapper>
            )}
@@ -708,61 +709,85 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
               <ListTodo size={20} /> Edit Many ({selectedIds.size})
             </button>
           )}
-          <GuideWrapper id="verify-stock" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
+          <GuideWrapper id="verify-stock-desktop" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
               <button onClick={handleStartVerification} disabled={isLoadingVerification || isVerifying || !isOnline} className="bg-blue-50 text-blue-700 px-4 py-3 rounded-xl flex items-center gap-2 font-bold border border-blue-200 hover:bg-blue-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-                {(isLoadingVerification || isVerifying) ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />} <span className="hidden md:inline">Verify Stock</span>
+                {(isLoadingVerification || isVerifying) ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />} <span>Verify Stock</span>
               </button>
           </GuideWrapper>
           {(!safeReadOnly || isGuideMode) && (
             <>
-              <GuideWrapper id="import-csv" className="hidden md:block" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
+              <GuideWrapper id="import-csv-desktop" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
                   <button
                     onClick={() => !safeReadOnly && setIsBulkImportOpen(true)}
                     disabled={safeReadOnly}
-                    className={`hidden md:flex bg-white text-gray-700 border border-gray-200 px-6 py-3 rounded-xl items-center gap-2 font-bold hover:bg-gray-50 transition-all active:scale-95 ${safeReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    className={`bg-white text-gray-700 border border-gray-200 px-6 py-3 rounded-xl flex items-center gap-2 font-bold hover:bg-gray-50 transition-all active:scale-95 ${safeReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
-                    <Download size={20} /> <span className="hidden md:inline">Import CSV</span>
+                    <Download size={20} /> <span>Import CSV</span>
                   </button>
               </GuideWrapper>
-              <GuideWrapper id="add-product" className="hidden md:block" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
+              
+              <GuideWrapper id="add-product-desktop" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
                   <button
                     onClick={() => !safeReadOnly && handleAddNew()}
                     disabled={safeReadOnly}
-                    className={`hidden md:flex bg-primary text-white px-6 py-3 rounded-xl items-center gap-2 font-bold shadow-lg shadow-indigo-100 hover:opacity-90 transition-all active:scale-95 ${safeReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    className={`bg-primary text-white px-6 py-3 rounded-xl flex items-center gap-2 font-bold shadow-lg shadow-indigo-100 hover:opacity-90 transition-all active:scale-95 ${safeReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
-                    <Plus size={20} /> <span className="hidden md:inline">Add New</span>
+                    <Plus size={20} /> <span>Add New</span>
                   </button>
               </GuideWrapper>
             </>
           )}
         </div>
+
+        {/* Mobile Header Buttons (Minimalist) */}
+        <div className={`flex flex-col md:hidden gap-2 w-full ${isSelectionMode ? 'hidden' : ''}`}>
+           <div className="flex gap-2 w-full">
+             {(!safeReadOnly || isGuideMode) && (
+               <GuideWrapper id="categories-mobile" className="flex-1" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
+                   <button
+                     onClick={() => !safeReadOnly && setIsCategoryManagerOpen(true)}
+                     disabled={safeReadOnly && !isGuideMode}
+                     className={`w-full bg-white text-gray-700 px-2 py-2 rounded-lg flex items-center justify-center gap-1.5 font-bold border hover:bg-gray-50 transition-all ${safeReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
+                   >
+                     <Tag size={16} /> <span className="text-xs">Categories</span>
+                   </button>
+               </GuideWrapper>
+             )}
+
+            <GuideWrapper id="verify-stock-mobile" className="flex-1" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
+                <button onClick={handleStartVerification} disabled={isLoadingVerification || isVerifying || !isOnline} className="w-full bg-blue-50 text-blue-700 px-2 py-2 rounded-lg flex items-center justify-center gap-1.5 font-bold border border-blue-200 hover:bg-blue-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                  {(isLoadingVerification || isVerifying) ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />} <span className="text-xs">Verify</span>
+                </button>
+            </GuideWrapper>
+           </div>
+
+          {(!safeReadOnly || isGuideMode) && (
+            <div className="flex gap-2 w-full">
+              <GuideWrapper id="import-csv-mobile" className="flex-1" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
+                  <button
+                    onClick={() => !safeReadOnly && setIsBulkImportOpen(true)}
+                    disabled={safeReadOnly}
+                    className={`w-full bg-white text-gray-700 border border-gray-200 px-2 py-2 rounded-lg flex items-center justify-center gap-1.5 font-bold hover:bg-gray-50 transition-all active:scale-95 ${safeReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    <Download size={16} /> <span className="text-xs">Import CSV</span>
+                  </button>
+              </GuideWrapper>
+
+              <GuideWrapper id="add-product-mobile" className="flex-1" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
+                  <button
+                    onClick={() => !safeReadOnly && handleAddNew()}
+                    disabled={safeReadOnly}
+                    className={`w-full bg-primary text-white px-3 py-2 rounded-lg flex items-center justify-center gap-1.5 font-bold shadow-sm shadow-indigo-100 hover:opacity-90 transition-all active:scale-95 ${safeReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    <Plus size={16} /> <span className="text-xs">Add Product</span>
+                  </button>
+              </GuideWrapper>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Mobile Floating Action Button */}
-      {(!safeReadOnly || isGuideMode) && (
-        <div className="md:hidden fixed bottom-24 right-4 z-50 flex flex-col gap-3">
-          <GuideWrapper id="import-csv" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick} dotPosition="top-0 right-0 -mt-1 -mr-1">
-              <button
-                onClick={() => !safeReadOnly && setIsBulkImportOpen(true)}
-                disabled={safeReadOnly}
-                className={`p-4 bg-white text-gray-700 border border-gray-200 rounded-full shadow-xl hover:bg-gray-50 active:scale-95 transition-all ${safeReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
-                aria-label="Import CSV"
-              >
-                <Download size={24} />
-              </button>
-          </GuideWrapper>
-          <GuideWrapper id="add-product" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick} dotPosition="top-0 right-0 -mt-1 -mr-1">
-              <button
-                onClick={() => !safeReadOnly && handleAddNew()}
-                disabled={safeReadOnly}
-                className={`p-4 bg-primary text-white rounded-full shadow-xl hover:bg-indigo-700 active:scale-95 transition-all ${safeReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
-                aria-label="Add New Product"
-              >
-                <Plus size={24} />
-              </button>
-          </GuideWrapper>
-        </div>
-      )}
+
 
       {/* Filters */}
       <div className="bg-white p-4 rounded-2xl shadow-sm border mb-6 flex flex-col gap-4 shrink-0 sticky top-0 z-20">

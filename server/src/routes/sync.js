@@ -18,6 +18,19 @@ const requireActiveSubscription = require('../middleware/subscription');
 
 const router = express.Router();
 
+global.sseClients = global.sseClients || new Map();
+
+const notifySSE = (businessId, changedDomains) => {
+    const clients = global.sseClients.get(businessId.toString());
+    if (clients) {
+        const domainsArray = Object.keys(changedDomains).filter(k => changedDomains[k]);
+        if (domainsArray.length > 0) {
+            const payload = `data: ${JSON.stringify({ type: 'INVALIDATE', domains: domainsArray })}\n\n`;
+            clients.forEach(c => c.write(payload));
+        }
+    }
+};
+
 const withAtomic = async (work) => {
   const session = await mongoose.startSession();
   try {
@@ -85,6 +98,35 @@ const parseDateOrFallback = (value, fallback = null) => {
 router.get('/time', (req, res) => {
     // Return server time for drift calculation
     res.json({ time: Date.now() });
+});
+
+// 0.5 SSE Stream Endpoint
+router.get('/stream', auth, (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const businessId = String(req.businessId).trim();
+    if (!global.sseClients.has(businessId)) {
+        global.sseClients.set(businessId, new Set());
+    }
+    const clients = global.sseClients.get(businessId);
+    clients.add(res);
+
+    res.write(`data: {"type": "CONNECTED"}\n\n`);
+
+    const keepAlive = setInterval(() => {
+        res.write(`:\n\n`);
+    }, 15000);
+
+    req.on('close', () => {
+        clearInterval(keepAlive);
+        clients.delete(res);
+        if (clients.size === 0) {
+            global.sseClients.delete(businessId);
+        }
+    });
 });
 
 // 0. Version Check
@@ -227,6 +269,8 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
       if (changedDomains.transactions) inc['syncVersions.transactions'] = 0.001;
       if (changedDomains.expenditures) inc['syncVersions.expenditures'] = 0.001;
       await Business.findByIdAndUpdate(businessId, { $inc: inc });
+
+      notifySSE(businessId, changedDomains);
     }
 
     if (categories.length > 0) {
@@ -262,10 +306,19 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
         const incomingUpdatedAt = p.updatedAt ? new Date(p.updatedAt) : new Date();
 
         if (existing) {
-          const existingUpdatedAt = existing.clientUpdatedAt ? new Date(existing.clientUpdatedAt) : new Date(0);
-          if (!Number.isNaN(existingUpdatedAt.getTime()) && incomingUpdatedAt <= existingUpdatedAt) {
-             skippedProducts += 1;
-             return null;
+          // Robust Server-Enforced Monotonic Versioning
+          // Prefer incoming.serverVersion if available, fallback to incomingUpdatedAt vs existing.updatedAt
+          if (p.serverVersion && existing.serverVersion) {
+              if (p.serverVersion < existing.serverVersion) {
+                  skippedProducts += 1;
+                  return null;
+              }
+          } else {
+              const existingUpdatedAt = existing.updatedAt ? new Date(existing.updatedAt) : new Date(0);
+              if (!Number.isNaN(existingUpdatedAt.getTime()) && incomingUpdatedAt <= existingUpdatedAt) {
+                 skippedProducts += 1;
+                 return null;
+              }
           }
         }
 
@@ -296,7 +349,8 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
                   costPrice: toDecimal(u.costPrice)
                 })) : [],
                 clientUpdatedAt: incomingUpdatedAt,
-                updatedAt: new Date()
+                updatedAt: new Date(),
+                serverVersion: Date.now()
               }
             },
             upsert: true
@@ -334,9 +388,15 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
         const existing = existingById || existingByKey;
 
         if (existing) {
-          const existingUpdatedAt = existing.clientUpdatedAt ? new Date(existing.clientUpdatedAt) : new Date(0);
-          if (!Number.isNaN(existingUpdatedAt.getTime()) && incomingUpdatedAt <= existingUpdatedAt) {
-            continue;
+          if (t.serverVersion && existing.serverVersion) {
+              if (t.serverVersion < existing.serverVersion) {
+                  continue;
+              }
+          } else {
+              const existingUpdatedAt = existing.updatedAt ? new Date(existing.updatedAt) : new Date(0);
+              if (!Number.isNaN(existingUpdatedAt.getTime()) && incomingUpdatedAt <= existingUpdatedAt) {
+                continue;
+              }
           }
         }
 
@@ -404,7 +464,8 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
                   createdByRole: t.createdByRole === 'staff' ? 'staff' : 'owner',
                   createdByUserId: t.createdByUserId ? String(t.createdByUserId) : '',
                   clientUpdatedAt: incomingUpdatedAt,
-                  updatedAt: new Date()
+                  updatedAt: new Date(),
+                  serverVersion: Date.now()
                 },
                 $setOnInsert: {
                   createdAt: safeTransactionDate || new Date()
@@ -493,6 +554,7 @@ router.delete('/products/:id', auth, requireActiveSubscription, async (req, res)
       payload: { productId: id }
     });
 
+    notifySSE(businessId, { products: true });
     res.json({ success: true, id, hard: true });
   } catch (err) {
     res.status(500).json({ message: 'Delete failed' });
@@ -525,6 +587,7 @@ router.delete('/transactions/:id', auth, requireActiveSubscription, async (req, 
     });
 
     await Transaction.deleteOne({ businessId, id });
+    notifySSE(businessId, { transactions: true, products: req.query.restock === 'true' });
     res.json({ success: true, id });
   } catch (err) {
     console.error(err);
@@ -537,6 +600,7 @@ router.delete('/expenditures/:id', auth, requireActiveSubscription, async (req, 
     const { id } = req.params;
     const businessId = req.businessId;
     await Expenditure.deleteOne({ business: businessId, id });
+    notifySSE(businessId, { expenditures: true });
     res.json({ success: true, id });
   } catch (err) {
     res.status(500).json({ message: 'Delete failed' });

@@ -1,17 +1,11 @@
 const mongoose = require('mongoose');
-const OpenAI = require('openai');
+const { DeepSeekAdapter } = require('./aiProvider');
 const Transaction = require('../models/Transaction');
 const Product = require('../models/Product');
 const Expenditure = require('../models/Expenditure');
 const { generateVerificationQueue } = require('./stockVerification');
 
-const client = new OpenAI({
-    baseURL: 'https://api.deepseek.com',
-    // Keep module load safe in test/offline envs; route guards prevent real calls when key is missing.
-    apiKey: process.env.DEEPSEEK_API_KEY || 'disabled'
-});
-
-const MODEL_NAME = "deepseek-chat";
+const aiProvider = new DeepSeekAdapter(process.env.DEEPSEEK_API_KEY);
 
 // --- Helper: Data Diet ---
 const escapeRegex = (value = '') => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -959,4 +953,9 @@ const executeTool = async ({ name, args }, businessId, userRole = 'staff') => {
     }
 };
 
-module.exports = { client, MODEL_NAME, tools, executeTool, sanitizeData };
+module.exports = {
+    aiProvider,
+    tools,
+    executeTool,
+    sanitizeData
+};

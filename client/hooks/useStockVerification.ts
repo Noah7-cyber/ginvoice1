@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { snoozeStockVerification, dismissNotification } from '../services/api';
 
 interface UseStockVerificationProps {
@@ -38,6 +38,18 @@ export const useStockVerification = ({
       addToast('Could not dismiss notification.', 'error');
     }
   }, [refreshData, addToast]);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      console.log('Network reconnected. Running background stock verification sync...');
+      refreshData().catch(err => console.error('Background sync failed', err));
+    };
+
+    window.addEventListener('online', handleOnline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [refreshData]);
 
   return {
     startStockVerification,

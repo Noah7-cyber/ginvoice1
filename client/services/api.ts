@@ -4,7 +4,7 @@ const API_BASE = (import.meta as any).env?.VITE_API_URL || '';
 const TOKEN_KEY = 'ginvoice_auth_token_v1';
 const ADMIN_TOKEN_KEY = 'ginvoice_admin_token_v1';
 
-const buildUrl = (path: string) => {
+export const buildUrl = (path: string) => {
   if (!API_BASE) return path;
   return `${API_BASE.replace(/\/$/, '')}${path}`;
 };

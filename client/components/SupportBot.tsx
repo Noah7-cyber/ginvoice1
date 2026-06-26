@@ -1,8 +1,12 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { X, Send, User, Bot } from 'lucide-react';
+import { X, Send, User, Bot, Mic } from 'lucide-react';
+import { motion } from 'motion/react';
+import { marked } from 'marked';
+marked.use({ breaks: true });
 import { useToast } from './ToastProvider';
 import { sendChat } from '../services/api';
 import { TabId } from '../types';
+import { useHybridSpeech } from '../hooks/useHybridSpeech';
 
 interface SupportBotProps {
   embed?: boolean;
@@ -24,6 +28,17 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate, uiCo
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const responseCacheRef = useRef<Map<string, { at: number; payload: any }>>(new Map());
+  
+  const { status: voiceStatus, transcript, activeEngine, toggleListening, setTranscript } = useHybridSpeech();
+
+  useEffect(() => {
+    if (transcript) {
+      setInputText(transcript);
+    }
+  }, [transcript]);
+
+  // Compute visual state
+  const visualState = isSending ? 'processing' : voiceStatus;
 
   const localCommandMap = useMemo(() => ([
     { pattern: /(take me to|go to|open)\s+(inventory|stock)/i, tab: 'inventory' as TabId, text: 'Opening Inventory for you.' },
@@ -156,13 +171,16 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate, uiCo
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${msg.from === 'user' ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-200 text-gray-600'}`}>
                         {msg.from === 'user' ? <User size={14} /> : <Bot size={14} />}
                     </div>
-                    <div className={`max-w-[80%] p-3 text-sm shadow-sm whitespace-pre-wrap ${
-                        msg.from === 'user'
-                        ? 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white rounded-2xl rounded-tr-none'
-                        : 'bg-white text-gray-700 rounded-2xl rounded-tl-none border border-gray-100'
-                    }`}>
-                        {msg.text}
-                    </div>
+                    {msg.from === 'user' ? (
+                        <div className="max-w-[80%] p-3 text-sm shadow-sm whitespace-pre-wrap bg-gradient-to-br from-indigo-600 to-violet-600 text-white rounded-2xl rounded-tr-none">
+                            {msg.text}
+                        </div>
+                    ) : (
+                        <div 
+                            className="max-w-[85%] p-3 text-sm shadow-sm bg-white text-gray-700 rounded-2xl rounded-tl-none border border-gray-100 prose prose-sm prose-indigo max-w-none"
+                            dangerouslySetInnerHTML={{ __html: marked.parse(msg.text) as string }}
+                        />
+                    )}
                 </div>
             ))}
             {isSending && (
@@ -198,6 +216,43 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate, uiCo
             )}
 
             <form onSubmit={handleSubmit} className="flex gap-2">
+                <button
+                    type="button"
+                    onClick={() => {
+                        if (visualState === 'idle') setInputText('');
+                        toggleListening();
+                    }}
+                    disabled={isSending || visualState === 'loading_model'}
+                    className="relative flex items-center justify-center w-10 h-10 rounded-xl transition-colors disabled:opacity-50 shrink-0 bg-gray-100 hover:bg-gray-200"
+                    aria-label="Voice input"
+                    title={activeEngine === 'whisper' ? 'Using Local Whisper' : 'Using Web Speech API'}
+                >
+                    {(visualState === 'idle' && !isSending) && (
+                        <Mic size={18} className="text-[#A0A0A0]" />
+                    )}
+                    
+                    {(visualState === 'listening' && !isSending) && (
+                        <motion.div
+                            animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
+                            transition={{ repeat: Infinity, duration: 1.5 }}
+                            className="absolute inset-0 rounded-xl bg-indigo-100 flex items-center justify-center"
+                        >
+                            <Mic size={18} className="text-indigo-600" />
+                        </motion.div>
+                    )}
+
+                    {(visualState === 'processing' || visualState === 'loading_model') && (
+                        <>
+                            <motion.div
+                                animate={{ rotate: 360 }}
+                                transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+                                className="absolute inset-0 rounded-full border-2 border-transparent border-t-indigo-600"
+                                style={{ background: 'conic-gradient(from 0deg, transparent, rgba(79, 70, 229, 0.1))' }}
+                            />
+                            <Mic size={18} className="text-indigo-400 relative z-10" />
+                        </>
+                    )}
+                </button>
                 <input
                     ref={inputRef}
                     type="text"

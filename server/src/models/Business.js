@@ -87,6 +87,8 @@ const BusinessSchema = new mongoose.Schema({
     canViewDashboard: { type: Boolean, default: false }
   },
 
+  pushSubscriptions: [{ type: mongoose.Schema.Types.Mixed }],
+
   createdAt: { type: Date, default: Date.now },
   lastActiveAt: { type: Date, default: Date.now }
 });

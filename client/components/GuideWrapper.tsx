@@ -3,19 +3,21 @@ export const GuideWrapper = ({ id, children, className = '', isGuideMode, active
     if (!isGuideMode) return <>{children}</>;
 
     return (
-        <div className={`relative w-fit h-fit ${className}`}>
+        <div 
+            className={`relative w-fit h-fit cursor-pointer ${className}`}
+            onClickCapture={(e) => {
+                // Intercept the click during capture phase so child buttons don't trigger their normal actions
+                e.stopPropagation();
+                e.preventDefault();
+                if (onHotspotClick) onHotspotClick(id);
+            }}
+        >
             {children}
-            <div className={`absolute ${dotPosition} z-[60]`}>
-                <button
-                    className="guide-hotspot relative flex items-center justify-center w-8 h-8 group z-50 pointer-events-auto"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        if (onHotspotClick) onHotspotClick(id);
-                    }}
-                >
+            <div className={`absolute ${dotPosition} z-[60] pointer-events-none`}>
+                <div className="guide-hotspot relative flex items-center justify-center w-8 h-8 pointer-events-none">
                     <span className={`absolute inline-flex h-full w-full rounded-full opacity-75 animate-ping ${activeHotspotId === id ? 'bg-indigo-600 scale-125' : 'bg-indigo-400'}`}></span>
-                    <span className={`relative inline-flex rounded-full h-4 w-4 border-2 border-white shadow-lg transition-transform ${activeHotspotId === id ? 'bg-indigo-700 scale-125' : 'bg-primary group-hover:scale-125'}`}></span>
-                </button>
+                    <span className={`relative inline-flex rounded-full h-4 w-4 border-2 border-white shadow-lg transition-transform ${activeHotspotId === id ? 'bg-indigo-700 scale-125' : 'bg-primary'}`}></span>
+                </div>
             </div>
         </div>
     );
