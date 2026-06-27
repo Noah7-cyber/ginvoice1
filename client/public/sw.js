@@ -122,13 +122,7 @@ self.addEventListener('fetch', (event) => {
 
   // 3. API/Backend: Network Only (with Offline Fallback)
   if (shouldBypass(requestUrl, event.request) || requestUrl.pathname.startsWith('/api/')) {
-    event.respondWith(
-      fetch(event.request).catch((err) => {
-        console.error('[SW] API Fetch Failed:', err);
-        return jsonOfflineResponse();
-      })
-    );
-    return;
+    return; // Let the browser handle the network request natively
   }
 });
 

@@ -15,7 +15,7 @@ const applyManualAdjustment = async ({ businessId, productId, delta = 0, current
   if (currentStock !== undefined && currentStock !== null) {
     const next = normalizeQty(currentStock);
     await Product.updateOne(
-      { businessId, id: productId },
+      { businessId, id: productId, itemType: { $ne: 'SERVICE' } },
       { $set: { stock: next } },
       { ...(session ? { session } : {}) }
     );
@@ -24,7 +24,7 @@ const applyManualAdjustment = async ({ businessId, productId, delta = 0, current
 
   if (normalizedDelta !== 0) {
     await Product.updateOne(
-      { businessId, id: productId },
+      { businessId, id: productId, itemType: { $ne: 'SERVICE' } },
       { $inc: { stock: normalizedDelta } },
       { ...(session ? { session } : {}) }
     );

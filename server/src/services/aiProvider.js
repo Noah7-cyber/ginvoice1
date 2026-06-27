@@ -19,7 +19,7 @@ class DeepSeekAdapter extends AIProvider {
       baseURL: 'https://api.deepseek.com',
       apiKey: apiKey || 'disabled'
     });
-    this.modelName = 'deepseek-v4-pro';
+    this.modelName = 'deepseek-v4-flash';
   }
 
   async generateChat(messages, tools, signal) {

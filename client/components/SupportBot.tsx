@@ -7,6 +7,7 @@ import { useToast } from './ToastProvider';
 import { sendChat } from '../services/api';
 import { TabId } from '../types';
 import { useHybridSpeech } from '../hooks/useHybridSpeech';
+import DashboardMessage from './ai-dashboard/DashboardMessage';
 
 interface SupportBotProps {
   embed?: boolean;
@@ -19,7 +20,7 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate, uiCo
   const { addToast } = useToast();
   const [open, setOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // State
   const [messages, setMessages] = useState<{ from: 'bot' | 'user'; text: string; isAction?: boolean }[]>([
@@ -176,10 +177,27 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate, uiCo
                             {msg.text}
                         </div>
                     ) : (
-                        <div 
-                            className="max-w-[85%] p-3 text-sm shadow-sm bg-white text-gray-700 rounded-2xl rounded-tl-none border border-gray-100 prose prose-sm prose-indigo max-w-none"
-                            dangerouslySetInnerHTML={{ __html: marked.parse(msg.text) as string }}
-                        />
+                        <div className="max-w-[95%] p-3 text-sm shadow-sm bg-white text-gray-700 rounded-2xl rounded-tl-none border border-gray-100">
+                            {(() => {
+                                try {
+                                    const textMatch = msg.text.match(/\{[\s\S]*\}/);
+                                    if (textMatch) {
+                                        const parsed = JSON.parse(textMatch[0]);
+                                        if (parsed.type === 'dashboard') {
+                                            return <DashboardMessage payload={parsed} onNavigate={onNavigate} />;
+                                        }
+                                    }
+                                } catch (e) {
+                                    // Fallback to markdown
+                                }
+                                return (
+                                    <div 
+                                        className="prose prose-sm prose-indigo max-w-none"
+                                        dangerouslySetInnerHTML={{ __html: marked.parse(msg.text) as string }}
+                                    />
+                                );
+                            })()}
+                        </div>
                     )}
                 </div>
             ))}
@@ -215,57 +233,72 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate, uiCo
                 </div>
             )}
 
-            <form onSubmit={handleSubmit} className="flex gap-2">
-                <button
-                    type="button"
-                    onClick={() => {
-                        if (visualState === 'idle') setInputText('');
-                        toggleListening();
-                    }}
-                    disabled={isSending || visualState === 'loading_model'}
-                    className="relative flex items-center justify-center w-10 h-10 rounded-xl transition-colors disabled:opacity-50 shrink-0 bg-gray-100 hover:bg-gray-200"
-                    aria-label="Voice input"
-                    title={activeEngine === 'whisper' ? 'Using Local Whisper' : 'Using Web Speech API'}
-                >
-                    {(visualState === 'idle' && !isSending) && (
-                        <Mic size={18} className="text-[#A0A0A0]" />
-                    )}
-                    
-                    {(visualState === 'listening' && !isSending) && (
-                        <motion.div
-                            animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
-                            transition={{ repeat: Infinity, duration: 1.5 }}
-                            className="absolute inset-0 rounded-xl bg-indigo-100 flex items-center justify-center"
-                        >
-                            <Mic size={18} className="text-indigo-600" />
-                        </motion.div>
-                    )}
-
-                    {(visualState === 'processing' || visualState === 'loading_model') && (
-                        <>
+            <form onSubmit={handleSubmit} className="flex items-end gap-2">
+                <div className="flex-1 bg-gray-100 rounded-xl flex items-end relative focus-within:ring-2 focus-within:ring-indigo-500 focus-within:bg-white transition-all overflow-hidden">
+                    <textarea
+                        ref={inputRef}
+                        value={inputText}
+                        onChange={(e) => {
+                            setInputText(e.target.value);
+                            e.target.style.height = 'auto';
+                            e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+                        }}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                if (inputText.trim() && !isSending) {
+                                    handleSubmit(e as any);
+                                }
+                            }
+                        }}
+                        placeholder="Ask anything..."
+                        rows={1}
+                        className="flex-1 bg-transparent border-0 px-4 py-3 text-sm outline-none resize-none overflow-y-auto"
+                        style={{ minHeight: '44px', maxHeight: '120px' }}
+                        disabled={isSending}
+                    />
+                    <button
+                        type="button"
+                        onClick={() => {
+                            if (visualState === 'idle') setInputText('');
+                            toggleListening();
+                        }}
+                        disabled={isSending || visualState === 'loading_model'}
+                        className="relative flex items-center justify-center w-10 h-10 mb-0.5 mr-1 rounded-xl transition-colors disabled:opacity-50 shrink-0 text-gray-500 hover:text-indigo-600 hover:bg-gray-200"
+                        aria-label="Voice input"
+                        title={activeEngine === 'whisper' ? 'Using Local Whisper' : 'Using Web Speech API'}
+                    >
+                        {(visualState === 'idle' && !isSending) && (
+                            <Mic size={18} />
+                        )}
+                        
+                        {(visualState === 'listening' && !isSending) && (
                             <motion.div
-                                animate={{ rotate: 360 }}
-                                transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-                                className="absolute inset-0 rounded-full border-2 border-transparent border-t-indigo-600"
-                                style={{ background: 'conic-gradient(from 0deg, transparent, rgba(79, 70, 229, 0.1))' }}
-                            />
-                            <Mic size={18} className="text-indigo-400 relative z-10" />
-                        </>
-                    )}
-                </button>
-                <input
-                    ref={inputRef}
-                    type="text"
-                    value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
-                    placeholder="Ask anything..."
-                    className="flex-1 bg-gray-100 border-0 rounded-xl px-4 text-sm focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all outline-none"
-                    disabled={isSending}
-                />
+                                animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
+                                transition={{ repeat: Infinity, duration: 1.5 }}
+                                className="absolute inset-0 rounded-xl bg-indigo-100 flex items-center justify-center"
+                            >
+                                <Mic size={18} className="text-indigo-600" />
+                            </motion.div>
+                        )}
+
+                        {(visualState === 'processing' || visualState === 'loading_model') && (
+                            <>
+                                <motion.div
+                                    animate={{ rotate: 360 }}
+                                    transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+                                    className="absolute inset-0 rounded-full border-2 border-transparent border-t-indigo-600"
+                                    style={{ background: 'conic-gradient(from 0deg, transparent, rgba(79, 70, 229, 0.1))' }}
+                                />
+                                <Mic size={18} className="text-indigo-400 relative z-10" />
+                            </>
+                        )}
+                    </button>
+                </div>
                 <button
                     type="submit"
                     disabled={!inputText.trim() || isSending}
-                    className="p-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="h-11 w-11 flex items-center justify-center shrink-0 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                     <Send size={18} />
                 </button>

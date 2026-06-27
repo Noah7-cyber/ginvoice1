@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ShoppingBag, 
   Package, 
@@ -1638,87 +1639,82 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* Content Area - Independent Scrolling for Performance */}
+        {/* Content Area - Framer Motion Animated Transitions */}
         <div className="flex-1 relative overflow-hidden">
-
-          {visitedTabs.has('sales') && (
-            <div
-               className="absolute inset-0 overflow-y-auto p-4 md:p-8"
-               style={{ display: activeTab === 'sales' ? 'block' : 'none' }}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ x: 20, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: -20, opacity: 0 }}
+              transition={{ duration: 0.25 }}
+              className="absolute inset-0 overflow-y-auto"
             >
-               <SalesScreen
-                  products={state.products}
-                  onAddToCart={addToCart}
-                  isReadOnly={subscriptionLocked}
-                  isOnline={isOnline}
-                  strictOnlineMode={state.business?.settings?.onlineOnlyMode}
-               />
-            </div>
-          )}
+              {activeTab === 'sales' && (
+                <div className="p-4 md:p-8 min-h-full">
+                  <SalesScreen
+                    products={state.products}
+                    onAddToCart={addToCart}
+                    isReadOnly={subscriptionLocked}
+                    isOnline={isOnline}
+                    strictOnlineMode={state.business?.settings?.onlineOnlyMode}
+                  />
+                </div>
+              )}
+              
+              {activeTab === 'inventory' && (
+                <div className="p-4 md:p-8 min-h-full">
+                  <InventoryScreen
+                    products={state.products}
+                    onUpdateProducts={handleUpdateProducts}
+                    isOwner={state.role === 'owner'}
+                    isReadOnly={!canManageStock || subscriptionLocked}
+                    isOnline={isOnline}
+                    initialParams={deepLinkParams}
+                    refreshData={refreshData}
+                  />
+                </div>
+              )}
 
-          {visitedTabs.has('inventory') && (
-            <div
-               className="absolute inset-0 overflow-y-auto p-4 md:p-8"
-               style={{ display: activeTab === 'inventory' ? 'block' : 'none' }}
-            >
-                <InventoryScreen
-                  products={state.products}
-                  onUpdateProducts={handleUpdateProducts}
-                  isOwner={state.role === 'owner'}
-                  isReadOnly={!canManageStock || subscriptionLocked}
-                  isOnline={isOnline}
-                  initialParams={deepLinkParams}
-                  refreshData={refreshData}
-                />
-            </div>
-          )}
+              {activeTab === 'history' && (
+                <div className="p-4 md:p-8 min-h-full">
+                  <HistoryScreen
+                    transactions={visibleTransactions}
+                    products={state.products}
+                    business={state.business}
+                    onDeleteTransaction={handleDeleteTransaction}
+                    onUpdateTransaction={(t, options) => {
+                      const payload = { ...t, updatedAt: new Date().toISOString() };
+                      setState(prev => ({
+                        ...prev,
+                        transactions: prev.transactions.map(tx => tx.id === t.id ? payload : tx)
+                      }));
+                      if (navigator.onLine && !options?.skipSync) {
+                        pushToBackend({ transactions: [payload] }).catch(err => console.error("Failed to sync edit", err));
+                      }
+                    }}
+                    onCreatePreviousDebt={(t) => {
+                      const created = { ...t, updatedAt: new Date().toISOString(), isPreviousDebt: true };
+                      setState(prev => ({
+                        ...prev,
+                        transactions: [created, ...prev.transactions]
+                      }));
+                      if (navigator.onLine) {
+                        pushToBackend({ transactions: [created] }).catch(err => console.error('Failed to sync opening debt', err));
+                      }
+                    }}
+                    isSubscriptionExpired={subscriptionLocked}
+                    onRenewSubscription={openPaymentLink}
+                    isReadOnly={!canManageHistory || subscriptionLocked}
+                    isOnline={isOnline}
+                    initialParams={deepLinkParams}
+                    onSelectedInvoiceChange={setHistorySelectedInvoice}
+                  />
+                </div>
+              )}
 
-          {visitedTabs.has('history') && (
-            <div
-               className="absolute inset-0 overflow-y-auto p-4 md:p-8"
-               style={{ display: activeTab === 'history' ? 'block' : 'none' }}
-            >
-               <HistoryScreen
-                transactions={visibleTransactions}
-                products={state.products}
-                business={state.business}
-                onDeleteTransaction={handleDeleteTransaction}
-                onUpdateTransaction={(t, options) => {
-                  const payload = { ...t, updatedAt: new Date().toISOString() };
-                  setState(prev => ({
-                    ...prev,
-                    transactions: prev.transactions.map(tx => tx.id === t.id ? payload : tx)
-                  }));
-                  if (navigator.onLine && !options?.skipSync) {
-                    pushToBackend({ transactions: [payload] }).catch(err => console.error("Failed to sync edit", err));
-                  }
-                }}
-                onCreatePreviousDebt={(t) => {
-                  const created = { ...t, updatedAt: new Date().toISOString(), isPreviousDebt: true };
-                  setState(prev => ({
-                    ...prev,
-                    transactions: [created, ...prev.transactions]
-                  }));
-                  if (navigator.onLine) {
-                    pushToBackend({ transactions: [created] }).catch(err => console.error('Failed to sync opening debt', err));
-                  }
-                }}
-                isSubscriptionExpired={subscriptionLocked}
-                onRenewSubscription={openPaymentLink}
-               isReadOnly={!canManageHistory || subscriptionLocked}
-               isOnline={isOnline}
-               initialParams={deepLinkParams}
-               onSelectedInvoiceChange={setHistorySelectedInvoice}
-              />
-            </div>
-          )}
-
-          {visitedTabs.has('dashboard') && (
-             (state.role === 'owner' || (state.business.staffPermissions as any)?.canViewDashboard) ? (
-                <div
-                   className="absolute inset-0 overflow-y-auto p-4 md:p-8"
-                   style={{ display: activeTab === 'dashboard' ? 'block' : 'none' }}
-                >
+              {activeTab === 'dashboard' && (state.role === 'owner' || (state.business.staffPermissions as any)?.canViewDashboard) && (
+                <div className="p-4 md:p-8 min-h-full">
                   <DashboardScreen
                     transactions={visibleTransactions}
                     products={state.products}
@@ -1727,53 +1723,43 @@ const App: React.FC = () => {
                     onUpdateBusiness={b => setState(prev => ({ ...prev, business: { ...prev.business, ...b } }))}
                   />
                 </div>
-             ) : null
-          )}
+              )}
 
-          {visitedTabs.has('expenditure') && (
-             <div
-               className="absolute inset-0 overflow-y-auto p-4 md:p-8"
-               style={{ display: activeTab === 'expenditure' ? 'block' : 'none' }}
-            >
-               <ExpenditureScreen
-                expenditures={visibleExpenditures}
-                onAddExpenditure={handleAddExpenditure}
-                onDeleteExpenditure={handleDeleteExpenditure}
-                onEditExpenditure={handleEditExpenditure}
-                isOnline={isOnline}
-                isReadOnly={subscriptionLocked}
-              />
-            </div>
-          )}
+              {activeTab === 'expenditure' && (
+                <div className="p-4 md:p-8 min-h-full">
+                  <ExpenditureScreen
+                    expenditures={visibleExpenditures}
+                    onAddExpenditure={handleAddExpenditure}
+                    onDeleteExpenditure={handleDeleteExpenditure}
+                    onEditExpenditure={handleEditExpenditure}
+                    isOnline={isOnline}
+                    isReadOnly={subscriptionLocked}
+                  />
+                </div>
+              )}
 
-          {visitedTabs.has('settings') && state.role === 'owner' && (
-             <div
-               className="absolute inset-0 overflow-y-auto p-4 md:p-8"
-               style={{ display: activeTab === 'settings' ? 'block' : 'none' }}
-            >
-               <SettingsScreen
-                business={state.business}
-                onUpdateBusiness={b => setState(prev => ({ ...prev, business: b }))}
-                onManualSync={() => safeSyncWithServer('manual')}
-                lastSyncedAt={state.lastSyncedAt}
-                onLogout={handleLogout}
-                onDeleteAccount={handleDeleteAccount}
-                isOnline={isOnline}
-                onSubscribe={openPaymentLink}
-              />
-            </div>
-          )}
+              {activeTab === 'settings' && state.role === 'owner' && (
+                <div className="p-4 md:p-8 min-h-full">
+                  <SettingsScreen
+                    business={state.business}
+                    onUpdateBusiness={b => setState(prev => ({ ...prev, business: b }))}
+                    onManualSync={() => safeSyncWithServer('manual')}
+                    lastSyncedAt={state.lastSyncedAt}
+                    onLogout={handleLogout}
+                    onDeleteAccount={handleDeleteAccount}
+                    isOnline={isOnline}
+                    onSubscribe={openPaymentLink}
+                  />
+                </div>
+              )}
 
-          {visitedTabs.has('guides') && (
-             <div
-               className="absolute inset-0 overflow-y-auto p-0 md:p-0"
-               style={{ display: activeTab === 'guides' ? 'block' : 'none' }}
-            >
-               <GuidesScreen />
-            </div>
-          )}
-
-
+              {activeTab === 'guides' && (
+                <div className="p-0 md:p-0 min-h-full">
+                  <GuidesScreen />
+                </div>
+              )}
+            </motion.div>
+          </AnimatePresence>
         </div>
 
         {/* Mobile Bottom Nav */}

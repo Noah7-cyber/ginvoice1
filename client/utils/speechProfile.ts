@@ -7,7 +7,7 @@ export const speechConfig = {
   defaultProfile: 'nigerian',
   profiles: {
     nigerian: {
-      fallbackModel: 'benjaminogbonna/whisper-tiny-for-nigerian-common-languages',
+      fallbackModel: 'Xenova/whisper-tiny',
       nativeLocale: 'en-NG'
     }
   } as Record<string, SpeechProfile>

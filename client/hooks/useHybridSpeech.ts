@@ -24,6 +24,7 @@ export const useHybridSpeech = (profileName = speechConfig.defaultProfile) => {
         setStatus('loading_model');
         // Dynamically import from CDN to avoid ENOSPC npm install errors
         const transformers = await import(/* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
+        transformers.env.allowLocalModels = false;
         const transcriber = await transformers.pipeline('automatic-speech-recognition', profile.fallbackModel);
         if (isMounted) {
           whisperPipelineRef.current = transcriber;

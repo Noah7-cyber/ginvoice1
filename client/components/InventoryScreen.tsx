@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Search, Edit3, Trash2, CheckCircle2, X, ListTodo, Layers, Tag, DollarSign, ArrowUp, Maximize2, Save, Loader2, Calculator, SlidersHorizontal, Download } from 'lucide-react';
+import { Plus, Search, Edit3, Trash2, CheckCircle2, X, ListTodo, Layers, Tag, DollarSign, ArrowUp, Maximize2, Save, Loader2, Calculator, SlidersHorizontal, Download, Infinity } from 'lucide-react';
 import { Product, Category } from '../types';
 import { CURRENCY } from '../constants';
 import { formatCurrency } from '../utils/currency';
@@ -942,19 +942,27 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                   <td className="px-6 py-4">
                     <GuideWrapper id="stock-status" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick} dotPosition="top-1/2 -left-2 -translate-y-1/2 -ml-2">
                         <div className="flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full ${product.currentStock < 10 ? 'bg-red-500 animate-pulse' : 'bg-green-500'}`}></span>
-                          {(!safeReadOnly && inlineEditingId === product.id) ? (
-                            <div className="flex items-center gap-1">
-                              <input
-                                type="number"
-                                className="w-20 px-2 py-1 border rounded font-bold text-gray-800"
-                                value={inlineEditData[product.id]?.currentStock ?? product.currentStock}
-                                onChange={(e) => handleInlineUpdateLocal(product.id, 'currentStock', e.target.value)}
-                              />
-                              <span className="text-xs text-gray-500">{product.baseUnit}</span>
+                          {product.itemType === 'SERVICE' ? (
+                            <div className="flex items-center gap-2 text-indigo-600 font-bold bg-indigo-50 px-3 py-1.5 rounded-full text-xs">
+                              <Infinity size={14} /> Service
                             </div>
                           ) : (
-                            <span className="font-bold text-gray-800">{product.currentStock} {product.baseUnit}</span>
+                            <>
+                              <span className={`w-2 h-2 rounded-full ${product.currentStock < 10 ? 'bg-red-500 animate-pulse' : 'bg-green-500'}`}></span>
+                              {(!safeReadOnly && inlineEditingId === product.id) ? (
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    type="number"
+                                    className="w-20 px-2 py-1 border rounded font-bold text-gray-800"
+                                    value={inlineEditData[product.id]?.currentStock ?? product.currentStock}
+                                    onChange={(e) => handleInlineUpdateLocal(product.id, 'currentStock', e.target.value)}
+                                  />
+                                  <span className="text-xs text-gray-500">{product.baseUnit}</span>
+                                </div>
+                              ) : (
+                                <span className="font-bold text-gray-800">{product.currentStock} {product.baseUnit}</span>
+                              )}
+                            </>
                           )}
                         </div>
                     </GuideWrapper>
@@ -1532,7 +1540,13 @@ const InventoryCard = React.memo(({ product, showHeader, headerId, firstChar, is
             <GuideWrapper id="stock-status" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick} dotPosition="top-0 right-0 -mt-3 -mr-3">
                 <div className="flex flex-col">
                 <span className="text-[10px] uppercase font-bold text-gray-400">Stock</span>
-                <span className={`font-bold ${product.currentStock < 10 ? 'text-red-500' : 'text-gray-900'}`}>{product.currentStock} {product.baseUnit}</span>
+                {product.itemType === 'SERVICE' ? (
+                  <span className="flex items-center gap-1 text-indigo-600 font-bold text-sm mt-0.5">
+                    <Infinity size={14} /> Service
+                  </span>
+                ) : (
+                  <span className={`font-bold ${product.currentStock < 10 ? 'text-red-500' : 'text-gray-900'}`}>{product.currentStock} {product.baseUnit}</span>
+                )}
                 </div>
             </GuideWrapper>
             <div className="flex flex-col text-right">

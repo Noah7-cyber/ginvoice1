@@ -17,6 +17,7 @@ const productSchema = new mongoose.Schema({
   sellingPrice: { type: mongoose.Types.Decimal128, default: 0 },
   costPrice: { type: mongoose.Types.Decimal128, default: 0 },
   baseUnit: { type: String, default: 'Piece' },
+  itemType: { type: String, enum: ['PRODUCT', 'SERVICE'], default: 'PRODUCT' },
 
   // This strict array definition fixes the "Disappearing Units" bug
   units: [unitSchema],
