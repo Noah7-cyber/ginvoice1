@@ -42,11 +42,15 @@ export default function useTabRouting({
     return () => window.removeEventListener('popstate', syncURL);
   }, [syncURL]);
 
-  const handleTabChange = useCallback((tab: TabId) => {
+  const handleTabChange = useCallback((tab: TabId, options?: { replace?: boolean }) => {
     setActiveTab(tab);
     setVisitedTabs(prev => new Set(prev).add(tab));
     setDeepLinkParams({});
-    window.history.pushState(null, '', `/${tab}`);
+    if (options?.replace) {
+      window.history.replaceState(null, '', `/${tab}`);
+    } else {
+      window.history.pushState(null, '', `/${tab}`);
+    }
   }, [setActiveTab, setVisitedTabs, setDeepLinkParams]);
 
   const handleBotNavigate = useCallback((tab: TabId, params?: any) => {

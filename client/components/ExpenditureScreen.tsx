@@ -523,4 +523,8 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
   );
 };
 
-export default ExpenditureScreen;
+export default React.memo(ExpenditureScreen, (prev, next) => {
+    return prev.expenditures === next.expenditures &&
+           prev.isOnline === next.isOnline &&
+           prev.isReadOnly === next.isReadOnly;
+});

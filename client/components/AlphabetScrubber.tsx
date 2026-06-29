@@ -77,7 +77,7 @@ const AlphabetScrubber: React.FC<AlphabetScrubberProps> = ({ onScrollTo, classNa
       {/* The Track */}
       <div
         ref={trackRef}
-        className={`fixed right-0 top-20 bottom-24 w-8 z-[60] flex flex-col items-center justify-between py-2 touch-none select-none transition-opacity duration-300 ${isInteracting ? 'opacity-100 bg-black/5' : 'opacity-0 hover:opacity-100'}`}
+        className={`absolute right-0 top-20 bottom-24 w-8 z-[60] flex flex-col items-center justify-between py-2 touch-none select-none transition-opacity duration-300 ${isInteracting ? 'opacity-100 bg-gray-100/80 rounded-l-xl border border-gray-200 shadow-sm' : 'opacity-60 hover:opacity-100 bg-white/50 backdrop-blur-[2px] rounded-l-xl border border-gray-100'}`}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}

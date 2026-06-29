@@ -160,7 +160,8 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
     sellingPrice: 0,
     currentStock: 0,
     baseUnit: 'Piece',
-    units: []
+    units: [],
+    itemType: 'PRODUCT'
   };
 
   const [newProduct, setNewProduct] = useState<Partial<Product>>(initialProductState);
@@ -1230,6 +1231,23 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
               <button onClick={() => { setIsModalOpen(false); updateUrlForProduct(null); }}><X size={24} /></button>
             </div>
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              <div className="flex bg-gray-100 p-1 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setNewProduct({ ...newProduct, itemType: 'PRODUCT' })}
+                  className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors ${newProduct.itemType !== 'SERVICE' ? 'bg-white shadow text-primary' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200'}`}
+                >
+                  Physical Product
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNewProduct({ ...newProduct, itemType: 'SERVICE' })}
+                  className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors ${newProduct.itemType === 'SERVICE' ? 'bg-white shadow text-primary' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200'}`}
+                >
+                  Service
+                </button>
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Product Name</label>
                 <input required type="text" className="w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary outline-none" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} placeholder="e.g. OMO Detergent" />
@@ -1373,15 +1391,24 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                     onChange={e => setNewProduct({...newProduct, sellingPrice: Number(e.target.value)})}
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Quantity Left</label>
-                  <input
-                    type="number"
-                    className="w-full px-4 py-3 rounded-xl border"
-                    value={newProduct.currentStock || ''}
-                    onChange={e => setNewProduct({...newProduct, currentStock: Number(e.target.value)})}
-                  />
-                </div>
+                {newProduct.itemType !== 'SERVICE' ? (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Quantity Left</label>
+                    <input
+                      type="number"
+                      className="w-full px-4 py-3 rounded-xl border"
+                      value={newProduct.currentStock || ''}
+                      onChange={e => setNewProduct({...newProduct, currentStock: Number(e.target.value)})}
+                    />
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Quantity Left</label>
+                    <div className="w-full px-4 py-3 rounded-xl border bg-gray-50 text-gray-400 font-medium">
+                      Infinite (Service)
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="pt-4 flex gap-3">
                 <button
@@ -1608,4 +1635,12 @@ const InventoryCard = React.memo(({ product, showHeader, headerId, firstChar, is
     );
 });
 
-export default React.memo(InventoryScreen);
+export default React.memo(InventoryScreen, (prev, next) => {
+    return prev.products === next.products &&
+           prev.isOwner === next.isOwner &&
+           prev.isReadOnly === next.isReadOnly &&
+           prev.isOnline === next.isOnline &&
+           prev.initialParams === next.initialParams &&
+           prev.isGuideMode === next.isGuideMode &&
+           prev.activeHotspotId === next.activeHotspotId;
+});

@@ -1407,4 +1407,14 @@ const EditTransactionModal: React.FC<EditModalProps> = ({ transaction, products,
    );
 };
 
-export default HistoryScreen;
+export default React.memo(HistoryScreen, (prev, next) => {
+    return prev.transactions === next.transactions &&
+           prev.products === next.products &&
+           prev.business === next.business &&
+           prev.isSubscriptionExpired === next.isSubscriptionExpired &&
+           prev.isReadOnly === next.isReadOnly &&
+           prev.isOnline === next.isOnline &&
+           prev.initialParams === next.initialParams &&
+           prev.isGuideMode === next.isGuideMode &&
+           prev.activeHotspotId === next.activeHotspotId;
+});

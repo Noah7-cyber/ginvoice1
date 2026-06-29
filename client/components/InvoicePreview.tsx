@@ -99,6 +99,13 @@ const InvoicePreview: React.FC<InvoicePreviewProps> = ({ transaction, business, 
             </div>
           </div>
 
+          {(() => {
+            const hasServices = transaction.items.some(item => {
+              const product = products.find(p => p.id === item.productId);
+              return product?.itemType === 'SERVICE';
+            });
+            return (
+              <>
           <div className="mb-10">
             <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Bill To</p>
             <h3 className="text-xl font-bold text-gray-900">{transaction.customerName}</h3>
@@ -108,29 +115,39 @@ const InvoicePreview: React.FC<InvoicePreviewProps> = ({ transaction, business, 
             <thead className="border-b-2 border-gray-100">
               <tr>
                 <th className="text-left py-4 text-xs font-black text-gray-400 uppercase tracking-widest">Item Description</th>
-                <th className="text-center py-4 text-xs font-black text-gray-400 uppercase tracking-widest">Qty</th>
+                <th className="text-center py-4 text-xs font-black text-gray-400 uppercase tracking-widest">{hasServices ? 'Qty / Sessions' : 'Qty'}</th>
                 <th className="text-right py-4 text-xs font-black text-gray-400 uppercase tracking-widest">Unit Price</th>
                 <th className="text-right py-4 text-xs font-black text-gray-400 uppercase tracking-widest">Total</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {transaction.items.map((item, idx) => (
-                <tr key={idx}>
-                  <td className="py-4">
-                    <div className="font-bold text-gray-800">{item.productName}</div>
-                    {item.discount > 0 && (
-                      <div className="flex items-center gap-1 text-[10px] text-emerald-600 font-bold uppercase tracking-wider">
-                        <Tag size={8} /> Item Discount Applied (-{CURRENCY}{item.discount.toLocaleString()})
+              {transaction.items.map((item, idx) => {
+                const product = products.find(p => p.id === item.productId);
+                const isService = product?.itemType === 'SERVICE';
+                return (
+                  <tr key={idx}>
+                    <td className="py-4">
+                      <div className="font-bold text-gray-800">
+                        {item.productName}
+                        {isService && <span className="ml-2 inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-50 text-purple-600 uppercase tracking-widest">Service</span>}
                       </div>
-                    )}
-                  </td>
-                  <td className="py-4 text-center font-medium text-gray-600">{item.quantity}</td>
-                  <td className="py-4 text-right font-medium text-gray-600">{CURRENCY}{item.unitPrice.toLocaleString()}</td>
-                  <td className="py-4 text-right font-bold text-gray-900">{CURRENCY}{item.total.toLocaleString()}</td>
-                </tr>
-              ))}
+                      {item.discount > 0 && (
+                        <div className="flex items-center gap-1 text-[10px] text-emerald-600 font-bold uppercase tracking-wider">
+                          <Tag size={8} /> Item Discount Applied (-{CURRENCY}{item.discount.toLocaleString()})
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-4 text-center font-medium text-gray-600">{item.quantity}</td>
+                    <td className="py-4 text-right font-medium text-gray-600">{CURRENCY}{item.unitPrice.toLocaleString()}</td>
+                    <td className="py-4 text-right font-bold text-gray-900">{CURRENCY}{item.total.toLocaleString()}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
+            </>
+          );
+        })()}
 
           <div className="flex flex-col items-end space-y-3 mb-12">
             <div className="w-full max-w-[240px] flex justify-between items-center py-2 text-gray-500">

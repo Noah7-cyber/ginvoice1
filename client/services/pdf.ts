@@ -87,10 +87,14 @@ export const generateInvoicePDF = async (transaction: Transaction, business: Bus
      drawLine();
 
      // Items Header
+     const hasServices = transaction.items.some(item => {
+         const p = products.find(prod => prod.id === item.productId);
+         return p?.itemType === 'SERVICE';
+     });
      doc.setFont('helvetica', 'bold');
      doc.setFontSize(8);
      doc.text('Item', margin, y);
-     doc.text('Qty', 45, y, { align: 'right' });
+     doc.text(hasServices ? 'Qty/Ses' : 'Qty', 45, y, { align: 'right' });
      doc.text('Total', pageWidth - margin, y, { align: 'right' });
      y += 4;
 
@@ -110,10 +114,13 @@ export const generateInvoicePDF = async (transaction: Transaction, business: Bus
          y += (nameLines.length * 3.5);
 
          // Category below name
-         if (category) {
+         const product = products.find(p => p.id === item.productId);
+         const isService = product?.itemType === 'SERVICE';
+         if (category || isService) {
+            const catStr = [category, isService ? '(Service)' : ''].filter(Boolean).join(' ');
             doc.setFontSize(7);
             doc.setTextColor(100);
-            doc.text(`(${category})`, margin, y);
+            doc.text(`(${catStr})`, margin, y);
             doc.setTextColor(0);
             doc.setFontSize(8);
             y += 4;
@@ -233,11 +240,16 @@ export const generateInvoicePDF = async (transaction: Transaction, business: Bus
   doc.rect(margin, y, pageWidth - (margin * 2), 10, 'F');
   y += 7;
 
+  const hasServicesA4 = transaction.items.some(item => {
+      const p = products.find(prod => prod.id === item.productId);
+      return p?.itemType === 'SERVICE';
+  });
+
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(100);
   drawText('ITEM DESCRIPTION', cols.desc + 2, y);
-  drawText('QTY', cols.qty, y, { align: 'center' });
+  drawText(hasServicesA4 ? 'QTY / SESSIONS' : 'QTY', cols.qty, y, { align: 'center' });
   drawText('PRICE', cols.price, y, { align: 'right' });
   drawText('TOTAL', pageWidth - margin - 2, y, { align: 'right' });
 
@@ -255,8 +267,11 @@ export const generateInvoicePDF = async (transaction: Transaction, business: Bus
     const nameLines = doc.splitTextToSize(item.productName, 100); // Max width 100mm
     let lineCount = nameLines.length;
 
+    const product = products.find(p => p.id === item.productId);
+    const isService = product?.itemType === 'SERVICE';
+    
     // Add category line if exists
-    if (category) lineCount += 1;
+    if (category || isService) lineCount += 1;
 
     const rowHeight = Math.max(10, lineCount * 5);
 
@@ -269,12 +284,13 @@ export const generateInvoicePDF = async (transaction: Transaction, business: Bus
     drawText(nameLines, cols.desc + 2, y);
 
     // Draw Category below
-    if (category) {
+    if (category || isService) {
+        const catStr = [category, isService ? '(Service)' : ''].filter(Boolean).join(' ');
         doc.setFontSize(8);
         doc.setTextColor(100);
         // Calculate Y position for category (below name lines)
         const catY = y + (nameLines.length * 4);
-        drawText(`(${category})`, cols.desc + 2, catY);
+        drawText(`(${catStr})`, cols.desc + 2, catY);
         doc.setTextColor(0);
         doc.setFontSize(9);
     }

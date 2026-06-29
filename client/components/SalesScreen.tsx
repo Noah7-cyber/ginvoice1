@@ -198,17 +198,18 @@ const ProductItem = React.memo(({ p, isReadOnly, isOfflineDisabled, onClick }: {
     return (
         <button
             onClick={() => onClick(p)}
-            disabled={p.currentStock <= 0}
+            disabled={p.itemType !== 'SERVICE' && p.currentStock <= 0}
             className={`
             group flex items-center gap-4 p-4 bg-white border border-gray-50 rounded-2xl shadow-sm transition-all text-left
-            ${p.currentStock <= 0 ? 'opacity-50 grayscale cursor-not-allowed' :
+            ${(p.itemType !== 'SERVICE' && p.currentStock <= 0) ? 'opacity-50 grayscale cursor-not-allowed' :
                 isReadOnly || isOfflineDisabled ? 'opacity-60 grayscale cursor-not-allowed' :
                 'hover:border-primary hover:shadow-md active:scale-[0.98]'}
             `}
         >
             <div className={`
             w-12 h-12 rounded-xl flex items-center justify-center shrink-0
-            ${p.currentStock < 10 ? 'bg-red-50 text-red-600' : 'bg-indigo-50 text-indigo-600'}
+            ${p.itemType === 'SERVICE' ? 'bg-purple-50 text-purple-600' :
+              p.currentStock < 10 ? 'bg-red-50 text-red-600' : 'bg-indigo-50 text-indigo-600'}
             `}>
             <ShoppingCart size={24} />
             </div>
@@ -224,9 +225,10 @@ const ProductItem = React.memo(({ p, isReadOnly, isOfflineDisabled, onClick }: {
             <div className="flex justify-between items-center">
                 <span className="text-sm font-black text-primary">{formatCurrency(p.sellingPrice)}</span>
                 <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
+                p.itemType === 'SERVICE' ? 'bg-purple-100 text-purple-700' :
                 p.currentStock < 10 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'
                 }`}>
-                {p.currentStock} {p.baseUnit}s
+                {p.itemType === 'SERVICE' ? 'Service' : `${p.currentStock} ${p.baseUnit}s`}
                 </span>
             </div>
             </div>
@@ -238,4 +240,11 @@ const ProductItem = React.memo(({ p, isReadOnly, isOfflineDisabled, onClick }: {
     );
 });
 
-export default React.memo(SalesScreen);
+export default React.memo(SalesScreen, (prev, next) => {
+    return prev.products === next.products &&
+           prev.isReadOnly === next.isReadOnly &&
+           prev.isOnline === next.isOnline &&
+           prev.strictOnlineMode === next.strictOnlineMode &&
+           prev.isGuideMode === next.isGuideMode &&
+           prev.activeHotspotId === next.activeHotspotId;
+});

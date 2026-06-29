@@ -1079,7 +1079,7 @@ const App: React.FC = () => {
   const addToCart = (product: Product, unit?: ProductUnit) => {
     const multiplier = unit ? unit.multiplier : 1;
     // Basic check for at least 1 unit availability
-    if (product.currentStock < multiplier) return;
+    if (product.itemType !== 'SERVICE' && product.currentStock < multiplier) return;
 
     setCart(prev => {
       // 1. Check if item exists (matching Product ID AND Unit)
@@ -1386,49 +1386,64 @@ const App: React.FC = () => {
     }
   }, [allowedTabs, activeTab]);
 
-  // Swipe Gestures for Mobile View
-  const [touchStart, setTouchStart] = useState<{ x: number, y: number } | null>(null);
-  const [touchEnd, setTouchEnd] = useState<{ x: number, y: number } | null>(null);
-  const minSwipeDistance = 50;
+  // Sync Nav Clicks and Swipe Gestures using CSS Scroll Snap
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const ignoreNextScrollRef = useRef(false);
 
-  const onTouchStart = (e: React.TouchEvent) => {
-    setTouchEnd(null);
-    setTouchStart({
-      x: e.targetTouches[0].clientX,
-      y: e.targetTouches[0].clientY
-    });
-  };
-
-  const onTouchMove = (e: React.TouchEvent) => {
-    setTouchEnd({
-      x: e.targetTouches[0].clientX,
-      y: e.targetTouches[0].clientY
-    });
-  };
-
-  const onTouchEnd = () => {
-    if (!touchStart || !touchEnd) return;
+  useEffect(() => {
+    if (!scrollRef.current || allowedTabs.length === 0) return;
     
-    const distanceX = touchStart.x - touchEnd.x;
-    const distanceY = Math.abs(touchStart.y - touchEnd.y);
-    
-    // Check if the swipe is mostly horizontal (ignore vertical scrolls)
-    if (distanceY > 40) return;
+    if (ignoreNextScrollRef.current) {
+      ignoreNextScrollRef.current = false;
+      return;
+    }
 
-    const isLeftSwipe = distanceX > minSwipeDistance;
-    const isRightSwipe = distanceX < -minSwipeDistance;
+    const index = allowedTabs.indexOf(activeTab);
+    if (index !== -1) {
+      scrollRef.current.scrollTo({
+        left: index * scrollRef.current.clientWidth,
+        behavior: 'instant'
+      });
+    }
+  }, [activeTab, allowedTabs]);
 
-    if (isLeftSwipe || isRightSwipe) {
-      if (isMobileView && !isCartOpen && !isNotificationOpen) {
-        const currentIndex = allowedTabs.indexOf(activeTab);
-        if (currentIndex === -1) return;
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return;
 
-        if (isLeftSwipe && currentIndex < allowedTabs.length - 1) {
-          handleTabChange(allowedTabs[currentIndex + 1]);
-        }
-        if (isRightSwipe && currentIndex > 0) {
-          handleTabChange(allowedTabs[currentIndex - 1]);
-        }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting && entry.intersectionRatio > 0.5) {
+            const tabId = entry.target.getAttribute('data-tabid') as TabId;
+            if (tabId && tabId !== activeTab) {
+              ignoreNextScrollRef.current = true;
+              handleTabChange(tabId, { replace: true });
+            }
+          }
+        });
+      },
+      {
+        root: container,
+        threshold: 0.6
+      }
+    );
+
+    const children = Array.from(container.children);
+    children.forEach((child) => observer.observe(child));
+
+    return () => observer.disconnect();
+  }, [activeTab, handleTabChange]);
+
+  const handleNavClick = (tab: TabId) => {
+    handleTabChange(tab);
+    if (scrollRef.current) {
+      const index = allowedTabs.indexOf(tab);
+      if (index !== -1) {
+        scrollRef.current.scrollTo({
+          left: index * scrollRef.current.clientWidth,
+          behavior: 'instant'
+        });
       }
     }
   };
@@ -1546,7 +1561,7 @@ const App: React.FC = () => {
         </div>
         <nav className="flex-1 px-4 py-4 space-y-1">
           {allowedTabs.filter(tab => tab !== 'guides').map(tab => (
-            <SidebarLink key={tab} active={activeTab === tab} onClick={() => handleTabChange(tab)} icon={
+            <SidebarLink key={tab} active={activeTab === tab} onClick={() => handleNavClick(tab)} icon={
               tab === 'sales' ? <ShoppingBag /> : tab === 'inventory' ? <Package /> : tab === 'history' ? <History /> : 
               tab === 'dashboard' ? <BarChart3 /> : tab === 'expenditure' ? <Wallet /> : tab === 'guides' ? <BookOpen /> : <Settings />
             } label={TAB_LABELS[tab] || tab.charAt(0).toUpperCase() + tab.slice(1)} />
@@ -1560,12 +1575,7 @@ const App: React.FC = () => {
       </aside>
 
       {/* Main Workspace */}
-      <main 
-        className="flex-1 flex flex-col overflow-hidden relative"
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
-      >
+      <main className="flex-1 flex flex-col overflow-hidden relative">
         <header className="bg-white border-b p-4 flex justify-between items-center shrink-0">
           <div className="md:hidden flex items-center gap-2 overflow-hidden">
              {state.business.logo && <img src={state.business.logo} alt="Logo" className="w-8 h-8 rounded-lg bg-white p-0.5 border shrink-0" />}
@@ -1615,7 +1625,7 @@ const App: React.FC = () => {
                )}
             </button>
             <button
-              onClick={() => handleTabChange('guides')}
+              onClick={() => handleNavClick('guides')}
               className={`relative p-2 rounded-xl transition-all ${activeTab === 'guides' ? 'bg-primary text-white' : 'text-primary bg-indigo-50 hover:bg-indigo-100'}`}
               title="Guides"
             >
@@ -1639,133 +1649,142 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* Content Area - Framer Motion Animated Transitions */}
-        <div className="flex-1 relative overflow-hidden">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={activeTab}
-              initial={{ x: 20, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={{ x: -20, opacity: 0 }}
-              transition={{ duration: 0.25 }}
-              className="absolute inset-0 overflow-y-auto"
+        {/* Content Area - Native CSS Scroll Snap */}
+        <div 
+          ref={scrollRef}
+          className="flex-1 flex overflow-x-auto snap-x snap-mandatory hide-scrollbar relative"
+        >
+          {allowedTabs.map(tab => (
+            <div 
+              key={tab} 
+              data-tabid={tab} 
+              className="w-full shrink-0 snap-center overflow-y-auto overflow-x-hidden relative"
+              style={{ height: '100%' }}
             >
-              {activeTab === 'sales' && (
-                <div className="p-4 md:p-8 min-h-full">
-                  <SalesScreen
-                    products={state.products}
-                    onAddToCart={addToCart}
-                    isReadOnly={subscriptionLocked}
-                    isOnline={isOnline}
-                    strictOnlineMode={state.business?.settings?.onlineOnlyMode}
-                  />
+              {!visitedTabs.has(tab) ? (
+                <div className="flex items-center justify-center min-h-full">
+                  <Loader2 className="w-8 h-8 text-indigo-200 animate-spin" />
                 </div>
-              )}
-              
-              {activeTab === 'inventory' && (
-                <div className="p-4 md:p-8 min-h-full">
-                  <InventoryScreen
-                    products={state.products}
-                    onUpdateProducts={handleUpdateProducts}
-                    isOwner={state.role === 'owner'}
-                    isReadOnly={!canManageStock || subscriptionLocked}
-                    isOnline={isOnline}
-                    initialParams={deepLinkParams}
-                    refreshData={refreshData}
-                  />
-                </div>
-              )}
+              ) : (
+                <>
+                  {tab === 'sales' && (
+                    <div className="p-4 md:p-8 min-h-full">
+                      <SalesScreen
+                        products={state.products}
+                        onAddToCart={addToCart}
+                        isReadOnly={subscriptionLocked}
+                        isOnline={isOnline}
+                        strictOnlineMode={state.business?.settings?.onlineOnlyMode}
+                      />
+                    </div>
+                  )}
+                  
+                  {tab === 'inventory' && (
+                    <div className="p-4 md:p-8 min-h-full">
+                      <InventoryScreen
+                        products={state.products}
+                        onUpdateProducts={handleUpdateProducts}
+                        isOwner={state.role === 'owner'}
+                        isReadOnly={!canManageStock || subscriptionLocked}
+                        isOnline={isOnline}
+                        initialParams={deepLinkParams}
+                        refreshData={refreshData}
+                      />
+                    </div>
+                  )}
 
-              {activeTab === 'history' && (
-                <div className="p-4 md:p-8 min-h-full">
-                  <HistoryScreen
-                    transactions={visibleTransactions}
-                    products={state.products}
-                    business={state.business}
-                    onDeleteTransaction={handleDeleteTransaction}
-                    onUpdateTransaction={(t, options) => {
-                      const payload = { ...t, updatedAt: new Date().toISOString() };
-                      setState(prev => ({
-                        ...prev,
-                        transactions: prev.transactions.map(tx => tx.id === t.id ? payload : tx)
-                      }));
-                      if (navigator.onLine && !options?.skipSync) {
-                        pushToBackend({ transactions: [payload] }).catch(err => console.error("Failed to sync edit", err));
-                      }
-                    }}
-                    onCreatePreviousDebt={(t) => {
-                      const created = { ...t, updatedAt: new Date().toISOString(), isPreviousDebt: true };
-                      setState(prev => ({
-                        ...prev,
-                        transactions: [created, ...prev.transactions]
-                      }));
-                      if (navigator.onLine) {
-                        pushToBackend({ transactions: [created] }).catch(err => console.error('Failed to sync opening debt', err));
-                      }
-                    }}
-                    isSubscriptionExpired={subscriptionLocked}
-                    onRenewSubscription={openPaymentLink}
-                    isReadOnly={!canManageHistory || subscriptionLocked}
-                    isOnline={isOnline}
-                    initialParams={deepLinkParams}
-                    onSelectedInvoiceChange={setHistorySelectedInvoice}
-                  />
-                </div>
-              )}
+                  {tab === 'history' && (
+                    <div className="p-4 md:p-8 min-h-full">
+                      <HistoryScreen
+                        transactions={visibleTransactions}
+                        products={state.products}
+                        business={state.business}
+                        onDeleteTransaction={handleDeleteTransaction}
+                        onUpdateTransaction={(t, options) => {
+                          const payload = { ...t, updatedAt: new Date().toISOString() };
+                          setState(prev => ({
+                            ...prev,
+                            transactions: prev.transactions.map(tx => tx.id === t.id ? payload : tx)
+                          }));
+                          if (navigator.onLine && !options?.skipSync) {
+                            pushToBackend({ transactions: [payload] }).catch(err => console.error("Failed to sync edit", err));
+                          }
+                        }}
+                        onCreatePreviousDebt={(t) => {
+                          const created = { ...t, updatedAt: new Date().toISOString(), isPreviousDebt: true };
+                          setState(prev => ({
+                            ...prev,
+                            transactions: [created, ...prev.transactions]
+                          }));
+                          if (navigator.onLine) {
+                            pushToBackend({ transactions: [created] }).catch(err => console.error('Failed to sync opening debt', err));
+                          }
+                        }}
+                        isSubscriptionExpired={subscriptionLocked}
+                        onRenewSubscription={openPaymentLink}
+                        isReadOnly={!canManageHistory || subscriptionLocked}
+                        isOnline={isOnline}
+                        initialParams={deepLinkParams}
+                        onSelectedInvoiceChange={setHistorySelectedInvoice}
+                      />
+                    </div>
+                  )}
 
-              {activeTab === 'dashboard' && (state.role === 'owner' || (state.business.staffPermissions as any)?.canViewDashboard) && (
-                <div className="p-4 md:p-8 min-h-full">
-                  <DashboardScreen
-                    transactions={visibleTransactions}
-                    products={state.products}
-                    expenditures={visibleExpenditures}
-                    business={state.business}
-                    onUpdateBusiness={b => setState(prev => ({ ...prev, business: { ...prev.business, ...b } }))}
-                  />
-                </div>
-              )}
+                  {tab === 'dashboard' && (state.role === 'owner' || (state.business.staffPermissions as any)?.canViewDashboard) && (
+                    <div className="p-4 md:p-8 min-h-full">
+                      <DashboardScreen
+                        transactions={visibleTransactions}
+                        products={state.products}
+                        expenditures={visibleExpenditures}
+                        business={state.business}
+                        onUpdateBusiness={b => setState(prev => ({ ...prev, business: { ...prev.business, ...b } }))}
+                      />
+                    </div>
+                  )}
 
-              {activeTab === 'expenditure' && (
-                <div className="p-4 md:p-8 min-h-full">
-                  <ExpenditureScreen
-                    expenditures={visibleExpenditures}
-                    onAddExpenditure={handleAddExpenditure}
-                    onDeleteExpenditure={handleDeleteExpenditure}
-                    onEditExpenditure={handleEditExpenditure}
-                    isOnline={isOnline}
-                    isReadOnly={subscriptionLocked}
-                  />
-                </div>
-              )}
+                  {tab === 'expenditure' && (
+                    <div className="p-4 md:p-8 min-h-full">
+                      <ExpenditureScreen
+                        expenditures={visibleExpenditures}
+                        onAddExpenditure={handleAddExpenditure}
+                        onDeleteExpenditure={handleDeleteExpenditure}
+                        onEditExpenditure={handleEditExpenditure}
+                        isOnline={isOnline}
+                        isReadOnly={subscriptionLocked}
+                      />
+                    </div>
+                  )}
 
-              {activeTab === 'settings' && state.role === 'owner' && (
-                <div className="p-4 md:p-8 min-h-full">
-                  <SettingsScreen
-                    business={state.business}
-                    onUpdateBusiness={b => setState(prev => ({ ...prev, business: b }))}
-                    onManualSync={() => safeSyncWithServer('manual')}
-                    lastSyncedAt={state.lastSyncedAt}
-                    onLogout={handleLogout}
-                    onDeleteAccount={handleDeleteAccount}
-                    isOnline={isOnline}
-                    onSubscribe={openPaymentLink}
-                  />
-                </div>
-              )}
+                  {tab === 'settings' && state.role === 'owner' && (
+                    <div className="p-4 md:p-8 min-h-full">
+                      <SettingsScreen
+                        business={state.business}
+                        onUpdateBusiness={b => setState(prev => ({ ...prev, business: b }))}
+                        onManualSync={() => safeSyncWithServer('manual')}
+                        lastSyncedAt={state.lastSyncedAt}
+                        onLogout={handleLogout}
+                        onDeleteAccount={handleDeleteAccount}
+                        isOnline={isOnline}
+                        onSubscribe={openPaymentLink}
+                      />
+                    </div>
+                  )}
 
-              {activeTab === 'guides' && (
-                <div className="p-0 md:p-0 min-h-full">
-                  <GuidesScreen />
-                </div>
+                  {tab === 'guides' && (
+                    <div className="p-0 md:p-0 min-h-full">
+                      <GuidesScreen />
+                    </div>
+                  )}
+                </>
               )}
-            </motion.div>
-          </AnimatePresence>
+            </div>
+          ))}
         </div>
 
         {/* Mobile Bottom Nav */}
         <nav className="md:hidden bg-white border-t flex justify-around p-2 shrink-0 z-50 overflow-x-auto hide-scrollbar">
           {allowedTabs.filter(tab => tab !== 'guides').map(tab => (
-            <MobileNavLink key={tab} active={activeTab === tab} onClick={() => handleTabChange(tab)} icon={
+            <MobileNavLink key={tab} active={activeTab === tab} onClick={() => handleNavClick(tab)} icon={
               tab === 'sales' ? <ShoppingBag /> : tab === 'inventory' ? <Package /> : tab === 'history' ? <History /> : 
               tab === 'dashboard' ? <BarChart3 /> : tab === 'expenditure' ? <Wallet /> : tab === 'guides' ? <BookOpen /> : <Settings />
             } label={TAB_LABELS[tab] || tab.charAt(0).toUpperCase() + tab.slice(1)} />

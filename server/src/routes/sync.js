@@ -11,6 +11,7 @@ const Category = require('../models/Category');
 const Notification = require('../models/Notification');
 const { maybeCreateStockVerificationNotification } = require('../services/stockVerification');
 const { decrementStock, restoreStock } = require('../services/stockAdapter');
+const { sendNativePush } = require('../services/pushService');
 
 // Middleware
 const auth = require('../middleware/auth');
@@ -342,6 +343,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
                 sellingPrice: toDecimal(p.sellingPrice),
                 costPrice: toDecimal(p.costPrice),
                 baseUnit: p.baseUnit || 'Piece',
+                itemType: p.itemType || (existing ? existing.itemType : 'PRODUCT'),
                 units: Array.isArray(p.units) ? p.units.map(u => ({
                   name: u.name,
                   multiplier: Number(u.multiplier || 1),
@@ -518,6 +520,19 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
       }
     }
 
+    if (transactions.length > 0) {
+      const validTxs = transactions.filter(t => t.id);
+      const newTxsCount = validTxs.length - skippedTransactions;
+      if (newTxsCount > 0) {
+        const totalValue = validTxs.reduce((sum, t) => sum + Number(t.totalAmount || 0), 0);
+        const format = (n) => `₦${n.toLocaleString()}`;
+        const msg = newTxsCount === 1 
+          ? `New sale recorded: ${format(totalValue)}`
+          : `New sync: ${newTxsCount} sales recorded totaling ${format(totalValue)}`;
+        sendNativePush(businessId, '🛒 New Sales Synced', msg).catch(console.error);
+      }
+    }
+
     return res.json({
       success: true,
       syncedAt: new Date(),
@@ -554,6 +569,8 @@ router.delete('/products/:id', auth, requireActiveSubscription, async (req, res)
       payload: { productId: id }
     });
 
+    sendNativePush(businessId, '🗑️ Product Deleted', `Product ID ${id} was deleted.`).catch(console.error);
+
     notifySSE(businessId, { products: true });
     res.json({ success: true, id, hard: true });
   } catch (err) {
@@ -585,6 +602,8 @@ router.delete('/transactions/:id', auth, requireActiveSubscription, async (req, 
         type: 'deletion',
         payload: { transactionId: transaction.id }
     });
+
+    sendNativePush(businessId, '🗑️ Sale Deleted', `Sale to ${transaction.customerName || 'Customer'} (₦${transaction.totalAmount || 0}) was deleted.`).catch(console.error);
 
     await Transaction.deleteOne({ businessId, id });
     notifySSE(businessId, { transactions: true, products: req.query.restock === 'true' });

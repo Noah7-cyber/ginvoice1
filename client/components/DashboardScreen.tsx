@@ -700,4 +700,9 @@ const StatCard: React.FC<{ title: string, value: string, icon: React.ReactNode, 
   </div>
 );
 
-export default DashboardScreen;
+export default React.memo(DashboardScreen, (prev, next) => {
+    return prev.transactions === next.transactions &&
+           prev.products === next.products &&
+           prev.expenditures === next.expenditures &&
+           prev.business === next.business;
+});

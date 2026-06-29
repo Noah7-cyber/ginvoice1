@@ -79,7 +79,7 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
       if (item.cartId === cartId) {
         const newQty = Math.max(1, item.quantity + delta);
         const product = products.find(p => p.id === item.productId);
-        if (product && newQty > product.currentStock) return item;
+        if (product && product.itemType !== 'SERVICE' && newQty > product.currentStock) return item;
         return { ...item, quantity: newQty, total: (newQty * item.unitPrice) - item.discount };
       }
       return item;
@@ -234,12 +234,18 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
               <p className="text-sm font-bold">No items in bill</p>
             </div>
           ) : (
-            cart.map((item, index) => (
+            cart.map((item, index) => {
+              const product = products.find(p => p.id === item.productId);
+              const isService = product?.itemType === 'SERVICE';
+              return (
               <GuideWrapper key={item.cartId} id="cart-item" className="w-full" isGuideMode={isGuideMode && index === 0} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick} dotPosition="top-1/2 -left-2 -translate-y-1/2">
               <div className="w-full bg-white p-3 rounded-2xl border border-gray-100 shadow-sm relative group">
                 <div className="flex justify-between items-start mb-2">
                   <div className="min-w-0 flex-1">
-                    <p className="font-bold text-gray-900 text-sm truncate">{item.productName}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-bold text-gray-900 text-sm truncate">{item.productName}</p>
+                      {isService && <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-50 text-purple-600 uppercase tracking-widest shrink-0">Service</span>}
+                    </div>
                     <p className="text-[10px] text-gray-400">{formatCurrency(item.unitPrice)} / unit</p>
                   </div>
                   <button onClick={() => removeFromCart(item.cartId)} className="text-gray-300 hover:text-red-500">
@@ -279,7 +285,8 @@ const CurrentOrderSidebar: React.FC<CurrentOrderSidebarProps> = ({
                 )}
               </div>
               </GuideWrapper>
-            ))
+              );
+            })
           )}
         </div>
 

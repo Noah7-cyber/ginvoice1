@@ -10,6 +10,7 @@ const helmet = require('helmet');
 // 1. Import Services & Plugins FIRST
 const { archiveInactiveBusinesses } = require('./services/archiver');
 const { processExpiredSubscriptions } = require('./services/subscriptionCron');
+const { initCronJobs } = require('./services/cronService');
 const decimal128ToNumberPlugin = require('./services/mongoosePlugin');
 const Product = require('./models/Product'); // Needed for Garbage Collection
 
@@ -113,6 +114,9 @@ if (require.main === module) {
       // Schedule subscription grace period / expiration task (Every 12 hours)
       setInterval(processExpiredSubscriptions, 12 * 60 * 60 * 1000);
       processExpiredSubscriptions(); // Run once on startup
+
+      // Initialize Cron Jobs
+      initCronJobs();
 
       // Garbage Collector for Tombstones (Every 12 hours)
       setInterval(async () => {
