@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import api from '../services/api';
 
-const MAX_DRIFT_MS = 5 * 60 * 1000; // 5 minutes
+const MAX_DRIFT_MS = 2 * 24 * 60 * 60 * 1000; // 2 days
 const STORAGE_KEY = 'ginvoice_last_known_time';
 
 export const useTimeDrift = () => {

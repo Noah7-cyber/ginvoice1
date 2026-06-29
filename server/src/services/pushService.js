@@ -37,10 +37,16 @@ const sendNativePush = async (businessId, title, body, data = {}) => {
         activeSubscriptions.push(subscription);
       } catch (err) {
         if (err.statusCode === 410 || err.statusCode === 404) {
+          console.log(`[WebPush] Subscription expired or not found. Removing. endpoint: ${subscription.endpoint}`);
           removals.push(subscription); // Subscription is no longer valid
         } else {
           activeSubscriptions.push(subscription); // Keep it if error was transient
-          console.error('[WebPush] Error sending push to a subscription:', err);
+          console.error('[WebPush] Error sending push to a subscription:', {
+            statusCode: err.statusCode,
+            body: err.body,
+            endpoint: subscription.endpoint,
+            message: err.message
+          });
         }
       }
     }

@@ -515,13 +515,16 @@ const search_expenses = async ({ query, startDate, endDate }, { businessId }) =>
     if (!businessId) return { error: "Login required." };
 
     const criteria = {
-        business: businessId,
-        $or: [
-            { description: { $regex: query, $options: 'i' } },
-            { title: { $regex: query, $options: 'i' } },
-            { category: { $regex: query, $options: 'i' } }
-        ]
+        business: businessId
     };
+
+    if (query && String(query).trim()) {
+        criteria.$or = [
+            { description: { $regex: String(query).trim(), $options: 'i' } },
+            { title: { $regex: String(query).trim(), $options: 'i' } },
+            { category: { $regex: String(query).trim(), $options: 'i' } }
+        ];
+    }
 
     if (startDate || endDate) {
         criteria.date = {};

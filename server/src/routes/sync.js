@@ -555,13 +555,17 @@ router.delete('/products/:id', auth, requireActiveSubscription, async (req, res)
     const { id } = req.params;
     const businessId = String(req.businessId).trim();
 
-    const result = await Product.deleteOne({ businessId: { $in: [businessId, new mongoose.Types.ObjectId(businessId)] }, id });
-    if (result.deletedCount === 0) return res.status(404).json({ message: 'Product not found for hard delete' });
+    const product = await Product.findOne({ businessId: { $in: [businessId, new mongoose.Types.ObjectId(businessId)] }, id });
+    if (!product) return res.status(404).json({ message: 'Product not found for hard delete' });
+    
+    await Product.deleteOne({ _id: product._id });
+    
+    const productName = product.name || id;
 
     await Notification.create({
       businessId,
       title: 'Product Deleted',
-      message: `Product deleted: ${id}`,
+      message: `Product deleted: ${productName}`,
       body: 'Owner deleted an item from inventory.',
       amount: 0,
       performedBy: req.userRole === 'owner' ? 'Owner' : 'Staff',
@@ -569,7 +573,7 @@ router.delete('/products/:id', auth, requireActiveSubscription, async (req, res)
       payload: { productId: id }
     });
 
-    sendNativePush(businessId, '🗑️ Product Deleted', `Product ID ${id} was deleted.`).catch(console.error);
+    sendNativePush(businessId, '🗑️ Product Deleted', `${productName} was deleted.`).catch(console.error);
 
     notifySSE(businessId, { products: true });
     res.json({ success: true, id, hard: true });

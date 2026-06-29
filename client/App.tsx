@@ -971,7 +971,6 @@ const App: React.FC = () => {
 
       // Pass the new state directly to refreshData
       await refreshData(newState);
-      subscribeUserToPush();
 
       setIsLoading(false);
 
@@ -1016,7 +1015,6 @@ const App: React.FC = () => {
 
         // Pass the new state directly to refreshData
         refreshData(newState);
-        subscribeUserToPush();
 
         return true;
       }
@@ -1658,7 +1656,7 @@ const App: React.FC = () => {
             <div 
               key={tab} 
               data-tabid={tab} 
-              className="w-full shrink-0 snap-center overflow-y-auto overflow-x-hidden relative"
+              className="w-full shrink-0 snap-center snap-always md:snap-normal overflow-y-auto overflow-x-hidden relative"
               style={{ height: '100%' }}
             >
               {!visitedTabs.has(tab) ? (

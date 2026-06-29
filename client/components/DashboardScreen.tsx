@@ -31,6 +31,8 @@ import { safeCalculate, safeSum } from '../utils/math';
 import ComplianceShieldWidget from './ComplianceShieldWidget';
 import ComplianceShieldModal from './ComplianceShieldModal';
 
+import { subscribeUserToPush } from '../services/pushNotifications';
+
 interface DashboardScreenProps {
   transactions: Transaction[];
   products: Product[];
@@ -41,6 +43,13 @@ interface DashboardScreenProps {
 
 const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, products, expenditures = [], business, onUpdateBusiness }) => {
   const [showShieldModal, setShowShieldModal] = useState(false);
+  const [showPushBanner, setShowPushBanner] = useState(false);
+
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission !== 'granted') {
+      setShowPushBanner(true);
+    }
+  }, []);
 
   const [remoteAnalytics, setRemoteAnalytics] = useState<{
     stats: {
@@ -315,6 +324,30 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
+      {showPushBanner && (
+        <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4">
+          <div className="flex items-center gap-3 text-indigo-900">
+             <div className="p-2 bg-indigo-100 rounded-full">
+               <AlertCircle size={20} className="text-indigo-600" />
+             </div>
+             <div>
+               <p className="font-bold text-sm">Turn on Notifications</p>
+               <p className="text-xs text-indigo-700/80">Enable notifications to get critical stock alerts and daily summaries.</p>
+             </div>
+          </div>
+          <button 
+             onClick={async () => {
+               const success = await subscribeUserToPush();
+               if (success) setShowPushBanner(false);
+               else setShowPushBanner(false); // hide even if denied so we don't annoy them forever
+             }}
+             className="w-full sm:w-auto px-6 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-sm hover:bg-indigo-700 hover:shadow-md transition-all active:scale-95"
+          >
+             Enable
+          </button>
+        </div>
+      )}
+
       <div>
         <div className="flex justify-between items-start">
            <div>
