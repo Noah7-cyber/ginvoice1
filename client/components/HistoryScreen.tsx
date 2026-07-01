@@ -327,8 +327,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
 
       const updatedTx = buildSettledTransaction(t);
       if (!isOnline) {
-          onUpdateTransaction(updatedTx);
-          addToast('Debt marked as paid locally. Will sync when online.', 'success');
+          addToast('Please connect to the internet to perform this action.', 'error');
           return;
       }
 
@@ -357,10 +356,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
       if (!confirm(`Mark all debts for this customer as paid?`)) return;
 
       if (!isOnline) {
-        debtorTransactions.forEach(t => {
-          onUpdateTransaction(buildSettledTransaction(t));
-        });
-        addToast('All debts marked as paid locally. Will sync when online.', 'success');
+        addToast('Please connect to the internet to perform this action.', 'error');
         return;
       }
 
@@ -533,6 +529,11 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ transactions, products, b
 
   const handleAutoSettle = async (customerName: string, amountPaid: number, customerTransactions: Transaction[]) => {
       if (!amountPaid || amountPaid <= 0) return;
+
+      if (!isOnline) {
+          addToast('Please connect to the internet to perform this action.', 'error');
+          return;
+      }
 
       setIsAutoSettling(true);
 

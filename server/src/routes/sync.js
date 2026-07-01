@@ -51,6 +51,7 @@ const withAtomic = async (work) => {
 const toDecimal = (value) => {
   if (value === null || value === undefined || value === '') return mongoose.Types.Decimal128.fromString('0');
   if (value instanceof Decimal128) return value;
+  if (typeof value === 'object' && value.$numberDecimal) return mongoose.Types.Decimal128.fromString(String(value.$numberDecimal));
   return mongoose.Types.Decimal128.fromString(String(value));
 };
 
@@ -361,7 +362,33 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
       }).filter(Boolean);
 
       if (productOps.length > 0) {
-        await Product.bulkWrite(productOps);
+        try {
+          await Product.bulkWrite(productOps, { ordered: false });
+        } catch (err) {
+          if (err.code === 11000 || (err.writeErrors && err.writeErrors.length > 0)) {
+            // Process individually to auto-rename duplicates without failing the batch
+            for (const op of productOps) {
+              try {
+                await Product.updateOne(op.updateOne.filter, op.updateOne.update, { upsert: true });
+              } catch (opErr) {
+                if (opErr.code === 11000) {
+                  const currentName = op.updateOne.update.$set?.name || 'Unknown';
+                  const newName = `${currentName} (Copy ${Math.floor(Math.random() * 10000)})`;
+                  op.updateOne.update.$set.name = newName;
+                  try {
+                    await Product.updateOne(op.updateOne.filter, op.updateOne.update, { upsert: true });
+                  } catch (retryErr) {
+                    skippedProducts += 1;
+                  }
+                } else {
+                  skippedProducts += 1;
+                }
+              }
+            }
+          } else {
+            skippedProducts += productOps.length;
+          }
+        }
       }
     }
 
