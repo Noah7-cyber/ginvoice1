@@ -70,6 +70,8 @@ export const getPendingStockDeductions = async (): Promise<Record<string, number
   const deductions: Record<string, number> = {};
 
   for (const job of jobs) {
+    if ((job.retryCount || 0) >= 5) continue;
+    
     if (job.payload?.transactions && Array.isArray(job.payload.transactions)) {
       for (const tx of job.payload.transactions) {
         if (tx.items && Array.isArray(tx.items)) {
