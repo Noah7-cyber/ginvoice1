@@ -87,3 +87,8 @@ coverage/
 *.sqlite
 *.db
 backup*.json
+
+# AI Test Scripts
+server/test_ai.js
+server/tests/
+server/test_*.js

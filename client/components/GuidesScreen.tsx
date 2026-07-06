@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BookOpen, ArrowLeft, Info, X, Clock, Settings as SettingsIcon, Wallet, ShoppingBag, Package } from 'lucide-react';
 import InventoryScreen from './InventoryScreen';
 import SalesScreen from './SalesScreen';
@@ -6,6 +6,7 @@ import CurrentOrderSidebar from './CurrentOrderSidebar';
 import HistoryScreen from './HistoryScreen';
 import ExpenditureScreen from './ExpenditureScreen';
 import SettingsScreen from './SettingsScreen';
+import { ErrorBoundary } from './ErrorBoundary';
 import { SaleItem, Product, Transaction, Expenditure, BusinessProfile } from '../types';
 
 // Dummy data for the guides
@@ -26,7 +27,7 @@ const DUMMY_TRANSACTIONS: Transaction[] = [
 ];
 
 const DUMMY_EXPENSES: Expenditure[] = [
-  { id: 'e1', date: new Date().toISOString(), amount: 50, category: 'Supplies', title: 'Napkins and cups', flowType: 'out', createdBy: 'owner' }
+  { id: 'e1', date: new Date().toISOString(), amount: 50, category: 'Supplies', title: 'Napkins and cups', flowType: 'out', createdBy: 'owner', description: 'Bought napkins', paymentMethod: 'cash' }
 ];
 
 const DUMMY_BUSINESS: BusinessProfile = {
@@ -65,10 +66,22 @@ export const SETTINGS_HOTSPOTS: Hotspot[] = [
   { id: 'staff-management', title: 'Staff Roles', description: 'Control what your cashiers can see and do.' }
 ];
 
-const GuidesScreen: React.FC = () => {
-  const [activeGuide, setActiveGuide] = useState<'inventory' | 'sales' | 'history' | 'expenditure' | 'settings' | null>(null);
+interface GuidesScreenProps {
+  initialGuide?: string | null;
+}
+
+const GuidesScreen: React.FC<GuidesScreenProps> = ({ initialGuide }) => {
+  const [activeGuide, setActiveGuide] = useState<'inventory' | 'sales' | 'history' | 'expenditure' | 'settings' | null>(
+    (initialGuide as any) || null
+  );
   const [activeHotspot, setActiveHotspot] = useState<Hotspot | null>(null);
   const [isCartOpen, setIsCartOpen] = useState(false);
+
+  useEffect(() => {
+    if (initialGuide) {
+      setActiveGuide(initialGuide as any);
+    }
+  }, [initialGuide]);
 
   const guideStyles = (
     <style>{`
@@ -123,9 +136,11 @@ const GuidesScreen: React.FC = () => {
       <div className="relative h-full flex flex-col bg-gray-50 overflow-hidden">
         {guideStyles}
         {renderHeader('Inventory Guide')}
-        <div className="flex-1 relative overflow-hidden select-none bg-gray-50/50">
-          <div className="guide-protected absolute inset-0 p-4 md:p-8 opacity-90 overflow-auto">
-            <InventoryScreen products={DUMMY_PRODUCTS} onUpdateProducts={() => {}} isOwner={true} isReadOnly={true} isOnline={false} refreshData={async () => {}} isGuideMode={true} activeHotspotId={activeHotspot?.id} onHotspotClick={(id) => setActiveHotspot(INVENTORY_HOTSPOTS.find(h => h.id === id) || null)} />
+        <div className="flex-1 relative overflow-hidden select-none bg-gray-50/50 flex">
+          <div className="guide-protected flex-1 overflow-auto p-4 md:p-8 opacity-90 relative">
+            <ErrorBoundary>
+              <InventoryScreen products={DUMMY_PRODUCTS} onUpdateProducts={() => {}} isOwner={true} isReadOnly={true} isOnline={false} refreshData={async () => {}} isGuideMode={true} activeHotspotId={activeHotspot?.id} onHotspotClick={(id) => setActiveHotspot(INVENTORY_HOTSPOTS.find(h => h.id === id) || null)} />
+            </ErrorBoundary>
           </div>
           {renderTooltip()}
         </div>
@@ -140,12 +155,16 @@ const GuidesScreen: React.FC = () => {
         {renderHeader('Sales & Cart Guide')}
         <div className="flex-1 relative overflow-hidden select-none bg-gray-50/50 flex">
           <div className="guide-protected flex-1 overflow-auto p-4 md:p-8 opacity-90 relative pb-32">
-            <SalesScreen products={DUMMY_PRODUCTS} onAddToCart={() => {}} isReadOnly={true} isGuideMode={true} activeHotspotId={activeHotspot?.id} onHotspotClick={(id) => setActiveHotspot(SALES_HOTSPOTS.find(h => h.id === id) || null)} />
+            <ErrorBoundary>
+              <SalesScreen products={DUMMY_PRODUCTS} onAddToCart={() => {}} isReadOnly={true} isOnline={false} isGuideMode={true} activeHotspotId={activeHotspot?.id} onHotspotClick={(id) => setActiveHotspot(SALES_HOTSPOTS.find(h => h.id === id) || null)} />
+            </ErrorBoundary>
           </div>
           <div className={`fixed inset-y-0 right-0 z-[60] transition-all duration-300 ease-in-out md:relative md:inset-auto md:z-auto ${isCartOpen ? 'translate-x-0 w-full max-w-sm md:w-80 lg:w-96 border-l shadow-2xl md:shadow-none' : 'translate-x-full w-0 overflow-hidden'}`}>
              {isCartOpen && window.innerWidth < 768 && <div className="fixed inset-0 bg-black/40 backdrop-blur-sm -z-10" onClick={() => setIsCartOpen(false)} />}
              <div className="guide-protected h-full bg-white flex flex-col relative pointer-events-auto">
-               <CurrentOrderSidebar cart={DUMMY_CART_ITEMS} setCart={() => {}} customerName="" setCustomerName={() => {}} customerPhone="" setCustomerPhone={() => {}} paymentMethod="cash" setPaymentMethod={() => {}} amountPaid={0} setAmountPaid={() => {}} globalDiscount={0} setGlobalDiscount={() => {}} isGlobalDiscountPercent={false} setIsGlobalDiscountPercent={() => {}} signature="" setSignature={() => {}} isLocked={true} setIsLocked={() => {}} onCompleteSale={() => {}} onClose={() => setIsCartOpen(false)} products={DUMMY_PRODUCTS} permissions={{canGiveDiscount:true, canViewInventory: true, canEditInventory: true, canViewHistory: true, canEditHistory: true, canViewExpenditure: true, canViewDashboard: true}} isOwner={true} activeShopName="Shop" business={DUMMY_BUSINESS} isGuideMode={true} activeHotspotId={activeHotspot?.id} onHotspotClick={(id) => setActiveHotspot(CART_HOTSPOTS.find(h => h.id === id) || null)} />
+               <ErrorBoundary>
+                 <CurrentOrderSidebar cart={DUMMY_CART_ITEMS} setCart={() => {}} customerName="" setCustomerName={() => {}} customerPhone="" setCustomerPhone={() => {}} paymentMethod="cash" setPaymentMethod={() => {}} amountPaid={0} setAmountPaid={() => {}} globalDiscount={0} setGlobalDiscount={() => {}} isGlobalDiscountPercent={false} setIsGlobalDiscountPercent={() => {}} signature="" setSignature={() => {}} isLocked={true} setIsLocked={() => {}} onCompleteSale={() => {}} onClose={() => setIsCartOpen(false)} products={DUMMY_PRODUCTS} permissions={{canGiveDiscount:true, canViewInventory: true, canEditInventory: true, canViewHistory: true, canEditHistory: true, canViewExpenditure: true, canViewDashboard: true}} isOwner={true} activeShopName="Shop" business={DUMMY_BUSINESS} isGuideMode={true} activeHotspotId={activeHotspot?.id} onHotspotClick={(id) => setActiveHotspot(CART_HOTSPOTS.find(h => h.id === id) || null)} />
+               </ErrorBoundary>
              </div>
           </div>
           <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20 pointer-events-auto">
@@ -164,9 +183,11 @@ const GuidesScreen: React.FC = () => {
       <div className="relative h-full flex flex-col bg-gray-50 overflow-hidden">
         {guideStyles}
         {renderHeader('Past Sales Guide')}
-        <div className="flex-1 relative overflow-hidden select-none bg-gray-50/50">
-          <div className="guide-protected absolute inset-0 p-4 md:p-8 opacity-90 overflow-auto">
-            <HistoryScreen transactions={DUMMY_TRANSACTIONS} products={DUMMY_PRODUCTS} business={DUMMY_BUSINESS} onDeleteTransaction={async () => {}} onUpdateTransaction={async () => {}} onCreatePreviousDebt={async () => {}} isOwner={true} isOnline={false} isGuideMode={true} activeHotspotId={activeHotspot?.id} onHotspotClick={(id) => setActiveHotspot(HISTORY_HOTSPOTS.find(h => h.id === id) || null)} />
+        <div className="flex-1 relative overflow-hidden select-none bg-gray-50/50 flex">
+          <div className="guide-protected flex-1 overflow-auto p-4 md:p-8 opacity-90 relative">
+            <ErrorBoundary>
+              <HistoryScreen transactions={DUMMY_TRANSACTIONS} products={DUMMY_PRODUCTS} business={DUMMY_BUSINESS} onDeleteTransaction={async () => {}} onUpdateTransaction={async () => {}} onCreatePreviousDebt={async () => {}} isReadOnly={true} isOnline={false} isGuideMode={true} activeHotspotId={activeHotspot?.id} onHotspotClick={(id) => setActiveHotspot(HISTORY_HOTSPOTS.find(h => h.id === id) || null)} />
+            </ErrorBoundary>
           </div>
           {renderTooltip()}
         </div>
@@ -179,9 +200,11 @@ const GuidesScreen: React.FC = () => {
       <div className="relative h-full flex flex-col bg-gray-50 overflow-hidden">
         {guideStyles}
         {renderHeader('Expenses Guide')}
-        <div className="flex-1 relative overflow-hidden select-none bg-gray-50/50">
-          <div className="guide-protected absolute inset-0 p-4 md:p-8 opacity-90 overflow-auto">
-            <ExpenditureScreen expenditures={DUMMY_EXPENSES} products={DUMMY_PRODUCTS} business={DUMMY_BUSINESS} onAddExpenditure={async () => {}} onDeleteExpenditure={async () => {}} isOwner={true} isOnline={false} isGuideMode={true} activeHotspotId={activeHotspot?.id} onHotspotClick={(id) => setActiveHotspot(EXPENDITURE_HOTSPOTS.find(h => h.id === id) || null)} />
+        <div className="flex-1 relative overflow-hidden select-none bg-gray-50/50 flex">
+          <div className="guide-protected flex-1 overflow-auto p-4 md:p-8 opacity-90 relative">
+            <ErrorBoundary>
+              <ExpenditureScreen expenditures={DUMMY_EXPENSES} onAddExpenditure={() => {}} onDeleteExpenditure={() => {}} onEditExpenditure={() => {}} isReadOnly={true} isOnline={false} isGuideMode={true} activeHotspotId={activeHotspot?.id} onHotspotClick={(id) => setActiveHotspot(EXPENDITURE_HOTSPOTS.find(h => h.id === id) || null)} />
+            </ErrorBoundary>
           </div>
           {renderTooltip()}
         </div>
@@ -194,9 +217,11 @@ const GuidesScreen: React.FC = () => {
       <div className="relative h-full flex flex-col bg-gray-50 overflow-hidden">
         {guideStyles}
         {renderHeader('Settings Guide')}
-        <div className="flex-1 relative overflow-hidden select-none bg-gray-50/50">
-          <div className="guide-protected absolute inset-0 p-4 md:p-8 opacity-90 overflow-auto">
-            <SettingsScreen business={DUMMY_BUSINESS} onUpdateSettings={async () => {}} onLogout={() => {}} isOnline={false} onManageStaff={async () => {}} entitlements={null} onRefreshEntitlements={async () => {}} isGuideMode={true} activeHotspotId={activeHotspot?.id} onHotspotClick={(id) => setActiveHotspot(SETTINGS_HOTSPOTS.find(h => h.id === id) || null)} />
+        <div className="flex-1 relative overflow-hidden select-none bg-gray-50/50 flex">
+          <div className="guide-protected flex-1 overflow-auto p-4 md:p-8 opacity-90 relative">
+            <ErrorBoundary>
+              <SettingsScreen business={DUMMY_BUSINESS} onUpdateBusiness={() => {}} onLogout={() => {}} isOnline={false} isGuideMode={true} activeHotspotId={activeHotspot?.id} onHotspotClick={(id) => setActiveHotspot(SETTINGS_HOTSPOTS.find(h => h.id === id) || null)} />
+            </ErrorBoundary>
           </div>
           {renderTooltip()}
         </div>

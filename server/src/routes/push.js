@@ -6,7 +6,7 @@ const auth = require('../middleware/auth');
 router.post('/save-subscription', auth, async (req, res) => {
   try {
     const { subscription } = req.body;
-    const businessId = req.business.businessId; // Check if auth.js attaches businessId or _id. I'll use businessId.
+    const businessId = req.businessId;
 
     if (!subscription || !subscription.endpoint) {
       return res.status(400).json({ error: 'Invalid subscription object' });

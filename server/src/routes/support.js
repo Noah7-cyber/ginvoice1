@@ -502,13 +502,20 @@ Only include fields (metrics, charts, tables, recommendations) if you have relev
     };
 
     try {
-        // First Call
-        const completion = await callAI(messages);
-        const responseMessage = completion.choices[0].message;
+        let maxIterations = 10;
+        let iteration = 0;
 
-        // F. Handle Tool Calls
-        if (responseMessage.tool_calls) {
-            // Append assistant's message with tool calls to history
+        while (iteration < maxIterations) {
+            iteration++;
+            const completion = await callAI(messages);
+            const responseMessage = completion.choices[0].message;
+
+            // If no tool calls, return the final response
+            if (!responseMessage.tool_calls || responseMessage.tool_calls.length === 0) {
+                return res.json({ text: responseMessage.content, action: null, usage: null });
+            }
+
+            // Otherwise, we have tool calls. Add them to history.
             messages.push(responseMessage);
 
             for (const toolCall of responseMessage.tool_calls) {
@@ -546,18 +553,15 @@ Only include fields (metrics, charts, tables, recommendations) if you have relev
                     content: JSON.stringify(toolResult)
                 });
             }
-
-            // Second Call (Final Response)
-            const finalCompletion = await callAI(messages);
-            return res.json({
-                text: finalCompletion.choices[0].message.content,
-                action: null,
-                usage: null
-            });
         }
 
-        // G. Standard Response (No Tool Calls)
-        return res.json({ text: responseMessage.content, action: null, usage: null });
+        // If we hit max iterations, force a final answer with all data gathered
+        messages.push({
+            role: "user",
+            content: "IMPORTANT: You have already gathered enough data. Do NOT request more tools. Provide your FINAL answer NOW using all the data you have collected above. Present the numbers, tables and insights directly. Do not say 'let me check' or 'let me look' - just give the answer."
+        });
+        const fallbackCompletion = await callAI(messages);
+        return res.json({ text: fallbackCompletion.choices[0].message.content, action: null, usage: null });
 
     } catch (error) {
         if (error.message === "Timeout") {
@@ -572,6 +576,7 @@ Only include fields (metrics, charts, tables, recommendations) if you have relev
     res.status(500).json({ text: "I'm having trouble connecting right now. Please try again.", action: null, usage: null });
   }
 });
+
 
 
 const safeLimit = (scope) => scope === 'full' ? MAX_EXPORT_DOCS : 5000;

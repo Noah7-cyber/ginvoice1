@@ -366,4 +366,46 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
+const MerchantWrapped = require('../models/MerchantWrapped');
+const { generateWrappedStory } = require('../services/analyticsWorker');
+
+router.get('/wrapped/:year/:month', auth, async (req, res) => {
+  try {
+    const businessId = req.businessId;
+    const { year, month } = req.params;
+    
+    const wrapped = await MerchantWrapped.findOne({ 
+      businessId, 
+      year: parseInt(year), 
+      month: parseInt(month) 
+    });
+    
+    if (!wrapped) {
+      return res.status(404).json({ message: 'Wrapped story not found for this month' });
+    }
+    
+    return res.json(wrapped);
+  } catch (err) {
+    console.error('Error fetching wrapped story:', err);
+    return res.status(500).json({ message: 'Failed to fetch wrapped story' });
+  }
+});
+
+router.post('/wrapped/generate', auth, async (req, res) => {
+  try {
+    const businessId = req.businessId;
+    const { year, month } = req.body;
+    
+    if (!year || !month) {
+      return res.status(400).json({ message: 'Year and month are required' });
+    }
+    
+    const wrapped = await generateWrappedStory(businessId, parseInt(year), parseInt(month));
+    return res.json(wrapped);
+  } catch (err) {
+    console.error('Error generating wrapped story:', err);
+    return res.status(500).json({ message: 'Failed to generate wrapped story' });
+  }
+});
+
 module.exports = router;

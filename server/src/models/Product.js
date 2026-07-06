@@ -23,6 +23,9 @@ const productSchema = new mongoose.Schema({
   units: [unitSchema],
 
   image: { type: String },
+  dailyVelocity: { type: Number, default: 0 },
+  safetyStock: { type: Number, default: 0 },
+  lowStockThreshold: { type: Number, default: 5 },
   clientUpdatedAt: { type: Date },
   updatedAt: { type: Date, default: Date.now },
   isManualUpdate: { type: Boolean, default: false }, // Keeping for schema compatibility if needed, though unused in logic

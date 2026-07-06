@@ -13,7 +13,8 @@ import {
   Coins,
   Gem,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Sparkles
 } from 'lucide-react';
 import { 
   AreaChart, 
@@ -27,9 +28,11 @@ import {
 import { Transaction, Product, BusinessProfile, Expenditure } from '../types';
 import { CURRENCY } from '../constants';
 import { getAnalytics, updateBusinessProfile } from '../services/api';
+import api from '../services/api';
 import { safeCalculate, safeSum } from '../utils/math';
 import ComplianceShieldWidget from './ComplianceShieldWidget';
 import ComplianceShieldModal from './ComplianceShieldModal';
+import WrappedCarousel from './ai-dashboard/WrappedCarousel';
 
 import { subscribeUserToPush } from '../services/pushNotifications';
 
@@ -44,6 +47,9 @@ interface DashboardScreenProps {
 const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, products, expenditures = [], business, onUpdateBusiness }) => {
   const [showShieldModal, setShowShieldModal] = useState(false);
   const [showPushBanner, setShowPushBanner] = useState(false);
+  const [showWrapped, setShowWrapped] = useState(false);
+  const [wrappedData, setWrappedData] = useState<any>(null);
+  const [isGeneratingWrapped, setIsGeneratingWrapped] = useState(false);
 
   useEffect(() => {
     if ('Notification' in window && Notification.permission !== 'granted') {
@@ -355,17 +361,59 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
               <p className="text-gray-500">Real-time performance overview</p>
            </div>
 
-           {business && !business.taxSettings?.isEnabled && (
-             <button
-               onClick={() => setShowShieldModal(true)}
-               className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-xl font-bold text-sm hover:bg-indigo-100 transition-colors"
-             >
-               <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></div>
-               Activate Compliance Shield
-             </button>
-           )}
+           <div className="flex gap-2">
+             {new Date().getDate() < 7 && (
+               <button
+                 onClick={async () => {
+                   setIsGeneratingWrapped(true);
+                   try {
+                     // Flush queue? Already handled globally, we just call API
+                     const now = new Date();
+                     let year = now.getFullYear();
+                     // getMonth() is 0-indexed (0 = Jan, 11 = Dec).
+                     // We want the previous month (1-indexed). 
+                     // So if getMonth() is 6 (July), previous month is 6 (June).
+                     // If getMonth() is 0 (January), previous month is 12 (December of prev year).
+                     let month = now.getMonth(); 
+                     if (month === 0) {
+                       month = 12;
+                       year -= 1;
+                     }
+
+                     const data = await api.post('/analytics/wrapped/generate', { year, month });
+                     setWrappedData(data);
+                     setShowWrapped(true);
+                   } catch (err: any) {
+                     console.error(err);
+                     alert(err.message || 'Failed to generate wrapped');
+                   } finally {
+                     setIsGeneratingWrapped(false);
+                   }
+                 }}
+                 disabled={isGeneratingWrapped}
+                 className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-pink-500 to-violet-500 text-white rounded-xl font-bold text-sm hover:opacity-90 transition-opacity disabled:opacity-50"
+               >
+                 <Sparkles size={16} />
+                 {isGeneratingWrapped ? 'Generating...' : 'My Wrapped'}
+               </button>
+             )}
+
+             {business && !business.taxSettings?.isEnabled && (
+               <button
+                 onClick={() => setShowShieldModal(true)}
+                 className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-xl font-bold text-sm hover:bg-indigo-100 transition-colors"
+               >
+                 <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></div>
+                 Compliance Shield
+               </button>
+             )}
+           </div>
         </div>
       </div>
+
+      {showWrapped && (
+        <WrappedCarousel wrappedData={wrappedData} onClose={() => setShowWrapped(false)} />
+      )}
 
       {business && business.taxSettings?.isEnabled && (
         <ComplianceShieldWidget

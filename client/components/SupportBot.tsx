@@ -30,7 +30,7 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate, uiCo
   const [isSending, setIsSending] = useState(false);
   const responseCacheRef = useRef<Map<string, { at: number; payload: any }>>(new Map());
   
-  const { status: voiceStatus, transcript, activeEngine, toggleListening, setTranscript } = useHybridSpeech();
+  const { status: voiceStatus, transcript, toggleListening, setTranscript } = useHybridSpeech();
 
   useEffect(() => {
     if (transcript) {
@@ -266,7 +266,7 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate, uiCo
                         disabled={isSending || visualState === 'loading_model'}
                         className="relative flex items-center justify-center w-10 h-10 mb-0.5 mr-1 rounded-xl transition-colors disabled:opacity-50 shrink-0 text-gray-500 hover:text-indigo-600 hover:bg-gray-200"
                         aria-label="Voice input"
-                        title={activeEngine === 'whisper' ? 'Using Local Whisper' : 'Using Web Speech API'}
+                        title="Using Local Whisper"
                     >
                         {(visualState === 'idle' && !isSending) && (
                             <Mic size={18} />

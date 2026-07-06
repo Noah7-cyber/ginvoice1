@@ -1,22 +1,16 @@
 import { useState, useRef, useEffect } from 'react';
-import { speechConfig } from '../utils/speechProfile';
 
-export type SpeechEngine = 'whisper' | 'webspeech' | 'none';
 export type SpeechStatus = 'idle' | 'loading_model' | 'listening' | 'processing';
 
-export const useHybridSpeech = (profileName = speechConfig.defaultProfile) => {
-  const profile = speechConfig.profiles[profileName] || speechConfig.profiles['nigerian'];
-  
+export const useHybridSpeech = () => {
   const [status, setStatus] = useState<SpeechStatus>('idle');
-  const [activeEngine, setActiveEngine] = useState<SpeechEngine>('none');
   const [transcript, setTranscript] = useState('');
   
   const whisperPipelineRef = useRef<any>(null);
-  const webSpeechRecRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
 
-  // Initialize Whisper
+  // Initialize Local Whisper-tiny
   useEffect(() => {
     let isMounted = true;
     const loadModel = async () => {
@@ -25,52 +19,30 @@ export const useHybridSpeech = (profileName = speechConfig.defaultProfile) => {
         // Dynamically import from CDN to avoid ENOSPC npm install errors
         const transformers = await import(/* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
         transformers.env.allowLocalModels = false;
-        const transcriber = await transformers.pipeline('automatic-speech-recognition', profile.fallbackModel);
+        // Using the free tiny model
+        const transcriber = await transformers.pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en');
         if (isMounted) {
           whisperPipelineRef.current = transcriber;
-          setActiveEngine('whisper');
           setStatus('idle');
         }
       } catch (err) {
-        console.error("Failed to load local Whisper model, falling back to Web Speech", err);
+        console.error("Failed to load local Whisper model", err);
         if (isMounted) {
-          setActiveEngine('webspeech');
-          setStatus('idle');
+          setStatus('idle'); // We will just gracefully fail if they try to record
         }
       }
     };
     loadModel();
     
     return () => { isMounted = false; };
-  }, [profile.fallbackModel]);
+  }, []);
 
-  const startWebSpeech = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      console.error("Web Speech API not supported");
-      setStatus('idle');
+  const startRecording = async () => {
+    if (!whisperPipelineRef.current) {
+      console.warn("Model is not loaded yet.");
       return;
     }
-    const recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.lang = profile.nativeLocale;
 
-    recognition.onstart = () => setStatus('listening');
-    recognition.onresult = (event: any) => {
-      const text = Array.from(event.results)
-        .map((res: any) => res[0].transcript)
-        .join('');
-      setTranscript(text);
-    };
-    recognition.onerror = () => setStatus('idle');
-    recognition.onend = () => setStatus('idle');
-
-    recognition.start();
-    webSpeechRecRef.current = recognition;
-  };
-
-  const startWhisper = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream);
@@ -96,8 +68,7 @@ export const useHybridSpeech = (profileName = speechConfig.defaultProfile) => {
              setTranscript(result.text);
           }
         } catch (err) {
-          console.error("Whisper transcription failed, falling back to Web Speech API for next interaction", err);
-          setActiveEngine('webspeech');
+          console.error("Local Whisper transcription failed", err);
         }
         
         setStatus('idle');
@@ -107,34 +78,25 @@ export const useHybridSpeech = (profileName = speechConfig.defaultProfile) => {
       mediaRecorder.start();
       setStatus('listening');
     } catch (err) {
-      console.error("Failed to access microphone or initialize recording for Whisper, falling back to Web Speech", err);
-      setActiveEngine('webspeech');
+      console.error("Failed to access microphone", err);
       setStatus('idle');
     }
   };
 
   const toggleListening = () => {
     if (status === 'listening') {
-      if (activeEngine === 'whisper' && mediaRecorderRef.current) {
+      if (mediaRecorderRef.current) {
         mediaRecorderRef.current.stop();
-      } else if (activeEngine === 'webspeech' && webSpeechRecRef.current) {
-        webSpeechRecRef.current.stop();
-        setStatus('idle');
       }
     } else if (status === 'idle') {
       setTranscript('');
-      if (activeEngine === 'whisper' && whisperPipelineRef.current) {
-        startWhisper();
-      } else {
-        startWebSpeech();
-      }
+      startRecording();
     }
   };
 
   return {
     status,
     transcript,
-    activeEngine,
     toggleListening,
     setTranscript
   };

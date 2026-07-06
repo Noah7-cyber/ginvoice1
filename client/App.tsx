@@ -137,6 +137,18 @@ const App: React.FC = () => {
   });
 
   const [activeTab, setActiveTab] = useState<TabId>('sales');
+  const [previousTab, setPreviousTab] = useState<TabId | null>(null);
+  const activeTabRef = useRef<TabId>(activeTab);
+  
+  useEffect(() => {
+    if (activeTabRef.current !== activeTab) {
+      if (activeTab === 'guides') {
+        setPreviousTab(activeTabRef.current);
+      }
+      activeTabRef.current = activeTab;
+    }
+  }, [activeTab]);
+
   // Lazy Keep-Alive Tabs: Track which tabs have been visited
   const [visitedTabs, setVisitedTabs] = useState<Set<TabId>>(new Set(['sales']));
 
@@ -1770,7 +1782,7 @@ const App: React.FC = () => {
 
                   {tab === 'guides' && (
                     <div className="p-0 md:p-0 min-h-full">
-                      <GuidesScreen />
+                      <GuidesScreen initialGuide={previousTab} />
                     </div>
                   )}
                 </>
