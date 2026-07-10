@@ -95,6 +95,30 @@ export const login = async (email: string, pin: string, role?: string, shopId?: 
   });
 };
 
+export const uploadProductImage = async (file: File): Promise<{url: string}> => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Not authenticated');
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const res = await fetch(buildUrl('/api/upload'), {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`
+    },
+    body: formData
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data?.error || data?.message || 'Upload failed') as any;
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+};
+
 export const getStaffShopOptions = async (email: string): Promise<{ shops: Shop[]; defaultShopId?: string | null }> => {
   return request('/api/auth/staff-shop-options', {
     method: 'POST',

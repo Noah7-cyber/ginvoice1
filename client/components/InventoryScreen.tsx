@@ -3,7 +3,7 @@ import { Plus, Search, Edit3, Trash2, CheckCircle2, X, ListTodo, Layers, Tag, Do
 import { Product, Category } from '../types';
 import { CURRENCY } from '../constants';
 import { formatCurrency } from '../utils/currency';
-import api, { deleteProduct, createProduct, updateProduct, getCategories, getStockVerificationQueue, verifyStockItem } from '../services/api';
+import api, { deleteProduct, createProduct, updateProduct, getCategories, getStockVerificationQueue, verifyStockItem, uploadProductImage } from '../services/api';
 import { BulkImportModal } from './BulkImportModal';
 import { useToast } from './ToastProvider';
 import CategoryManager from './CategoryManager';
@@ -165,6 +165,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   };
 
   const [newProduct, setNewProduct] = useState<Partial<Product>>(initialProductState);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   const deductedProducts = useMemo(() => {
     return products.map(p => {
@@ -932,8 +933,21 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                     )}
                   </td>
                   <td className="px-6 py-4">
-                    <div className="font-bold text-gray-900">{product.name}</div>
-                    <div className="text-[10px] text-gray-400 font-medium">#{product.sku || product.id.slice(-5)}</div>
+                    <div className="flex items-center gap-3">
+                      {product.image ? (
+                        <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 border">
+                          <img src={product.image} alt="" className="w-full h-full object-cover" />
+                        </div>
+                      ) : (
+                        <div className="w-10 h-10 rounded-lg bg-gray-100 shrink-0 border flex items-center justify-center">
+                          <Layers className="text-gray-400" size={16} />
+                        </div>
+                      )}
+                      <div>
+                        <div className="font-bold text-gray-900">{product.name}</div>
+                        <div className="text-[10px] text-gray-400 font-medium">#{product.sku || product.id.slice(-5)}</div>
+                      </div>
+                    </div>
                   </td>
                   <td className="px-6 py-4 hidden sm:table-cell">
                     <span className="px-2 py-1 bg-white border rounded text-[10px] font-bold uppercase text-gray-500">
@@ -1248,6 +1262,42 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                 </button>
               </div>
 
+              {/* Image Upload */}
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden bg-gray-50 shrink-0">
+                  {newProduct.image ? (
+                    <img src={newProduct.image} alt="Preview" className="w-full h-full object-cover" />
+                  ) : (
+                    <Layers className="text-gray-400" size={24} />
+                  )}
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Product Image</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
+                    onChange={async (e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        setIsUploadingImage(true);
+                        try {
+                          const res = await uploadProductImage(e.target.files[0]);
+                          setNewProduct({ ...newProduct, image: res.url });
+                          addToast('Image uploaded successfully!', 'success');
+                        } catch (err: any) {
+                          addToast(err.message || 'Failed to upload image.', 'error');
+                        } finally {
+                          setIsUploadingImage(false);
+                          e.target.value = ''; // Reset input
+                        }
+                      }
+                    }}
+                    disabled={isUploadingImage}
+                  />
+                  {isUploadingImage && <p className="text-xs text-primary mt-1 flex items-center gap-1"><Loader2 size={12} className="animate-spin"/> Uploading & compressing...</p>}
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Product Name</label>
                 <input required type="text" className="w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-primary outline-none" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} placeholder="e.g. OMO Detergent" />
@@ -1553,9 +1603,20 @@ const InventoryCard = React.memo(({ product, showHeader, headerId, firstChar, is
                     onChange={(e) => { e.stopPropagation(); onToggleSelection(); }}
                 />
             )}
-            <div>
-                <h3 className="font-bold text-gray-900">{product.name}</h3>
-                <p className="text-xs text-gray-400">#{product.sku || product.id.slice(-5)}</p>
+            <div className="flex gap-3 items-center">
+              {product.image ? (
+                <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 border shadow-sm">
+                  <img src={product.image} alt="" className="w-full h-full object-cover" />
+                </div>
+              ) : (
+                <div className="w-12 h-12 rounded-xl bg-gray-50 shrink-0 border flex items-center justify-center">
+                  <Layers className="text-gray-400" size={20} />
+                </div>
+              )}
+              <div>
+                  <h3 className="font-bold text-gray-900 leading-tight">{product.name}</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">#{product.sku || product.id.slice(-5)}</p>
+              </div>
             </div>
         </div>
         <span className="px-2 py-1 bg-gray-100 rounded text-[10px] font-bold uppercase text-gray-500">

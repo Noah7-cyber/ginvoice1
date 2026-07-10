@@ -345,6 +345,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
                 costPrice: toDecimal(p.costPrice),
                 baseUnit: p.baseUnit || 'Piece',
                 itemType: p.itemType || (existing ? existing.itemType : 'PRODUCT'),
+                image: p.image !== undefined ? p.image : (existing ? existing.image : undefined),
                 units: Array.isArray(p.units) ? p.units.map(u => ({
                   name: u.name,
                   multiplier: Number(u.multiplier || 1),

@@ -207,11 +207,15 @@ const ProductItem = React.memo(({ p, isReadOnly, isOfflineDisabled, onClick }: {
             `}
         >
             <div className={`
-            w-12 h-12 rounded-xl flex items-center justify-center shrink-0
-            ${p.itemType === 'SERVICE' ? 'bg-purple-50 text-purple-600' :
-              p.currentStock < 10 ? 'bg-red-50 text-red-600' : 'bg-indigo-50 text-indigo-600'}
+            w-12 h-12 rounded-xl flex items-center justify-center shrink-0 overflow-hidden shadow-sm
+            ${!p.image ? (p.itemType === 'SERVICE' ? 'bg-purple-50 text-purple-600' :
+              p.currentStock < 10 ? 'bg-red-50 text-red-600' : 'bg-indigo-50 text-indigo-600') : 'border'}
             `}>
-            <ShoppingCart size={24} />
+            {p.image ? (
+                <img src={p.image} alt="" className="w-full h-full object-cover" />
+            ) : (
+                <ShoppingCart size={24} />
+            )}
             </div>
 
             <div className="flex-1 min-w-0">

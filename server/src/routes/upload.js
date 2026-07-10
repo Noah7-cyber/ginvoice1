@@ -24,11 +24,22 @@ router.post('/', requireAuth, requireActiveSubscription, upload.single('file'), 
       return res.status(400).json({ error: 'No file provided' });
     }
 
-    // 1. Optimize image buffer with sharp
-    const optimizedBuffer = await sharp(req.file.buffer)
-      .resize({ width: 800, withoutEnlargement: true })
-      .jpeg({ quality: 80 })
-      .toBuffer();
+    // 1. Optimize image buffer with sharp safely
+    let optimizedBuffer;
+    try {
+      optimizedBuffer = await sharp(req.file.buffer)
+        .resize({ width: 800, withoutEnlargement: true })
+        .jpeg({ quality: 80 })
+        .toBuffer();
+    } catch (sharpErr) {
+      console.error('Image processing error:', sharpErr);
+      return res.status(400).json({ error: 'Invalid image file provided. Please upload a valid image.' });
+    }
+
+    // 1.5 Enforce strictly 1MB file limit after compression
+    if (optimizedBuffer.length > 1024 * 1024) {
+      return res.status(400).json({ error: 'Please upload a smaller or pre-compressed image.' });
+    }
 
     // 2. Wrap Cloudinary upload in a Promise to prevent 500 errors/hangs
     const uploadToCloudinary = () => {

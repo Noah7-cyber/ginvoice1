@@ -331,73 +331,100 @@ router.post('/verify', auth, async (req, res) => {
 const manageSubscription = async (business, action, reason = '') => {
     const { secretKey } = getPaystackConfig();
     const subCode = business.paystackSubscriptionCode;
-    let subToken = business.paystackEmailToken;
+    let customerCode = business.paystackCustomerCode;
 
     if (!secretKey) {
         return { success: false, message: 'Payment gateway is not configured.' };
     }
 
-    if (!subCode) {
+    if (!subCode && !customerCode) {
         return { success: false, message: 'This subscription was either gifted or created offline and cannot be managed via the payment gateway.' };
     }
 
-    // Call Paystack API
     try {
-        // If we are missing the email token, fetch it from Paystack first
-        if (!subToken) {
-            const fetchResponse = await fetch(`https://api.paystack.co/subscription/${subCode}`, {
-                method: 'GET',
-                headers: {
-                    Authorization: `Bearer ${secretKey}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-            const fetchData = await fetchResponse.json();
-
-            if (!fetchResponse.ok || !fetchData.status) {
-                console.warn(`Failed to retrieve missing subscription token for ${subCode}:`, fetchData.message);
-                return { success: false, message: 'Could not fetch subscription details from the gateway to perform this action.' };
-            }
-
-            subToken = fetchData.data?.email_token;
+        if (action === 'resume') {
+            if (!subCode) return { success: false, message: 'No valid subscription found to resume.' };
+            
+            let subToken = business.paystackEmailToken;
             if (!subToken) {
-                return { success: false, message: 'Invalid subscription state in payment gateway.' };
+                const fetchResponse = await fetch(`https://api.paystack.co/subscription/${subCode}`, {
+                    headers: { Authorization: `Bearer ${secretKey}` }
+                });
+                const fetchData = await fetchResponse.json();
+                subToken = fetchData.data?.email_token;
+                if (!subToken) return { success: false, message: 'Invalid subscription state.' };
+                business.paystackEmailToken = subToken;
+                await business.save();
             }
 
-            // Save the newly retrieved token for future operations
-            business.paystackEmailToken = subToken;
-            await business.save();
-        }
+            const response = await fetch(`https://api.paystack.co/subscription/enable`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${secretKey}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code: subCode, token: subToken })
+            });
+            const data = await response.json();
+            const msg = (data.message || '').toLowerCase();
+            if (!data.status && !msg.includes('already active')) {
+                return { success: false, message: data.message || 'Failed to sync with payment gateway' };
+            }
+        } else {
+            // Cancel or Pause: Disable all active subscriptions for the user
+            if (!customerCode && subCode) {
+                 const fetchResponse = await fetch(`https://api.paystack.co/subscription/${subCode}`, {
+                     headers: { Authorization: `Bearer ${secretKey}` }
+                 });
+                 const fetchData = await fetchResponse.json();
+                 customerCode = fetchData.data?.customer?.customer_code;
+                 if (customerCode) {
+                     business.paystackCustomerCode = customerCode;
+                     await business.save();
+                 }
+            }
 
-        const endpoint = action === 'resume' ? 'enable' : 'disable'; // pause and cancel both disable
-        const response = await fetch(`https://api.paystack.co/subscription/${endpoint}`, {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${secretKey}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ code: subCode, token: subToken })
-        });
-        const data = await response.json();
-
-        if (!data.status) {
-             console.warn(`Paystack ${action} failed:`, data.message);
-
-             // Check if Paystack indicates the subscription is already in the requested state
-             const msg = (data.message || '').toLowerCase();
-             const alreadyActive = action === 'resume' && (msg.includes('already active') || msg.includes('not found'));
-             const alreadyInactive = (action === 'pause' || action === 'cancel') && (msg.includes('already inactive') || msg.includes('already disabled') || msg.includes('not found'));
-
-             if (!alreadyActive && !alreadyInactive) {
-                 return { success: false, message: data.message || 'Failed to sync with payment gateway' };
-             }
+            if (customerCode) {
+                 const custRes = await fetch(`https://api.paystack.co/customer/${customerCode}`, {
+                     headers: { Authorization: `Bearer ${secretKey}` }
+                 });
+                 const custData = await custRes.json();
+                 const subscriptions = custData.data?.subscriptions || [];
+                 const activeSubs = subscriptions.filter(s => s.status === 'active');
+                 
+                 for (const sub of activeSubs) {
+                      const res = await fetch(`https://api.paystack.co/subscription/disable`, {
+                          method: 'POST',
+                          headers: { Authorization: `Bearer ${secretKey}`, 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ code: sub.subscription_code, token: sub.email_token })
+                      });
+                      const disableData = await res.json();
+                      if (!disableData.status && !disableData.message?.toLowerCase().includes('already inactive')) {
+                           console.warn(`Failed to disable duplicate sub ${sub.subscription_code}:`, disableData.message);
+                      }
+                 }
+            } else if (subCode) {
+                 // Fallback if we still don't have customerCode but have subCode
+                 let subToken = business.paystackEmailToken;
+                 if (!subToken) {
+                     const fetchResponse = await fetch(`https://api.paystack.co/subscription/${subCode}`, {
+                         headers: { Authorization: `Bearer ${secretKey}` }
+                     });
+                     const fetchData = await fetchResponse.json();
+                     subToken = fetchData.data?.email_token;
+                 }
+                 if (subToken) {
+                     await fetch(`https://api.paystack.co/subscription/disable`, {
+                          method: 'POST',
+                          headers: { Authorization: `Bearer ${secretKey}`, 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ code: subCode, token: subToken })
+                     });
+                 }
+            }
         }
     } catch (e) {
         console.error(`Paystack ${action} error:`, e.message);
         return { success: false, message: 'Failed to sync with payment gateway' };
     }
 
-    // Update Local DB only if API success
+    // Update Local DB
     if (action === 'cancel') {
         business.autoRenew = false;
         business.subscriptionStatus = 'cancelled';
@@ -568,4 +595,5 @@ router.post('/webhook', async (req, res) => {
 });
 
 router.reconcilePending = reconcilePending;
+router.manageSubscription = manageSubscription;
 module.exports = router;

@@ -97,6 +97,7 @@ export interface Product {
   baseUnit: string;      // Renamed from 'unit'
   units: ProductUnit[];  // Alternative units (e.g., Packs)
   itemType?: 'PRODUCT' | 'SERVICE';
+  image?: string;
   isManualUpdate?: boolean; // Flag to indicate if stock was manually adjusted
   lastVerifiedAt?: string | null;
   lastVerifiedQty?: number | null;
