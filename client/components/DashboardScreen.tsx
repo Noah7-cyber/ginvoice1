@@ -52,8 +52,12 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ transactions, product
   const [isGeneratingWrapped, setIsGeneratingWrapped] = useState(false);
 
   useEffect(() => {
-    if ('Notification' in window && Notification.permission !== 'granted') {
-      setShowPushBanner(true);
+    if ('Notification' in window) {
+      if (Notification.permission !== 'granted') {
+        setShowPushBanner(true);
+      } else {
+        subscribeUserToPush().catch(console.error);
+      }
     }
   }, []);
 

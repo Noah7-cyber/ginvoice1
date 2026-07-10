@@ -393,12 +393,16 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
       }
     }
 
+    let preExistingTxIds = new Set();
+    let existingByIdMap = new Map();
+
     if (transactions.length > 0) {
       const incomingTxIds = transactions.map((t) => String(t?.id || '').trim()).filter(Boolean);
       const existingTxs = incomingTxIds.length > 0
         ? await Transaction.find({ businessId, id: { $in: incomingTxIds } }).lean()
         : [];
-      const existingByIdMap = new Map(existingTxs.map((tx) => [tx.id, tx]));
+      existingByIdMap = new Map(existingTxs.map((tx) => [tx.id, tx]));
+      preExistingTxIds = new Set(existingTxs.map(tx => tx.id));
 
       for (const t of transactions) {
         const txId = String(t?.id || '').trim();
@@ -514,6 +518,12 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
     }
 
     if (expenditures.length > 0) {
+      const incomingExpIds = expenditures.map((e) => String(e?.id || '').trim()).filter(Boolean);
+      const existingExps = incomingExpIds.length > 0
+        ? await Expenditure.find({ business: businessId, id: { $in: incomingExpIds } }).select('id').lean()
+        : [];
+      const existingExpIds = new Set(existingExps.map(e => e.id));
+
       const expOps = expenditures.map((e) => {
         const expId = String(e?.id || '').trim();
         if (!expId) {
@@ -544,19 +554,38 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
         };
       }).filter(Boolean);
       if (expOps.length > 0) {
-        await Expenditure.bulkWrite(expOps);
+        try {
+          await Expenditure.bulkWrite(expOps, { ordered: false });
+        } catch (bulkErr) {
+          if (bulkErr.code !== 11000) console.error('[Sync] Expenditure bulkWrite error:', bulkErr);
+        }
+      }
+
+      const trulyNewExps = expenditures.filter(e => e.id && !existingExpIds.has(e.id));
+      if (trulyNewExps.length > 0) {
+        const format = (n) => `₦${Math.abs(n).toLocaleString()}`;
+        const totalExp = trulyNewExps.reduce((sum, e) => sum + Math.abs(Number(e.amount || 0)), 0);
+        const firstTitle = trulyNewExps[0]?.title || 'Expense';
+        const hasIncome = trulyNewExps.some(e => Number(e.amount || 0) > 0);
+        const hasExpense = trulyNewExps.some(e => Number(e.amount || 0) < 0);
+        const icon = hasIncome && !hasExpense ? '💰' : '💸';
+        const label = hasIncome && !hasExpense ? 'Income' : 'Expense';
+        const msg = trulyNewExps.length === 1
+          ? `${firstTitle}: ${format(totalExp)}`
+          : `${trulyNewExps.length} ${label.toLowerCase()}s recorded totaling ${format(totalExp)}`;
+        sendNativePush(businessId, `${icon} ${label} Recorded`, msg).catch(console.error);
       }
     }
 
+    // Transactions push block
     if (transactions.length > 0) {
-      const validTxs = transactions.filter(t => t.id);
-      const newTxsCount = validTxs.length - skippedTransactions;
-      if (newTxsCount > 0) {
-        const totalValue = validTxs.reduce((sum, t) => sum + Number(t.totalAmount || 0), 0);
+      const trulyNewTxs = transactions.filter(t => t.id && !preExistingTxIds.has(t.id));
+      if (trulyNewTxs.length > 0) {
+        const totalValue = trulyNewTxs.reduce((sum, t) => sum + Number(t.totalAmount || 0), 0);
         const format = (n) => `₦${n.toLocaleString()}`;
-        const msg = newTxsCount === 1 
+        const msg = trulyNewTxs.length === 1 
           ? `New sale recorded: ${format(totalValue)}`
-          : `New sync: ${newTxsCount} sales recorded totaling ${format(totalValue)}`;
+          : `New sync: ${trulyNewTxs.length} sales recorded totaling ${format(totalValue)}`;
         sendNativePush(businessId, '🛒 New Sales Synced', msg).catch(console.error);
       }
     }

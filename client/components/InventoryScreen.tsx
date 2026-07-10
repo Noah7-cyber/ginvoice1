@@ -821,7 +821,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
         </div>
 
         {/* Row 2: Collapsible Filters */}
-        <div className={`${isFiltersOpen ? 'flex' : 'hidden'} md:flex flex-col md:flex-row gap-4 items-center animate-in slide-in-from-top-2 md:animate-none`}>
+        <div className={`${isFiltersOpen ? 'flex' : 'hidden'} md:flex flex-col md:flex-row flex-wrap gap-4 items-center animate-in slide-in-from-top-2 md:animate-none`}>
 
             <select
             className="w-full md:w-auto bg-gray-50 border-none rounded-lg px-4 py-2 text-sm font-medium focus:ring-2 focus:ring-primary outline-none"
@@ -884,7 +884,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
       <div className="hidden md:block bg-white rounded-2xl shadow-sm border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
-            <thead className="bg-gray-50 border-b">
+            <thead className="bg-gray-50 border-b whitespace-nowrap">
               <tr>
                 <th className="px-6 py-4 w-12">
                    {/* Always show checkbox on desktop, or toggle? User asked for "Default View: Hide checkbox column". But usually desktop has checkboxes.
@@ -921,7 +921,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
             </thead>
             <tbody className="divide-y">
               {filteredProducts.slice(0, visibleCount).map(product => (
-                <tr key={product.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(product.id) ? 'bg-indigo-50/50' : ''}`}>
+                <tr key={product.id} className={`hover:bg-gray-50 transition-colors whitespace-nowrap ${selectedIds.has(product.id) ? 'bg-indigo-50/50' : ''}`}>
                   <td className="px-6 py-4">
                     {isSelectionMode && (
                         <input

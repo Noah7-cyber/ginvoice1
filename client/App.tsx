@@ -51,6 +51,7 @@ import WelcomeScreen from './components/WelcomeScreen';
 import AdminDashboard from './components/AdminDashboard';
 import AdminLogin from './components/AdminLogin';
 import GuidesScreen from './components/GuidesScreen';
+import NotificationPermissionPrompt from './components/NotificationPermissionPrompt';
 import { loadAdminToken, clearAdminToken } from './services/api';
 
 // Helper to check for active alerts (duplicated from NotificationCenter to avoid circular deps or complex state lifting)
@@ -181,6 +182,7 @@ const App: React.FC = () => {
   const [hubOverview, setHubOverview] = useState<{ rows: any[]; totals: any } | null>(null);
   const [deleteReplacementShopId, setDeleteReplacementShopId] = useState('');
   const isTimeBlocked = useTimeDrift();
+  const [showPushPrompt, setShowPushPrompt] = useState(true);
 
   /* // TEMPORARILY DISABLED TO FIX CRASH
   useEffect(() => {
@@ -1858,6 +1860,7 @@ const App: React.FC = () => {
         isOpen={isNotificationOpen}
         onClose={() => setIsNotificationOpen(false)}
         transactions={visibleTransactions}
+        expenditures={state.expenditures}
         activities={state.activities}
         notifications={visibleNotifications}
         products={state.products}
@@ -1973,6 +1976,11 @@ const App: React.FC = () => {
           <CurrentOrderSidebar cart={cart} setCart={setCart} customerName={customerName} setCustomerName={setCustomerName} customerPhone={customerPhone} setCustomerPhone={setCustomerPhone} paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod} amountPaid={amountPaid} setAmountPaid={setAmountPaid} globalDiscount={globalDiscount} setGlobalDiscount={setGlobalDiscount} isGlobalDiscountPercent={isGlobalDiscountPercent} setIsGlobalDiscountPercent={setIsGlobalDiscountPercent} signature={signature} setSignature={setSignature} isLocked={isLocked} setIsLocked={setIsLocked} onCompleteSale={handleCompleteSale} onClose={() => setIsCartOpen(false)} products={state.products} permissions={state.business.staffPermissions} isOwner={state.role === 'owner'} pastCustomers={pastCustomers} activeShopName={(state.shops || []).find((s) => s.id === state.activeShopId)?.name || state.business.staffContext?.assignedShopName || 'Shop'} staffDisplayName={state.business.staffContext?.staffName || undefined} business={state.business} />
         </div>
       </div>
+
+      {/* Notification Permission Prompt — shows once after login for TWA/PWA users */}
+      {showPushPrompt && (
+        <NotificationPermissionPrompt onComplete={() => setShowPushPrompt(false)} />
+      )}
 
       {/* Hide gBot on Inventory and Expenditure screens in mobile view so it doesn't block the Plus button */}
       {!(['expenditure', 'inventory', 'guides'].includes(activeTab) && isMobileView) && (

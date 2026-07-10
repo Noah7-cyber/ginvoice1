@@ -11,7 +11,7 @@ const requireActiveSubscription = async (req, res, next) => {
 
     // Add a 3-day grace period
     const gracePeriodEnd = subscriptionEndsAt
-      ? new Date(subscriptionEndsAt.getTime() + (3 * 24 * 60 * 60 * 1000))
+      ? new Date(subscriptionEndsAt.getTime() + (0 * 24 * 60 * 60 * 1000)) // TEST MODE: 0 days grace period
       : null;
 
     const hasAccess = (gracePeriodEnd && gracePeriodEnd >= now) || (trialEndsAt && trialEndsAt >= now);

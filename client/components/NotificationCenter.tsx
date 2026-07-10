@@ -10,6 +10,7 @@ interface NotificationCenterProps {
   onSnoozeVerification?: () => void;
   onDismissVerification?: (id: string) => void;
   transactions: Transaction[];
+  expenditures?: any[];
   activities: ActivityLog[];
   notifications: Notification[];
   products: Product[];
@@ -23,6 +24,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
   isOpen,
   onClose,
   transactions,
+  expenditures = [],
   activities = [],
   notifications = [],
   products,
@@ -49,6 +51,20 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
         message: '',
         body: '',
         payload: null
+      }));
+
+    const expenses = [...expenditures]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .map(e => ({
+        id: e.id,
+        type: 'expense',
+        amount: Number(e.amount || 0),
+        actor: e.expenseType || 'Business',
+        timestamp: e.date || new Date().toISOString(),
+        title: e.title || 'Expense',
+        message: e.description || '',
+        body: '',
+        payload: { flowType: e.flowType }
       }));
 
     const deleteNotes = notifications
@@ -83,7 +99,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
 
     const cutoff = Date.now() - TRANSACTION_TTL_MS;
 
-    const merged = [...sales, ...deleteNotes, ...edits]
+    const merged = [...sales, ...expenses, ...deleteNotes, ...edits]
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
       .filter((item) => {
         const ts = new Date(item.timestamp).getTime();
@@ -128,6 +144,10 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
         } else {
           subtext = `Sold by ${actorLabel}`;
         }
+      } else if (item.type === 'expense') {
+        const isIncome = item.payload?.flowType === 'in' || item.amount > 0;
+        title = `${isIncome ? 'Income' : 'Expense'} • ${amountStr}`;
+        subtext = item.title || (isIncome ? 'Income Recorded' : 'Expense Recorded');
       } else if (item.type === 'deletion') {
         const isTxDelete = Boolean(item.payload?.transactionId);
         if (isTxDelete) {

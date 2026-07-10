@@ -26,6 +26,7 @@ router.post('/save-subscription', auth, async (req, res) => {
     
     if (!exists) {
       business.pushSubscriptions.push(subscription);
+      business.markModified('pushSubscriptions');
       await business.save();
     }
 

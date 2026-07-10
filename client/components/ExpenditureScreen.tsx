@@ -201,7 +201,7 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Shop Expenses</h1>
 
-        <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
+        <div className="flex flex-col lg:flex-row flex-wrap gap-3 w-full lg:w-auto justify-end items-start lg:items-center">
            {/* Search Input */}
            <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
@@ -342,7 +342,7 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
       <div className="hidden md:block bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
-            <thead className="bg-gray-50 border-b border-gray-100">
+            <thead className="bg-gray-50 border-b border-gray-100 whitespace-nowrap">
               <tr>
                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Date</th>
                 <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Title</th>
@@ -357,7 +357,7 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
                  <tr><td colSpan={6} className="px-6 py-4 text-center text-gray-500">No expenditures found.</td></tr>
               ) : (
                 filteredExpenditures.map((exp) => (
-                  <tr key={exp.id || Math.random()} className="hover:bg-gray-50">
+                  <tr key={exp.id || Math.random()} className="hover:bg-gray-50 whitespace-nowrap">
                     <td className="px-6 py-4 text-sm text-gray-600">
                        {exp.date ? new Date(exp.date).toLocaleDateString() : 'N/A'}
                     </td>
@@ -369,7 +369,8 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
                     <td className={`px-6 py-4 text-sm font-bold text-right ${exp.flowType === 'in' ? 'text-emerald-600' : 'text-red-600'}`}>
                       {new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(exp.amount || 0)}
                     </td>
-                    <td className="px-6 py-4 text-sm text-right flex justify-end gap-2">
+                    <td className="px-6 py-4 text-sm text-right">
+                      <div className="flex justify-end gap-2">
                       {isReadOnly ? (
                         <span className="text-gray-400 italic text-xs">Locked</span>
                       ) : (
@@ -413,6 +414,7 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
                           </button>
                         </>
                       )}
+                      </div>
                     </td>
                   </tr>
                 ))

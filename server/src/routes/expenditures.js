@@ -82,6 +82,16 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
 
     await Business.findByIdAndUpdate(businessId, { $inc: { dataVersion: 1 } });
 
+    // Try sending push notification for expense
+    try {
+      const { sendNativePush } = require('../services/pushService');
+      const action = flowType === 'out' ? 'Expense Recorded' : 'Income Recorded';
+      const amountFmt = new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(Math.abs(finalAmount));
+      await sendNativePush(businessId, action, `${title} for ${amountFmt}`, { url: '/expenditure' });
+    } catch (pushErr) {
+      console.error('[WebPush] Error sending expense push:', pushErr);
+    }
+
     res.json(expenditure);
   } catch (err) {
     if (err?.status) return res.status(err.status).json({ message: err.message });

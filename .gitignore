@@ -92,3 +92,7 @@ backup*.json
 server/test_ai.js
 server/tests/
 server/test_*.js
+server/check_push.js
+server/send_test_push.js
+server/simulate_webhook.js
+server/scripts/expire-user.js
