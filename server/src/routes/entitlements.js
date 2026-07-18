@@ -26,7 +26,8 @@ router.get('/', auth, async (req, res) => {
       trialEndsAt: business.trialEndsAt,
       subscriptionExpiresAt: business.subscriptionExpiresAt,
       autoRenew: business.autoRenew,
-      subscriptionStatus: business.subscriptionStatus
+      subscriptionStatus: business.subscriptionStatus,
+      isGifted: !business.paystackSubscriptionCode && !business.paystackCustomerCode
     });
   } catch (err) {
     return res.status(500).json({ message: 'Entitlements fetch failed' });

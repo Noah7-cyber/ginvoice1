@@ -17,6 +17,7 @@ export interface BusinessProfile {
   subscriptionExpiresAt?: string;
   subscriptionStatus?: 'active' | 'non-renewing' | 'cancelled';
   autoRenew?: boolean;
+  isGifted?: boolean;
   useThermalPrinter?: boolean;
   theme: {
     primaryColor: string;

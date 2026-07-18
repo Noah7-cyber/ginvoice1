@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { X, Send, User, Bot, Mic } from 'lucide-react';
+import { X, Send, User, Bot, Mic, Copy } from 'lucide-react';
 import { motion } from 'motion/react';
 import { marked } from 'marked';
 marked.use({ breaks: true });
@@ -177,7 +177,7 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate, uiCo
                             {msg.text}
                         </div>
                     ) : (
-                        <div className="max-w-[95%] p-3 text-sm shadow-sm bg-white text-gray-700 rounded-2xl rounded-tl-none border border-gray-100">
+                        <div className="max-w-[95%] p-3 text-sm shadow-sm bg-white text-gray-700 rounded-2xl rounded-tl-none border border-gray-100 relative group">
                             {(() => {
                                 try {
                                     const textMatch = msg.text.match(/\{[\s\S]*\}/);
@@ -192,11 +192,21 @@ const SupportBot: React.FC<SupportBotProps> = ({ embed = false, onNavigate, uiCo
                                 }
                                 return (
                                     <div 
-                                        className="prose prose-sm prose-indigo max-w-none"
+                                        className="prose prose-sm prose-indigo max-w-none pr-6"
                                         dangerouslySetInnerHTML={{ __html: marked.parse(msg.text) as string }}
                                     />
                                 );
                             })()}
+                            <button
+                                onClick={() => {
+                                    navigator.clipboard.writeText(msg.text);
+                                    addToast('Copied to clipboard', 'success');
+                                }}
+                                className="absolute top-2 right-2 p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-gray-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all active:scale-95"
+                                title="Copy response"
+                            >
+                                <Copy size={14} />
+                            </button>
                         </div>
                     )}
                 </div>

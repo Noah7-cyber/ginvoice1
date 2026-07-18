@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Store, Save, RefreshCw, CloudCheck, Upload, Trash2, Image as ImageIcon, MessageSquare, HeadphonesIcon, HelpCircle, Lock, AlertTriangle, X, Ticket, ToggleLeft, ToggleRight, Loader2, CreditCard, ShieldCheck, CheckCircle2, Palette, Database, Download, Printer } from 'lucide-react';
-import { BusinessProfile, DiscountCode, Shop } from '../types';
+import { BusinessProfile, DiscountCode } from '../types';
 import { THEME_COLORS, FONTS } from '../constants';
-import { deleteAccount, uploadFile, updateSettings, generateDiscountCode, verifyPayment, getEntitlements, cancelSubscription, pauseSubscription, resumeSubscription, exportBusinessData, updateStaffPin } from '../services/api';
+import { deleteAccount, uploadFile, generateDiscountCode, verifyPayment, getEntitlements, cancelSubscription, pauseSubscription, resumeSubscription, exportBusinessData, updateStaffPin } from '../services/api';
 import api from '../services/api';
 import SupportBot from './SupportBot';
 import { useToast } from './ToastProvider';
@@ -77,7 +77,8 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                     isSubscribed: true,
                     subscriptionExpiresAt: data.subscriptionExpiresAt,
                     autoRenew: data.autoRenew,
-                    subscriptionStatus: data.subscriptionStatus
+                    subscriptionStatus: data.subscriptionStatus,
+                    isGifted: data.isGifted
                 };
                 onUpdateBusiness(newBusiness);
                 setFormData(prev => ({ ...prev, ...newBusiness }));
@@ -103,7 +104,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
   const fetchAndSyncEntitlements = async () => {
     try {
       const data = await getEntitlements();
-      const newBusiness = { ...business, autoRenew: data.autoRenew, subscriptionStatus: data.subscriptionStatus, subscriptionExpiresAt: data.subscriptionExpiresAt, isSubscribed: data.plan === 'PRO' };
+      const newBusiness = { ...business, autoRenew: data.autoRenew, subscriptionStatus: data.subscriptionStatus, subscriptionExpiresAt: data.subscriptionExpiresAt, isSubscribed: data.plan === 'PRO', isGifted: data.isGifted };
       onUpdateBusiness(newBusiness as any);
       setFormData(prev => ({ ...prev, ...newBusiness } as any));
     } catch (err) {
@@ -118,8 +119,8 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
        await pauseSubscription();
        addToast("Auto-renewal paused.", "success");
        await fetchAndSyncEntitlements();
-    } catch(e) {
-       addToast("Failed to pause.", "error");
+    } catch(e: any) {
+       addToast(e.message || "Failed to pause.", "error");
     } finally {
        setIsManagingSub(false);
     }
@@ -131,8 +132,8 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
        await resumeSubscription();
        addToast("Auto-renewal resumed!", "success");
        await fetchAndSyncEntitlements();
-    } catch(e) {
-       addToast("Failed to resume.", "error");
+    } catch(e: any) {
+       addToast(e.message || "Failed to resume.", "error");
     } finally {
        setIsManagingSub(false);
     }
@@ -146,8 +147,8 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
           addToast("Subscription cancelled.", "success");
           await fetchAndSyncEntitlements();
           setShowCancelModal(false);
-      } catch(e) {
-          addToast("Cancellation failed.", "error");
+      } catch(e: any) {
+          addToast(e.message || "Cancellation failed.", "error");
       } finally {
           setIsManagingSub(false);
       }
@@ -801,43 +802,50 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                           <div className="border-t pt-6">
                               <h3 className="font-bold text-gray-900 mb-4">Manage Subscription</h3>
 
-                              {business.autoRenew ? (
-                                  <div className="flex flex-col gap-3">
-                                      <div className="p-4 bg-emerald-50 text-emerald-800 rounded-xl text-sm border border-emerald-100 flex items-center gap-2">
-                                          <CheckCircle2 size={16} />
-                                          <span>Auto-renewal is <strong>ON</strong>. Next charge on {business.subscriptionExpiresAt ? new Date(business.subscriptionExpiresAt).toDateString() : 'expiry date'}.</span>
-                                      </div>
-                                      <div className="flex gap-3">
-                                          <button
-                                              onClick={handlePause}
-                                              disabled={isManagingSub}
-                                              className="flex-1 py-3 border-2 border-gray-200 text-gray-700 font-bold rounded-xl hover:bg-gray-50 disabled:opacity-50"
-                                          >
-                                              {isManagingSub ? <Loader2 className="animate-spin mx-auto"/> : 'Pause Auto-Renew'}
-                                          </button>
-                                          <button
-                                              onClick={() => setShowCancelModal(true)}
-                                              disabled={isManagingSub}
-                                              className="flex-1 py-3 border-2 border-red-100 text-red-600 font-bold rounded-xl hover:bg-red-50 disabled:opacity-50"
-                                          >
-                                              Cancel Plan
-                                          </button>
-                                      </div>
+                              {business.isGifted ? (
+                                  <div className="p-4 bg-blue-50 text-blue-800 rounded-xl text-sm border border-blue-100 flex items-center gap-2">
+                                      <CheckCircle2 size={16} />
+                                      <span>This subscription is <strong>manually managed</strong>. Access expires on {business.subscriptionExpiresAt ? new Date(business.subscriptionExpiresAt).toDateString() : 'expiry date'}. To renew, please make a direct payment or use a voucher code.</span>
                                   </div>
                               ) : (
-                                  <div className="flex flex-col gap-3">
-                                      <div className="p-4 bg-orange-50 text-orange-800 rounded-xl text-sm border border-orange-100 flex items-center gap-2">
-                                          <AlertTriangle size={16} />
-                                          <span>Auto-renewal is <strong>OFF</strong>. Access expires on {business.subscriptionExpiresAt ? new Date(business.subscriptionExpiresAt).toDateString() : 'expiry date'}.</span>
+                                  business.autoRenew ? (
+                                      <div className="flex flex-col gap-3">
+                                          <div className="p-4 bg-emerald-50 text-emerald-800 rounded-xl text-sm border border-emerald-100 flex items-center gap-2">
+                                              <CheckCircle2 size={16} />
+                                              <span>Auto-renewal is <strong>ON</strong>. Next charge on {business.subscriptionExpiresAt ? new Date(business.subscriptionExpiresAt).toDateString() : 'expiry date'}.</span>
+                                          </div>
+                                          <div className="flex gap-3">
+                                              <button
+                                                  onClick={handlePause}
+                                                  disabled={isManagingSub}
+                                                  className="flex-1 py-3 border-2 border-gray-200 text-gray-700 font-bold rounded-xl hover:bg-gray-50 disabled:opacity-50"
+                                              >
+                                                  {isManagingSub ? <Loader2 className="animate-spin mx-auto"/> : 'Pause Auto-Renew'}
+                                              </button>
+                                              <button
+                                                  onClick={() => setShowCancelModal(true)}
+                                                  disabled={isManagingSub}
+                                                  className="flex-1 py-3 border-2 border-red-100 text-red-600 font-bold rounded-xl hover:bg-red-50 disabled:opacity-50"
+                                              >
+                                                  Cancel Plan
+                                              </button>
+                                          </div>
                                       </div>
-                                      <button
-                                          onClick={handleResume}
-                                          disabled={isManagingSub}
-                                          className="w-full py-3 bg-gray-900 text-white font-bold rounded-xl hover:bg-black disabled:opacity-50"
-                                      >
-                                          {isManagingSub ? <Loader2 className="animate-spin mx-auto"/> : 'Resume Auto-Renewal'}
-                                      </button>
-                                  </div>
+                                  ) : (
+                                      <div className="flex flex-col gap-3">
+                                          <div className="p-4 bg-orange-50 text-orange-800 rounded-xl text-sm border border-orange-100 flex items-center gap-2">
+                                              <AlertTriangle size={16} />
+                                              <span>Auto-renewal is <strong>OFF</strong>. Access expires on {business.subscriptionExpiresAt ? new Date(business.subscriptionExpiresAt).toDateString() : 'expiry date'}.</span>
+                                          </div>
+                                          <button
+                                              onClick={handleResume}
+                                              disabled={isManagingSub}
+                                              className="w-full py-3 bg-gray-900 text-white font-bold rounded-xl hover:bg-black disabled:opacity-50"
+                                          >
+                                              {isManagingSub ? <Loader2 className="animate-spin mx-auto"/> : 'Resume Auto-Renewal'}
+                                          </button>
+                                      </div>
+                                  )
                               )}
                           </div>
                       )}

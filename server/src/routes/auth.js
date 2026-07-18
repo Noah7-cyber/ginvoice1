@@ -29,7 +29,8 @@ const sanitizeBusiness = (business) => ({
   isSubscribed: business.isSubscribed,
   subscriptionExpiresAt: business.subscriptionExpiresAt,
   createdAt: business.createdAt,
-  emailVerified: business.emailVerified // Added field
+  emailVerified: business.emailVerified,
+  isGifted: !business.paystackSubscriptionCode && !business.paystackCustomerCode
 });
 
 router.post('/register', async (req, res) => {
