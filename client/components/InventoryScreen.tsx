@@ -691,7 +691,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
         {/* Desktop Header Buttons (Original Layout) */}
         <div className={`hidden md:flex gap-2 ${isSelectionMode ? 'hidden md:flex' : ''}`}>
            {(!safeReadOnly || isGuideMode) && (
-             <GuideWrapper id="categories-desktop" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
+             <GuideWrapper id="categories" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
                  <button
                    onClick={() => !safeReadOnly && setIsCategoryManagerOpen(true)}
                    disabled={safeReadOnly && !isGuideMode}
@@ -712,14 +712,14 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
               <ListTodo size={20} /> Edit Many ({selectedIds.size})
             </button>
           )}
-          <GuideWrapper id="verify-stock-desktop" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
+          <GuideWrapper id="verify-stock" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
               <button onClick={handleStartVerification} disabled={isLoadingVerification || isVerifying || !isOnline} className="bg-blue-50 text-blue-700 px-4 py-3 rounded-xl flex items-center gap-2 font-bold border border-blue-200 hover:bg-blue-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                 {(isLoadingVerification || isVerifying) ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />} <span>Verify Stock</span>
               </button>
           </GuideWrapper>
           {(!safeReadOnly || isGuideMode) && (
             <>
-              <GuideWrapper id="import-csv-desktop" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
+              <GuideWrapper id="import-csv" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
                   <button
                     onClick={() => !safeReadOnly && setIsBulkImportOpen(true)}
                     disabled={safeReadOnly}
@@ -729,7 +729,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                   </button>
               </GuideWrapper>
               
-              <GuideWrapper id="add-product-desktop" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
+              <GuideWrapper id="add-product" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
                   <button
                     onClick={() => !safeReadOnly && handleAddNew()}
                     disabled={safeReadOnly}
@@ -746,7 +746,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
         <div className={`flex flex-col md:hidden gap-2 w-full ${isSelectionMode ? 'hidden' : ''}`}>
            <div className="flex gap-2 w-full">
              {(!safeReadOnly || isGuideMode) && (
-               <GuideWrapper id="categories-mobile" className="flex-1" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
+               <GuideWrapper id="categories" className="flex-1" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
                    <button
                      onClick={() => !safeReadOnly && setIsCategoryManagerOpen(true)}
                      disabled={safeReadOnly && !isGuideMode}
@@ -757,7 +757,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                </GuideWrapper>
              )}
 
-            <GuideWrapper id="verify-stock-mobile" className="flex-1" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
+            <GuideWrapper id="verify-stock" className="flex-1" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
                 <button onClick={handleStartVerification} disabled={isLoadingVerification || isVerifying || !isOnline} className="w-full bg-blue-50 text-blue-700 px-2 py-2 rounded-lg flex items-center justify-center gap-1.5 font-bold border border-blue-200 hover:bg-blue-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                   {(isLoadingVerification || isVerifying) ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />} <span className="text-xs">Verify</span>
                 </button>
@@ -766,7 +766,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
 
           {(!safeReadOnly || isGuideMode) && (
             <div className="flex gap-2 w-full">
-              <GuideWrapper id="import-csv-mobile" className="flex-1" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
+              <GuideWrapper id="import-csv" className="flex-1" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
                   <button
                     onClick={() => !safeReadOnly && setIsBulkImportOpen(true)}
                     disabled={safeReadOnly}
@@ -776,7 +776,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                   </button>
               </GuideWrapper>
 
-              <GuideWrapper id="add-product-mobile" className="flex-1" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
+              <GuideWrapper id="add-product" className="flex-1" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
                   <button
                     onClick={() => !safeReadOnly && handleAddNew()}
                     disabled={safeReadOnly}
