@@ -679,6 +679,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                   </GuideWrapper>
 
                   {/* Strict Online Mode Toggle */}
+                  <GuideWrapper id="network-settings" className="w-full" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
                   <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
                       <h2 className="text-lg font-bold flex items-center gap-2"><CloudCheck className="text-primary" /> Network Settings</h2>
                       <div className="flex items-center justify-between p-4 rounded-2xl border bg-gray-50">
@@ -697,6 +698,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                           </button>
                       </div>
                   </div>
+                  </GuideWrapper>
 
                   {/* Tax Compliance Toggle */}
                   <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-6">
@@ -763,6 +765,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                   </GuideWrapper>
 
                    {/* Discount Codes */}
+                    <GuideWrapper id="discount-codes" className="w-full" isGuideMode={isGuideMode} activeHotspotId={activeHotspotId} onHotspotClick={onHotspotClick}>
                     <div className="bg-white rounded-3xl shadow-sm border p-6 md:p-8 space-y-4">
                         <div className="flex justify-between items-center">
                             <h2 className="text-lg font-bold flex items-center gap-2"><Ticket className="text-pink-500" /> Discount Codes</h2>
@@ -776,6 +779,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                         </div>
                         <p className="text-sm text-gray-500">Manage promo codes for your customers.</p>
                     </div>
+                    </GuideWrapper>
               </div>
           )}
 
