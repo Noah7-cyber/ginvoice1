@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Search, Edit3, Trash2, CheckCircle2, X, ListTodo, Layers, Tag, DollarSign, ArrowUp, Maximize2, Save, Loader2, Calculator, SlidersHorizontal, Download, Infinity } from 'lucide-react';
+import { Plus, Search, Edit3, Trash2, CheckCircle2, X, ListTodo, Layers, Tag, DollarSign, ArrowUp, Maximize2, Save, Loader2, Calculator, SlidersHorizontal, Download, Infinity, Upload } from 'lucide-react';
 import { Product, Category } from '../types';
 import { CURRENCY } from '../constants';
 import { formatCurrency } from '../utils/currency';
@@ -41,6 +41,7 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [visibleCount, setVisibleCount] = useState(50); // Performance Pagination
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [filterLowStock, setFilterLowStock] = useState(false);
@@ -1272,11 +1273,12 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                   )}
                 </div>
                 <div className="flex-1">
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Product Image</label>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Product Image (Optional)</label>
                   <input
                     type="file"
+                    ref={fileInputRef}
                     accept="image/*"
-                    className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
+                    className="hidden"
                     onChange={async (e) => {
                       if (e.target.files && e.target.files[0]) {
                         setIsUploadingImage(true);
@@ -1294,7 +1296,27 @@ const InventoryScreen: React.FC<InventoryScreenProps> = ({ products, onUpdatePro
                     }}
                     disabled={isUploadingImage}
                   />
-                  {isUploadingImage && <p className="text-xs text-primary mt-1 flex items-center gap-1"><Loader2 size={12} className="animate-spin"/> Uploading & compressing...</p>}
+                  <div className="flex gap-2 mt-1">
+                    <button 
+                      type="button" 
+                      onClick={() => fileInputRef.current?.click()} 
+                      className="text-[10px] font-black uppercase text-primary bg-primary/10 px-3 py-2 rounded-lg hover:bg-primary/20 flex items-center gap-1 disabled:opacity-50"
+                      disabled={isUploadingImage}
+                    >
+                      <Upload size={14} /> Upload
+                    </button>
+                    {newProduct.image && (
+                      <button 
+                        type="button" 
+                        onClick={() => setNewProduct({ ...newProduct, image: '' })} 
+                        className="text-[10px] font-black uppercase text-red-600 bg-red-50 px-3 py-2 rounded-lg hover:bg-red-100 flex items-center justify-center"
+                        disabled={isUploadingImage}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
+                  {isUploadingImage && <p className="text-xs text-primary mt-2 flex items-center gap-1"><Loader2 size={12} className="animate-spin"/> Uploading & compressing...</p>}
                 </div>
               </div>
 

@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
 import { ToastProvider } from './components/ToastProvider';
+import { GoogleOAuthProvider } from '@react-oauth/google';
 import './i18n';
 
 const rootElement = document.getElementById('root');
@@ -10,12 +11,16 @@ if (!rootElement) {
   throw new Error("Could not find root element to mount to");
 }
 
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '1000000000000-dummy.apps.googleusercontent.com';
+
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <ToastProvider>
-      <App />
-    </ToastProvider>
+    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+      <ToastProvider>
+        <App />
+      </ToastProvider>
+    </GoogleOAuthProvider>
   </React.StrictMode>
 );
 

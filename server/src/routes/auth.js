@@ -2,6 +2,8 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const { OAuth2Client } = require('google-auth-library');
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const Business = require('../models/Business');
 const Product = require('../models/Product');
@@ -25,6 +27,9 @@ const sanitizeBusiness = (business) => ({
   address: business.address,
   logo: business.logo,
   theme: business.theme,
+  settings: business.settings,
+  taxSettings: business.taxSettings,
+  staffPermissions: business.staffPermissions,
   trialEndsAt: business.trialEndsAt,
   isSubscribed: business.isSubscribed,
   subscriptionExpiresAt: business.subscriptionExpiresAt,
@@ -564,6 +569,81 @@ router.post('/cleanup-unverified', require('../middleware/auth'), async (req, re
   } catch (err) {
     console.error('Cleanup failed:', err);
     return res.status(500).json({ message: 'Cleanup failed' });
+  }
+});
+
+// Google Authentication
+router.post('/google', async (req, res) => {
+  try {
+    const { token, name, phone, address, ownerPassword, staffPassword } = req.body;
+    if (!token) return res.status(400).json({ message: 'Missing Google token' });
+
+    const ticket = await googleClient.verifyIdToken({
+      idToken: token,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    const googleId = payload.sub;
+    const email = payload.email;
+    const defaultName = payload.name;
+
+    let business = await Business.findOne({ $or: [{ googleId }, { email }] });
+
+    if (business) {
+      if (!business.googleId) {
+        business.googleId = googleId;
+        business.emailVerified = true;
+        await business.save();
+      }
+      const authToken = buildToken(business._id.toString(), 'owner', business.credentialsVersion);
+      return res.json({ token: authToken, business: sanitizeBusiness(business), isNewUser: false });
+    }
+
+    // New user registration flow
+    if (!name || !phone || !ownerPassword || !staffPassword) {
+      return res.status(200).json({
+        isNewUser: true,
+        email,
+        name: defaultName,
+        message: 'Additional details required to complete registration'
+      });
+    }
+
+    const ownerPin = await bcrypt.hash(ownerPassword, 10);
+    const staffPin = await bcrypt.hash(staffPassword, 10);
+    const trialEndsAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+    business = await Business.create({
+      name,
+      email,
+      phone,
+      address: address || '',
+      ownerPin,
+      staffPin,
+      googleId,
+      emailVerified: true,
+      trialEndsAt,
+      isSubscribed: false
+    });
+
+    const authToken = buildToken(business._id.toString(), 'owner', 1);
+    
+    if (email) {
+      const emailHtml = buildWelcomeEmail({ businessName: name });
+      sendSystemEmail({
+        to: email,
+        subject: 'Welcome to Ginvoice! 🚀',
+        text: `Welcome to Ginvoice, ${name}! Your account is verified.`,
+        html: emailHtml
+      }).catch(console.error);
+    }
+    
+    sendTikTokEvent({ email, phone }).catch(console.error);
+
+    res.json({ token: authToken, business: sanitizeBusiness(business), isNewUser: false });
+  } catch (err) {
+    console.error('Google Auth Error:', err);
+    res.status(500).json({ message: 'Google authentication failed' });
   }
 });
 

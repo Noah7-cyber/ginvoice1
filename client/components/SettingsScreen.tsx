@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Store, Save, RefreshCw, CloudCheck, Upload, Trash2, Image as ImageIcon, MessageSquare, HeadphonesIcon, HelpCircle, Lock, AlertTriangle, X, Ticket, ToggleLeft, ToggleRight, Loader2, CreditCard, ShieldCheck, CheckCircle2, Palette, Database, Download, Printer } from 'lucide-react';
 import { BusinessProfile, DiscountCode } from '../types';
 import { THEME_COLORS, FONTS } from '../constants';
-import { deleteAccount, uploadFile, generateDiscountCode, verifyPayment, getEntitlements, cancelSubscription, pauseSubscription, resumeSubscription, exportBusinessData, updateStaffPin } from '../services/api';
+import { deleteAccount, uploadFile, generateDiscountCode, verifyPayment, getEntitlements, cancelSubscription, pauseSubscription, resumeSubscription, exportBusinessData, updateStaffPin, verifyGooglePlaySubscription } from '../services/api';
 import api from '../services/api';
 import SupportBot from './SupportBot';
 import { useToast } from './ToastProvider';
@@ -112,6 +112,57 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
     }
   };
 
+  const handleGooglePlaySubscribe = async () => {
+    // Digital Goods API is only available inside a TWA (Trusted Web Activity) on Android
+    if (!('getDigitalGoodsService' in window)) {
+      addToast('Google Play Billing is only available in the Android app. Using card payment instead.', 'error');
+      if (onSubscribe) onSubscribe();
+      return;
+    }
+    
+    setIsPollingSubscription(true);
+    try {
+      const service = await (window as any).getDigitalGoodsService('https://play.google.com/billing');
+      if (!service) {
+        addToast('Could not connect to Google Play. Using card payment instead.', 'error');
+        if (onSubscribe) onSubscribe();
+        return;
+      }
+
+      const paymentMethods = [{
+        supportedMethods: 'https://play.google.com/billing',
+        data: { sku: 'ginvoice_pro_monthly' }
+      }];
+      const paymentDetails = {
+        total: {
+          label: 'Ginvoice Pro Subscription',
+          amount: { value: '2000.00', currency: 'NGN' }
+        }
+      };
+      
+      const paymentRequest = new PaymentRequest(paymentMethods, paymentDetails);
+      const response = await paymentRequest.show();
+      const purchaseToken = response.details.purchaseToken;
+      
+      const verificationResponse = await verifyGooglePlaySubscription(purchaseToken, 'ginvoice_pro_monthly');
+      await response.complete('success');
+      
+      if (verificationResponse.isSubscribed) {
+        addToast('Subscription activated!', 'success');
+        await fetchAndSyncEntitlements();
+      }
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        addToast('Subscription cancelled.', 'error');
+      } else {
+        console.error('Google Play Subscription failed:', err);
+        addToast(err.message || 'Subscription failed. Please try card payment.', 'error');
+      }
+    } finally {
+      setIsPollingSubscription(false);
+    }
+  };
+
   const handlePause = async () => {
     if(!confirm("Pause auto-renewal? You will keep access until your current period ends.")) return;
     setIsManagingSub(true);
@@ -164,11 +215,12 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
 
     setIsLoading(true);
     try {
-      await api.put('/settings', data);
+      const res = await api.put('/settings', data);
       addToast("Business updated successfully!", "success");
 
-      const updatedBusiness = { ...business, ...data };
-      setFormData(prev => ({ ...prev, ...data }));
+      // Use the response from the server as the source of truth
+      const updatedBusiness = { ...business, ...res };
+      setFormData(prev => ({ ...prev, ...res }));
       onUpdateBusiness(updatedBusiness);
 
       setShowSaved(true);
@@ -195,10 +247,6 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 200 * 1024) {
-        addToast("Image too large. Max 200KB.", "error");
-        return;
-      }
       if (!isOnline) {
         addToast('Online required for logo change', 'error');
         return;
@@ -220,7 +268,19 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
 
   const handleRemoveLogo = async () => {
     if (!confirm('Are you sure you want to remove the logo?')) return;
-    await handleUpdateBusiness({ logo: null as any });
+    if (!isOnline) {
+      addToast('Online required to remove logo.', 'error');
+      return;
+    }
+    const oldLogo = formData.logo;
+    // Optimistically clear the logo in UI immediately
+    setFormData(prev => ({ ...prev, logo: null as any }));
+    try {
+      await handleUpdateBusiness({ logo: null as any });
+    } catch {
+      // Restore on failure
+      setFormData(prev => ({ ...prev, logo: oldLogo }));
+    }
   };
 
   const togglePermission = async (key: string) => {
@@ -739,12 +799,20 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ business, onUpdateBusin
                                       <p className="text-sm text-slate-600 mb-4">
                                           Your trial has ended. You are on the read-only free plan. Upgrade to regain full access.
                                       </p>
-                                      <button
-                                        onClick={handleSubscribe}
-                                        className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold shadow-lg hover:bg-black transition-all"
-                                      >
-                                          {isPollingSubscription ? <span className="flex items-center justify-center gap-2"><Loader2 className="animate-spin" size={18}/> Checking Payment...</span> : 'Upgrade to Pro (₦2,000/mo)'}
-                                      </button>
+                                      <div className="flex flex-col gap-2">
+                                          <button
+                                            onClick={handleSubscribe}
+                                            className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold shadow-lg hover:bg-black transition-all"
+                                          >
+                                              {isPollingSubscription ? <span className="flex items-center justify-center gap-2"><Loader2 className="animate-spin" size={18}/> Checking Payment...</span> : 'Upgrade to Pro with Card (₦2,000/mo)'}
+                                          </button>
+                                          <button
+                                            onClick={handleGooglePlaySubscribe}
+                                            className="w-full py-3 bg-indigo-100 text-indigo-700 rounded-xl font-bold shadow-sm border border-indigo-200 hover:bg-indigo-200 transition-all flex items-center justify-center gap-2"
+                                          >
+                                              Subscribe with Google Play
+                                          </button>
+                                      </div>
                                   </div>
                               );
                           }

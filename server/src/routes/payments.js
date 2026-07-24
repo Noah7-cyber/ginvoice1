@@ -1,5 +1,7 @@
 const express = require('express');
 const crypto = require('crypto');
+const { google } = require('googleapis');
+const playDeveloper = google.androidpublisher('v3');
 
 const Business = require('../models/Business');
 const PaymentEvent = require('../models/PaymentEvent');
@@ -496,6 +498,60 @@ router.post('/subscription/resume', auth, async (req, res) => {
       res.json({ success: true, message: 'Auto-renewal resumed.' });
   } catch (error) {
       res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Google Play Billing Verification
+router.post('/google-play/verify', auth, async (req, res) => {
+  try {
+    const { purchaseToken, subscriptionId } = req.body;
+    if (!purchaseToken || !subscriptionId) {
+      return res.status(400).json({ message: 'Missing purchase details' });
+    }
+
+    const business = await Business.findById(req.businessId);
+    if (!business) return res.status(404).json({ message: 'Business not found' });
+
+    // Google Play API Setup (Requires GOOGLE_CLIENT_EMAIL and GOOGLE_PRIVATE_KEY in env)
+    const googleAuth = new google.auth.GoogleAuth({
+      credentials: {
+        client_email: process.env.GOOGLE_CLIENT_EMAIL,
+        private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      },
+      scopes: ['https://www.googleapis.com/auth/androidpublisher']
+    });
+
+    const client = await googleAuth.getClient();
+    google.options({ auth: client });
+
+    const response = await playDeveloper.purchases.subscriptions.get({
+      packageName: process.env.ANDROID_PACKAGE_NAME || 'com.ginvoice.app',
+      subscriptionId,
+      token: purchaseToken
+    });
+
+    const purchase = response.data;
+
+    // Check if payment state is 1 (Payment received) or if it's active based on expiry
+    const expiryTime = parseInt(purchase.expiryTimeMillis);
+    const isActive = expiryTime > Date.now();
+
+    if (isActive) {
+      business.isSubscribed = true;
+      business.subscriptionStatus = purchase.autoRenewing ? 'active' : 'non-renewing';
+      business.playStorePurchaseToken = purchaseToken;
+      business.playStoreSubscriptionId = subscriptionId;
+      business.subscriptionExpiresAt = new Date(expiryTime);
+      await business.save();
+      
+      return res.json({ message: 'Subscription verified', isSubscribed: true });
+    }
+
+    return res.status(400).json({ message: 'Subscription is not active' });
+
+  } catch (err) {
+    console.error('Google Play Verify Error:', err);
+    res.status(500).json({ message: 'Failed to verify subscription' });
   }
 });
 

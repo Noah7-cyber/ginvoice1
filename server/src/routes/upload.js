@@ -64,4 +64,34 @@ router.post('/', requireAuth, requireActiveSubscription, upload.single('file'), 
   }
 });
 
-module.exports = router;
+// Helper to delete an image from Cloudinary given its full URL
+const deleteImageFromCloudinary = async (imageUrl) => {
+  if (!imageUrl || typeof imageUrl !== 'string' || !imageUrl.includes('cloudinary.com')) {
+    return;
+  }
+  
+  try {
+    // Extract public ID from URL:
+    // e.g., https://res.cloudinary.com/cloud_name/image/upload/v1234567890/ginvoice_uploads/abcd123.jpg
+    // We want: ginvoice_uploads/abcd123
+    const parts = imageUrl.split('/');
+    const uploadIndex = parts.findIndex(p => p === 'upload');
+    if (uploadIndex !== -1 && parts.length > uploadIndex + 2) {
+      // The parts after 'upload/v12345/' are the public ID plus extension
+      const publicIdWithExt = parts.slice(uploadIndex + 2).join('/');
+      const publicId = publicIdWithExt.substring(0, publicIdWithExt.lastIndexOf('.'));
+      
+      if (publicId) {
+        await cloudinary.uploader.destroy(publicId);
+        console.log(`[Cloudinary] Deleted old image: ${publicId}`);
+      }
+    }
+  } catch (err) {
+    console.error('[Cloudinary] Failed to delete old image:', err);
+  }
+};
+
+module.exports = {
+  router,
+  deleteImageFromCloudinary
+};

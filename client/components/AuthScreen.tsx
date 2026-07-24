@@ -2,16 +2,18 @@
 import React, { useState } from 'react';
 import { UserCircle, ShieldCheck, ShoppingBag, Info, Lock, Eye, EyeOff, ArrowLeft, ArrowRight, RefreshCw, Loader2 } from 'lucide-react';
 import { UserRole, BusinessProfile } from '../types';
+import { GoogleLogin } from '@react-oauth/google';
 
 interface AuthScreenProps {
   onLogin: (pin: string, role: UserRole) => Promise<boolean>;
   onForgotPassword: (email?: string) => void;
   onResetBusiness: () => void;
+  onGoogleLogin?: (token: string, additionalData?: any) => Promise<any>;
   business: BusinessProfile;
   email?: string;
 }
 
-const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onForgotPassword, onResetBusiness, business, email }) => {
+const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onForgotPassword, onResetBusiness, onGoogleLogin, business, email }) => {
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -86,6 +88,26 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onForgotPassword, onRe
                 </div>
               </button>
             </div>
+
+            {onGoogleLogin && (
+              <div className="pt-4 flex justify-center border-t border-gray-100">
+                <div style={{ height: '44px', width: '44px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                  <GoogleLogin
+                    type="icon"
+                    size="large"
+                    shape="circle"
+                    onSuccess={credentialResponse => {
+                      if (credentialResponse.credential) {
+                        onGoogleLogin(credentialResponse.credential);
+                      }
+                    }}
+                    onError={() => {
+                      console.error('Google Login Failed');
+                    }}
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Logout/Reset Business Toggle */}
             <div className="pt-4 border-t border-gray-100 text-center">

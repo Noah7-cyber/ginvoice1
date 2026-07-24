@@ -210,11 +210,13 @@ router.get('/users/:id', async (req, res) => {
 
     const productCount = await Product.countDocuments({ businessId: req.params.id });
     const transactionCount = await Transaction.countDocuments({ businessId: req.params.id });
+    const expenditureCount = await Expenditure.countDocuments({ business: req.params.id });
 
     res.json({
       ...business,
       productCount,
-      transactionCount
+      transactionCount,
+      expenditureCount
     });
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch user details' });

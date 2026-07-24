@@ -2,6 +2,7 @@ const express = require('express');
 const Business = require('../models/Business');
 const auth = require('../middleware/auth');
 const requireActiveSubscription = require('../middleware/subscription');
+const { deleteImageFromCloudinary } = require('./upload');
 
 const router = express.Router();
 
@@ -64,11 +65,22 @@ router.put('/', auth, requireActiveSubscription, async (req, res) => {
       updateDoc.$inc = { credentialsVersion: 1 }; // Invalidate staff sessions only when permissions change
     }
 
+    const oldBusiness = await Business.findById(req.businessId).select('logo');
+
     const business = await Business.findByIdAndUpdate(
       req.businessId,
       updateDoc,
       { new: true, runValidators: true }
     ).select('settings staffPermissions name phone address email logo theme');
+    
+    // Clean up old logo from Cloudinary if it was replaced or removed
+    if (oldBusiness && oldBusiness.logo) {
+      const logoWasRemoved = logo === null;
+      const logoWasChanged = logo !== undefined && logo !== oldBusiness.logo;
+      if (logoWasRemoved || logoWasChanged) {
+        deleteImageFromCloudinary(oldBusiness.logo).catch(console.error);
+      }
+    }
 
     // Trigger immediate version bump for sync
     await Business.findByIdAndUpdate(req.businessId, { $inc: { dataVersion: 1 } });

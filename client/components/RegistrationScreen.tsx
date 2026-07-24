@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { ShoppingBag, MapPin, Phone, Mail, ArrowRight, Store, Sparkles, Upload, Trash2, Image as ImageIcon, Lock, ShieldCheck, UserCircle, Info, KeyRound, Loader2, Eye, EyeOff } from 'lucide-react';
 import PhoneInput from 'react-phone-input-2';
 import 'react-phone-input-2/lib/style.css';
+import { GoogleLogin } from '@react-oauth/google';
 import { useToast } from './ToastProvider';
 import { uploadFile, loadAuthToken } from '../services/api';
 
@@ -10,11 +11,12 @@ declare global { interface Window { ttq: any; } }
 interface RegistrationScreenProps {
   onRegister: (details: { name: string, address: string, phone: string, email: string, logo?: string, ownerPassword?: string, staffPassword?: string }) => Promise<void>;
   onManualLogin: (details: { email: string, pin: string }) => Promise<void>;
+  onGoogleLogin?: (token: string, additionalData?: any) => Promise<any>;
   onForgotPassword: () => void;
   defaultMode?: 'register' | 'login';
 }
 
-const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onManualLogin, onForgotPassword, defaultMode }) => {
+const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onManualLogin, onGoogleLogin, onForgotPassword, defaultMode }) => {
   const { addToast } = useToast();
   const [mode, setMode] = useState<'register' | 'login'>(defaultMode || 'register');
   const [acceptedPolicy, setAcceptedPolicy] = useState(false);
@@ -29,6 +31,7 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onM
     ownerPassword: '',
     staffPassword: ''
   });
+  const [googleToken, setGoogleToken] = useState<string | null>(null);
 
   const [loginData, setLoginData] = useState({
     email: '',
@@ -111,7 +114,11 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onM
         }
 
         if (formData.name && formData.phone && formData.ownerPassword && formData.staffPassword) {
-          await onRegister(formData);
+          if (googleToken) {
+            await onGoogleLogin?.(googleToken, formData);
+          } else {
+            await onRegister(formData);
+          }
           // TikTok Pixel: Track successful registration
           if (window.ttq) {
             window.ttq.track('CompleteRegistration', {
@@ -137,8 +144,8 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onM
   };
 
   return (
-    <div className="min-h-screen bg-indigo-700 flex items-center justify-center p-4 overflow-y-auto bg-gradient-to-br from-indigo-700 via-indigo-600 to-indigo-800">
-      <div className="max-w-xl w-full py-8">
+    <div className="min-h-screen flex p-4 overflow-y-auto bg-gradient-to-br from-indigo-700 via-indigo-600 to-indigo-800">
+      <div className="max-w-xl w-full m-auto py-8">
         <div className="text-center mb-8">
           <div className="inline-flex p-4 rounded-3xl bg-white/10 backdrop-blur-md mb-4 animate-bounce">
             <ShoppingBag size={48} className="text-white" />
@@ -238,9 +245,10 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onM
                 <div className="pt-2 space-y-4">
                   <div className="p-4 bg-indigo-50 rounded-2xl border border-indigo-100 flex items-start gap-3">
                     <Info size={16} className="text-indigo-600 shrink-0 mt-0.5" />
-                    <p className="text-[10px] text-indigo-700 leading-relaxed font-medium">
-                      Note: Your email is vital for password recovery. While you can enter any text, we recommend using a valid business email. Without a valid email, you may lose access to your store's data forever if you forget your password.
-                    </p>
+                    <div className="text-[10px] text-indigo-700 leading-relaxed font-medium">
+                      <p className="mb-1"><strong>Owner PIN:</strong> This is your personal admin passcode to log in and manage the store. Do not share this.</p>
+                      <p><strong>Staff PIN:</strong> This is a separate passcode your employees will use to log in and record sales.</p>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -400,6 +408,34 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onM
             >
               {mode === 'register' ? 'Already have a store? Login here' : 'Need to setup a new store? Register here'}
             </button>
+
+            {onGoogleLogin && (
+              <div className="pt-4 flex justify-center border-t border-gray-100">
+                <div style={{ height: '44px', width: '44px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                  <GoogleLogin
+                    type="icon"
+                    size="large"
+                    shape="circle"
+                    onSuccess={async (credentialResponse) => {
+                      if (credentialResponse.credential) {
+                        setIsLoading(true);
+                        const result = await onGoogleLogin(credentialResponse.credential);
+                        setIsLoading(false);
+                        if (result && result.isNewUser) {
+                          setGoogleToken(credentialResponse.credential);
+                          setFormData(prev => ({ ...prev, email: result.email, name: result.name }));
+                          setMode('register');
+                        }
+                      }
+                    }}
+                    onError={() => {
+                      console.error('Google Login Failed');
+                      addToast('Google Login failed', 'error');
+                    }}
+                  />
+                </div>
+              </div>
+            )}
 
             <p className="text-center text-xs text-gray-400 mt-6 font-medium">
               Ginvoice Market OS • Made for Nigerian Traders 🇳🇬

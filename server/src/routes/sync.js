@@ -12,6 +12,7 @@ const Notification = require('../models/Notification');
 const { maybeCreateStockVerificationNotification } = require('../services/stockVerification');
 const { decrementStock, restoreStock } = require('../services/stockAdapter');
 const { sendNativePush } = require('../services/pushService');
+const { deleteImageFromCloudinary } = require('./upload');
 
 // Middleware
 const auth = require('../middleware/auth');
@@ -177,13 +178,15 @@ router.get('/', auth, async (req, res) => {
     const notificationsPromise = shouldInclude('notifications')
       ? Notification.find({ businessId, dismissedAt: null }).sort({ timestamp: -1 }).limit(50).lean()
       : Promise.resolve([]);
+    const businessPromise = Business.findById(req.businessId).lean();
 
-    const [rawProducts, rawTransactions, rawExpenditures, rawCategories, rawNotifications] = await Promise.all([
+    const [rawProducts, rawTransactions, rawExpenditures, rawCategories, rawNotifications, rawBusiness] = await Promise.all([
       productsPromise,
       transactionsPromise,
       expendituresPromise,
       categoriesPromise,
-      notificationsPromise
+      notificationsPromise,
+      businessPromise
     ]);
 
     // Map Decimals to Numbers
@@ -231,7 +234,30 @@ router.get('/', auth, async (req, res) => {
 
     const notifications = rawNotifications;
 
+    let business = null;
+    if (rawBusiness) {
+      business = {
+        id: rawBusiness._id ? rawBusiness._id.toString() : rawBusiness.id,
+        name: rawBusiness.name,
+        email: rawBusiness.email,
+        phone: rawBusiness.phone,
+        address: rawBusiness.address,
+        logo: rawBusiness.logo,
+        theme: rawBusiness.theme,
+        settings: rawBusiness.settings,
+        taxSettings: rawBusiness.taxSettings,
+        staffPermissions: rawBusiness.staffPermissions,
+        trialEndsAt: rawBusiness.trialEndsAt,
+        isSubscribed: rawBusiness.isSubscribed,
+        subscriptionExpiresAt: rawBusiness.subscriptionExpiresAt,
+        createdAt: rawBusiness.createdAt,
+        emailVerified: rawBusiness.emailVerified,
+        isGifted: !rawBusiness.paystackSubscriptionCode && !rawBusiness.paystackCustomerCode
+      };
+    }
+
     res.json({
+      business,
       products,
       transactions,
       expenditures,
@@ -253,7 +279,12 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
 
     if (business && typeof business === 'object') {
        const { staffPermissions, trialEndsAt, isSubscribed, ...safeUpdates } = business;
-       await Business.findByIdAndUpdate(businessId, { $set: { ...safeUpdates, lastActiveAt: new Date() } });
+       const oldBusiness = await Business.findByIdAndUpdate(businessId, { $set: { ...safeUpdates, lastActiveAt: new Date() } });
+       
+       // Clean up old logo from Cloudinary if it was replaced
+       if (oldBusiness && safeUpdates.logo && oldBusiness.logo && oldBusiness.logo !== safeUpdates.logo) {
+         deleteImageFromCloudinary(oldBusiness.logo).catch(console.error);
+       }
     }
 
     const changedDomains = {
@@ -296,6 +327,8 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
         ? await Product.find({ businessId, id: { $in: incomingProductIds } }).lean()
         : [];
       const existingProductMap = new Map(existingProducts.map((p) => [p.id, p]));
+      
+      const imagesToDelete = [];
 
       const productOps = products.map((p) => {
         const productId = String(p?.id || '').trim();
@@ -331,7 +364,7 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
            stockUpdate.$set = { stock: Number(p.currentStock || p.stock || 0) };
         }
 
-        return {
+        const op = {
           updateOne: {
             filter: { businessId, id: productId },
             update: {
@@ -360,6 +393,13 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
             upsert: true
           }
         };
+        
+        // If image is being replaced, stage the old image for deletion
+        if (existing && p.image !== undefined && existing.image && p.image !== existing.image) {
+           imagesToDelete.push(existing.image);
+        }
+        
+        return op;
       }).filter(Boolean);
 
       if (productOps.length > 0) {
@@ -390,6 +430,9 @@ router.post('/', auth, requireActiveSubscription, async (req, res) => {
             skippedProducts += productOps.length;
           }
         }
+        
+        // Clean up orphaned product images in the background
+        imagesToDelete.forEach(imgUrl => deleteImageFromCloudinary(imgUrl).catch(console.error));
       }
     }
 
@@ -616,6 +659,11 @@ router.delete('/products/:id', auth, requireActiveSubscription, async (req, res)
     if (!product) return res.status(404).json({ message: 'Product not found for hard delete' });
     
     await Product.deleteOne({ _id: product._id });
+    
+    // Clean up product image from Cloudinary
+    if (product.image) {
+      deleteImageFromCloudinary(product.image).catch(console.error);
+    }
     
     const productName = product.name || id;
 

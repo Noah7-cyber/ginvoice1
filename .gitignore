@@ -97,3 +97,6 @@ server/send_test_push.js
 server/simulate_webhook.js
 server/scripts/expire-user.js
 server/test_payment_e2e.js
+
+# Google Service Account Keys (never commit these)
+server/*-*.json

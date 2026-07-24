@@ -95,6 +95,13 @@ export const login = async (email: string, pin: string, role?: string, shopId?: 
   });
 };
 
+export const googleLogin = async (token: string, additionalData?: { name?: string, phone?: string, address?: string, ownerPassword?: string, staffPassword?: string }) => {
+  return request('/api/auth/google', {
+    method: 'POST',
+    body: JSON.stringify({ token, ...additionalData })
+  });
+};
+
 export const uploadProductImage = async (file: File): Promise<{url: string}> => {
   const token = loadAuthToken();
   if (!token) throw new Error('Not authenticated');
@@ -574,6 +581,16 @@ export const getAdminStats = async () => {
   return request('/api/admin/stats', {
     method: 'GET',
     headers: { Authorization: `Bearer ${token}` }
+  });
+};
+
+export const verifyGooglePlaySubscription = async (purchaseToken: string, subscriptionId: string) => {
+  const token = loadAuthToken();
+  if (!token) throw new Error('Not authenticated');
+  return request('/api/payments/google-play/verify', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ purchaseToken, subscriptionId })
   });
 };
 

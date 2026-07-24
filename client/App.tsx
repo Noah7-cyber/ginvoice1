@@ -30,7 +30,7 @@ import { CURRENCY, INITIAL_PRODUCTS } from './constants';
 import { safeCalculate } from './utils/math';
 import { saveState, loadState, pushToBackend, getDataVersion, saveDataVersion, getDomainVersions, saveDomainVersions, getLastSync, saveLastSync, clearLocalData, flushPendingSyncQueue, hasPendingSyncJobs, listPendingSyncJobs, syncPendingJobsWithProgress, getPendingTransactionIds } from './services/storage';
 import type { PendingSyncJobView } from './services/storage';
-import { login, registerBusiness, saveAuthToken, clearAuthToken, loadAuthToken, buildUrl, getEntitlements, initializePayment, fetchRemoteState, deleteExpenditure, snoozeStockVerification, dismissNotification, checkServerVersion, fetchPermissions } from './services/api';
+import { login, googleLogin, registerBusiness, saveAuthToken, clearAuthToken, loadAuthToken, buildUrl, getEntitlements, initializePayment, fetchRemoteState, deleteExpenditure, snoozeStockVerification, dismissNotification, checkServerVersion, fetchPermissions } from './services/api';
 import { subscribeUserToPush } from './services/pushNotifications';
 import { useToast } from './components/ToastProvider';
 import SalesScreen from './components/SalesScreen';
@@ -1044,6 +1044,38 @@ const App: React.FC = () => {
     return false;
   };
 
+  const handleGoogleLogin = async (token: string, additionalData?: any) => {
+    if (!navigator.onLine) {
+      addToast('Login requires internet connection.', 'error');
+      return false;
+    }
+    try {
+      const response = await googleLogin(token, additionalData);
+      if (response.isNewUser) {
+        return response;
+      }
+      
+      saveAuthToken(response.token);
+      const newState = {
+        ...state,
+        role: 'owner' as UserRole,
+        isLoggedIn: true,
+        isRegistered: true,
+        business: { ...state.business, ...response.business, staffContext: null },
+        activeShopId: response.business?.defaultShopId || state.activeShopId,
+        allShopsMode: false
+      };
+      setState(newState);
+      setActiveTab('history');
+      refreshData(newState);
+      return { success: true };
+    } catch (err: any) {
+      console.error('Google Login failed', err);
+      addToast(err.message || 'Google Login failed', 'error');
+      return false;
+    }
+  };
+
   const handleDeleteTransaction = async (id: string, restockItems: boolean) => {
     if (!navigator.onLine) {
       addToast('Delete requires internet.', 'error');
@@ -1551,8 +1583,8 @@ const App: React.FC = () => {
     );
   }
 
-  if (!state.isRegistered) return <RegistrationScreen onRegister={handleRegister} onManualLogin={handleManualLogin} onForgotPassword={() => setView('forgot-password')} defaultMode={loginMode ? 'login' : 'register'} />;
-  if (!state.isLoggedIn) return <AuthScreen onLogin={handleLogin} onForgotPassword={(email) => { setRecoveryEmail(email); setView('forgot-password'); }} onResetBusiness={() => setState(prev => ({...prev, isRegistered: false}))} business={state.business} email={state.business.email} />;
+  if (!state.isRegistered) return <RegistrationScreen onRegister={handleRegister} onManualLogin={handleManualLogin} onGoogleLogin={handleGoogleLogin} onForgotPassword={() => setView('forgot-password')} defaultMode={loginMode ? 'login' : 'register'} />;
+  if (!state.isLoggedIn) return <AuthScreen onLogin={handleLogin} onGoogleLogin={handleGoogleLogin} onForgotPassword={(email) => { setRecoveryEmail(email); setView('forgot-password'); }} onResetBusiness={() => setState(prev => ({...prev, isRegistered: false}))} business={state.business} email={state.business.email} />;
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row h-screen overflow-hidden">

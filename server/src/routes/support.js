@@ -3,6 +3,7 @@ const router = express.Router();
 const auth = require('../middleware/auth');
 const { sendSupportEmail } = require('../services/mail');
 const { aiProvider, tools, executeTool, sanitizeData } = require('../services/aiTools');
+const { parseMemorySignal, processMemorySignals, getConfirmedMemoryContext } = require('../services/memoryService');
 const Business = require('../models/Business');
 const Product = require('../models/Product');
 const Transaction = require('../models/Transaction');
@@ -392,6 +393,9 @@ router.post('/chat', auth, async (req, res) => {
     const contextSummary = summarizeUiContextForPrompt(uiContext);
     const todayISO = new Date().toISOString().split('T')[0];
 
+    // A1. Load long-term customer memory context (non-blocking, best-effort)
+    const confirmedMemoryContext = await getConfirmedMemoryContext(businessId);
+
     const systemPrompt = {
       role: "system",
       content: `You are gBot, an expert AI product architect and financial auditor inside the GInvoice app. Current Date: ${new Date().toDateString()} (ISO: ${todayISO}).
@@ -444,7 +448,28 @@ Schema:
   "tables": [ { "title": "Top Selling", "columns": ["Product", "Qty", "Revenue"], "rows": [ ["Milk", 12, "₦12,000"] ] } ],
   "recommendations": [ { "title": "Promote Milk", "action": "Bundle with Coca-Cola", "impact": "Higher turnover", "cta": { "label": "View", "route": "inventory" } } ]
 }
-Only include fields (metrics, charts, tables, recommendations) if you have relevant data.`
+Only include fields (metrics, charts, tables, recommendations) if you have relevant data.
+${confirmedMemoryContext ? `
+---
+[CUSTOMER MEMORY — Long-Term Context]
+The following are confirmed facts you have learned about this specific customer over time.
+Use them to make your responses highly personalized and contextual:
+${confirmedMemoryContext}
+---` : ''}
+
+---
+[MEMORY CURATOR LAYER — Intent-Triggered Observation]
+After formulating your response, apply this single check:
+Did the user just express business intent? (e.g., making plans, revealing how their shop works, describing their customers, stating preferences, or identifying a recurring pattern in their business?)
+
+If YES — emit a hidden memory signal at the very end of your response in this exact format:
+<memory_signal>
+[{ "topic": "Category", "summary": "Actionable business-relevant fact" }]
+</memory_signal>
+
+If NO (routine query, report, greeting, or one-off issue) — do NOT emit any signal.
+This block is NEVER shown to the user. It is stripped by the backend before delivery.
+---`
     };
 
     // B. Construct Messages Array
@@ -512,7 +537,17 @@ Only include fields (metrics, charts, tables, recommendations) if you have relev
 
             // If no tool calls, return the final response
             if (!responseMessage.tool_calls || responseMessage.tool_calls.length === 0) {
-                return res.json({ text: responseMessage.content, action: null, usage: null });
+                // Parse and strip any memory signal from the response
+                const { cleanText, signals } = parseMemorySignal(responseMessage.content || '');
+
+                // Process memory signals in the background (fire-and-forget)
+                if (signals.length > 0) {
+                  processMemorySignals(businessId, signals, aiProvider).catch((err) =>
+                    console.warn('[MemoryService] Background signal processing failed:', err.message)
+                  );
+                }
+
+                return res.json({ text: cleanText, action: null, usage: null });
             }
 
             // Otherwise, we have tool calls. Add them to history.
@@ -561,7 +596,13 @@ Only include fields (metrics, charts, tables, recommendations) if you have relev
             content: "IMPORTANT: You have already gathered enough data. Do NOT request more tools. Provide your FINAL answer NOW using all the data you have collected above. Present the numbers, tables and insights directly. Do not say 'let me check' or 'let me look' - just give the answer."
         });
         const fallbackCompletion = await callAI(messages);
-        return res.json({ text: fallbackCompletion.choices[0].message.content, action: null, usage: null });
+        const { cleanText: fallbackCleanText, signals: fallbackSignals } = parseMemorySignal(
+          fallbackCompletion.choices[0].message.content || ''
+        );
+        if (fallbackSignals.length > 0) {
+          processMemorySignals(businessId, fallbackSignals, aiProvider).catch(() => {});
+        }
+        return res.json({ text: fallbackCleanText, action: null, usage: null });
 
     } catch (error) {
         if (error.message === "Timeout") {

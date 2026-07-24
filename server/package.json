@@ -18,6 +18,8 @@
     "decimal.js": "^10.6.0",
     "dotenv": "^16.6.1",
     "express": "^4.19.2",
+    "google-auth-library": "^10.9.0",
+    "googleapis": "^173.0.0",
     "groq-sdk": "^0.37.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",

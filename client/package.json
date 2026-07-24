@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@react-oauth/google": "^0.13.5",
     "@tailwindcss/typography": "^0.5.20",
     "@types/papaparse": "^5.5.2",
     "date-fns": "^4.1.0",

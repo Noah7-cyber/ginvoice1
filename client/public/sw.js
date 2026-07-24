@@ -134,13 +134,31 @@ self.addEventListener('push', function(event) {
     try {
       const payload = event.data.json();
       const title = payload.title || 'New Notification';
-      const options = {
-        body: payload.body || 'You have a new update.',
-        icon: '/ginvoice-192.png',
-        badge: '/ginvoice-192nil.png',
-        vibrate: [100, 50, 100],
-        data: payload.data || {}
-      };
+      const isMemoryPromotion = payload.data && payload.data.type === 'memory_promotion';
+
+      const options = isMemoryPromotion
+        ? {
+            // Stylized memory notification
+            body: payload.body || 'I\'ve learned something new about you.',
+            icon: '/ginvoice-192.png',
+            badge: '/ginvoice-192nil.png',
+            // Double pulse vibration — distinct from regular notifications
+            vibrate: [200, 100, 200, 100, 100],
+            tag: 'memory-promotion',         // Collapse duplicates
+            renotify: false,
+            silent: false,
+            data: {
+              ...payload.data,
+              url: '/'
+            }
+          }
+        : {
+            body: payload.body || 'You have a new update.',
+            icon: '/ginvoice-192.png',
+            badge: '/ginvoice-192nil.png',
+            vibrate: [100, 50, 100],
+            data: payload.data || {}
+          };
 
       event.waitUntil(self.registration.showNotification(title, options));
     } catch (err) {

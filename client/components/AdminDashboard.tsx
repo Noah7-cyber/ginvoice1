@@ -334,16 +334,24 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`px-2 py-1 rounded-md text-xs font-bold uppercase ${
-                      user.isSubscribed ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'
-                    }`}>
-                      {user.isSubscribed ? 'PRO' : 'FREE'}
-                    </span>
-                    {user.subscriptionExpiresAt && (
-                      <div className="text-[10px] mt-1 text-gray-400">
-                        Exp: {new Date(user.subscriptionExpiresAt).toLocaleDateString()}
-                      </div>
-                    )}
+                    {(() => {
+                      const isExpired = user.subscriptionExpiresAt && new Date(user.subscriptionExpiresAt) < new Date();
+                      const isPro = user.isSubscribed && !isExpired;
+                      return (
+                        <>
+                          <span className={`px-2 py-1 rounded-md text-xs font-bold uppercase ${
+                            isPro ? 'bg-emerald-100 text-emerald-700' : (isExpired ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600')
+                          }`}>
+                            {isPro ? 'PRO' : (isExpired ? 'EXPIRED' : 'FREE')}
+                          </span>
+                          {user.subscriptionExpiresAt && (
+                            <div className="text-[10px] mt-1 text-gray-400">
+                              Exp: {new Date(user.subscriptionExpiresAt).toLocaleDateString()}
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                   </td>
                   <td className="px-6 py-4 text-gray-500">
                     {user.lastActiveAt ? new Date(user.lastActiveAt).toLocaleDateString() : 'Never'}
@@ -473,7 +481,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
               </div>
 
               {/* Stats Preview */}
-              <div className="grid grid-cols-2 gap-4 mt-4 bg-gray-50 p-4 rounded-lg">
+              <div className="grid grid-cols-3 gap-4 mt-4 bg-gray-50 p-4 rounded-lg">
                   <div>
                       <span className="block text-xs text-gray-500 uppercase">Products</span>
                       <span className="text-lg font-bold">{selectedUser.productCount ?? '...'}</span>
@@ -481,6 +489,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                   <div>
                       <span className="block text-xs text-gray-500 uppercase">Transactions</span>
                       <span className="text-lg font-bold">{selectedUser.transactionCount ?? '...'}</span>
+                  </div>
+                  <div>
+                      <span className="block text-xs text-gray-500 uppercase">Expenses</span>
+                      <span className="text-lg font-bold">{selectedUser.expenditureCount ?? '...'}</span>
                   </div>
               </div>
 

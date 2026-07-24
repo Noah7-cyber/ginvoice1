@@ -67,6 +67,7 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
 
   // Calculate Summary Metrics
   const summaryMetrics = React.useMemo(() => {
@@ -121,6 +122,7 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
     return expenditures.filter(e => {
       if (startDate && e.date < startDate) return false;
       if (endDate && e.date > endDate) return false;
+      if (selectedCategory && e.category !== selectedCategory) return false;
 
       if (searchTerm) {
         const term = searchTerm.toLowerCase();
@@ -131,7 +133,34 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
       }
       return true;
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [expenditures, startDate, endDate, searchTerm]);
+  }, [expenditures, startDate, endDate, searchTerm, selectedCategory]);
+
+  const filterMetrics = React.useMemo(() => {
+    if (!startDate && !endDate && !selectedCategory && !searchTerm) return null;
+    
+    // Only count 'out' (expenses) for total spent
+    const totalSpent = filteredExpenditures.reduce((sum, e) => {
+        return e.flowType !== 'in' ? sum + Math.abs(e.amount || 0) : sum;
+    }, 0);
+
+    let daysCount = 1;
+    if (startDate && endDate) {
+        const start = new Date(startDate).getTime();
+        const end = new Date(endDate).getTime();
+        daysCount = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1);
+    } else if (filteredExpenditures.length > 0) {
+        const dates = filteredExpenditures.map(e => new Date(e.date).getTime());
+        const minDate = Math.min(...dates);
+        const maxDate = Math.max(...dates, Date.now()); // Up to today
+        daysCount = Math.max(1, Math.ceil((maxDate - minDate) / (1000 * 60 * 60 * 24)));
+    }
+
+    return {
+        totalSpent,
+        averagePerDay: totalSpent / daysCount,
+        daysCount
+    };
+  }, [filteredExpenditures, startDate, endDate, selectedCategory, searchTerm]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -214,6 +243,18 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
                 />
            </div>
 
+           {/* Category Filter */}
+           <div className="flex items-center bg-white p-2 rounded-lg border">
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="text-sm font-bold text-gray-700 outline-none bg-transparent"
+              >
+                <option value="">All Categories</option>
+                {categories.map(cat => <option key={cat.id} value={cat.name}>{cat.name}</option>)}
+              </select>
+           </div>
+
            {/* Date Filters */}
            <div className="flex items-center gap-2 bg-white p-2 rounded-lg border">
               <span className="text-xs font-bold text-gray-500 uppercase">From</span>
@@ -259,6 +300,24 @@ const ExpenditureScreen: React.FC<ExpenditureScreenProps> = ({ expenditures, onA
         </div>
       </div>
 
+
+      {/* Filter Metric Cards */}
+      {filterMetrics && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 animate-in fade-in slide-in-from-top-4 duration-300">
+            <div className="bg-gradient-to-br from-indigo-500 to-indigo-700 rounded-2xl p-5 text-white shadow-lg relative overflow-hidden group hover:-translate-y-1 transition-transform">
+                <div className="absolute -right-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-xl group-hover:bg-white/20 transition-all"></div>
+                <h3 className="text-indigo-100 text-sm font-bold mb-1 flex items-center gap-2"><DollarSign size={16}/> Total Filtered Spent</h3>
+                <p className="text-3xl font-black">{new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(filterMetrics.totalSpent)}</p>
+                <p className="text-indigo-200 text-xs mt-2 font-medium">From {filteredExpenditures.length} recorded expense(s)</p>
+            </div>
+            <div className="bg-gradient-to-br from-emerald-500 to-teal-700 rounded-2xl p-5 text-white shadow-lg relative overflow-hidden group hover:-translate-y-1 transition-transform">
+                <div className="absolute -right-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-xl group-hover:bg-white/20 transition-all"></div>
+                <h3 className="text-emerald-100 text-sm font-bold mb-1 flex items-center gap-2"><Calendar size={16}/> Daily Average</h3>
+                <p className="text-3xl font-black">{new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(filterMetrics.averagePerDay)}</p>
+                <p className="text-emerald-200 text-xs mt-2 font-medium">Over {filterMetrics.daysCount} day{filterMetrics.daysCount !== 1 ? 's' : ''}</p>
+            </div>
+        </div>
+      )}
 
       {/* Mobile Card List */}
       <div className="md:hidden space-y-3">
