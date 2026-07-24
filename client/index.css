@@ -4,8 +4,7 @@
 
 @layer base {
   html, body {
-    @apply overflow-x-hidden w-full;
-    overscroll-behavior-x: none;
+    @apply w-full;
   }
   input::placeholder, textarea::placeholder {
     @apply text-gray-400 font-normal opacity-100;

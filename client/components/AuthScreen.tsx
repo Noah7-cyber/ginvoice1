@@ -91,21 +91,16 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onForgotPassword, onRe
 
             {onGoogleLogin && (
               <div className="pt-4 flex justify-center border-t border-gray-100">
-                <div style={{ height: '44px', width: '44px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                  <GoogleLogin
-                    type="icon"
-                    size="large"
-                    shape="circle"
-                    onSuccess={credentialResponse => {
-                      if (credentialResponse.credential) {
-                        onGoogleLogin(credentialResponse.credential);
-                      }
-                    }}
-                    onError={() => {
-                      console.error('Google Login Failed');
-                    }}
-                  />
-                </div>
+                <GoogleLogin
+                  onSuccess={credentialResponse => {
+                    if (credentialResponse.credential) {
+                      onGoogleLogin(credentialResponse.credential);
+                    }
+                  }}
+                  onError={() => {
+                    console.error('Google Login Failed');
+                  }}
+                />
               </div>
             )}
 

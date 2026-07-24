@@ -411,29 +411,25 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onRegister, onM
 
             {onGoogleLogin && (
               <div className="pt-4 flex justify-center border-t border-gray-100">
-                <div style={{ height: '44px', width: '44px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                  <GoogleLogin
-                    type="icon"
-                    size="large"
-                    shape="circle"
-                    onSuccess={async (credentialResponse) => {
-                      if (credentialResponse.credential) {
-                        setIsLoading(true);
-                        const result = await onGoogleLogin(credentialResponse.credential);
-                        setIsLoading(false);
-                        if (result && result.isNewUser) {
-                          setGoogleToken(credentialResponse.credential);
-                          setFormData(prev => ({ ...prev, email: result.email, name: result.name }));
-                          setMode('register');
-                        }
+                <GoogleLogin
+                  text={mode === 'register' ? 'signup_with' : 'signin_with'}
+                  onSuccess={async (credentialResponse) => {
+                    if (credentialResponse.credential) {
+                      setIsLoading(true);
+                      const result = await onGoogleLogin(credentialResponse.credential);
+                      setIsLoading(false);
+                      if (result && result.isNewUser) {
+                        setGoogleToken(credentialResponse.credential);
+                        setFormData(prev => ({ ...prev, email: result.email, name: result.name }));
+                        setMode('register');
                       }
-                    }}
-                    onError={() => {
-                      console.error('Google Login Failed');
-                      addToast('Google Login failed', 'error');
-                    }}
-                  />
-                </div>
+                    }
+                  }}
+                  onError={() => {
+                    console.error('Google Login Failed');
+                    addToast('Google Login failed', 'error');
+                  }}
+                />
               </div>
             )}
 
